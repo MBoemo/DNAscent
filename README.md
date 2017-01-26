@@ -1,8 +1,13 @@
 # Osiris
-Python/C++ HMM package for detecting base analogues in Oxford Nanopore reads.  It works by creating a branching HMM from a reference file.  One branch is for 6-mers that only contain thymidine, and the other branch is for 6-mers that contain at least one analogue.  The Python flavour of Osiris uses some of the HMM libraries from pomegranate (https://github.com/jmschrei/pomegranate).  Instructions for using Osiris in Python are as follows.
+Python/C++ software for detecting base analogues in Oxford Nanopore reads.  The two general uses are (1) determining the current across the pore that is produced by a 6mer that contains a base analogue, and (2) determining where base analogues are incorporated in a nanopore read.  The Python flavour of Osiris uses some of the HMM libraries from pomegranate (https://github.com/jmschrei/pomegranate).  Instructions for using Osiris in Python are as follows.
 
 ## Python Flavour
-First install pomegranate (https://github.com/jmschrei/pomegranate), which is a HMM library written implemented in Cython that serves as a backend for Osiris.
+Dependencies:
+- samtools (http://samtools.sourceforge.net/),
+- pysam (https://github.com/pysam-developers/pysam),
+- pomegranate (https://github.com/jmschrei/pomegranate).
+
+Pomegranate is a Cython library of hidden markov model (HMM) algorithms that serves as a backend for Osiris.
 
 ### Installation and Setup
 Install Osiris by running:
@@ -11,56 +16,81 @@ python setup.py install
 ```      
 Import Osiris functions with:
 ```python
-import Osiris as Osiris
+import Osiris as osi
 ```
 
-### Basic Usage
-The first step is to build a HMM from a reference file.  If the DNA samples include base analogues, then this HMM will have a branching structure.  The inputs are:
-(1.) a reference .fasta file
-(2.) a base model, which has the emission data (mean, standard deviation) for all 6-mers, formatted for Nanopolish,
-(3.) (optional) an Osiris BaseAnalogue object that contains the analogue's name as well as data for the concentration and emission probabilities.
+### Finding Base Analogue Emissions
+The inputs to Osiris are:
+- A reference fasta file, which should contain the reference sequence of all samples used in the run.  They should each have unique names.  The only admissable characters in the reference sequences are A, T, G, C, and N.
+- A directory that contains all of the fast5 files from the run.
 
-The first argument is trivial, and the second argument can be found by using the same 6-mer model that Nanopolish uses.  To get the third argument, simply create the analogue object.  
+The first step is to sort the reads by the reference that they align to and perform a quality control on the coverage of these reads.  The shell script prepData.sh is provided in the scripts directory for this purpose.  Paths to the reference file and reads directory should be put under the "inputs" header at the top of the script.  Save the script after editing, and run it with:
+```shell
+bash prepData.sh
+```
+The script will export the fast5 reads to a fasta file, perform a sequence alignment against the reference, ignore reads that have below 80% coverage of one of the references, and finally sorts the BAM file into a BAM file for each reference.
+
+Once the script finishes, create a few reference fasta file that contains only the reference of interest (that contains an analogue).  Import the new reference file by running:
 
 ```python
-analogue = Osiris.BaseAnalogue()
-analogue.set_concentration(0.50)
-analogue.set_emissions(path-to-nanopolish-eventalign-file)
+reference = osi.import_reference('mySingleEntryReference.fasta')
 ```
-Note that the position of the analogue is indexed starting from 1 (unlike normal Python indexing which starts from 0).
 
-If we're not interested in analogues, you can build the HMM by running:
-```python
-model = Osiris.build_hmm('reference.fasta','modelfile.model')
-```
-To build a HMM with branching structure for a base analogue, run:
-```python
-model = Osiris.build_hmm('reference.fasta',modelfile.model',analogue)
-```
-In the HMM, the reference file determines the branching structure where the HMM is in the branched hidden states if there is an analogue somewhere in the 6-mer.    
+Osiris accepts two types of training data.  The first has a base analogue (BrdU, for example, which we will denote by B) in a fixed context, such as 5'-ATGCCBTCCAG-3'.  The second has an analogue flanked by three N's with its reverse complement downstream, such as 5'-ATCG...NNNBNNN...NNNANNN...-3'.  We shall follow a workflow for the latter type of training data.  The case for the former is similar.
 
-NOTE: The HMM is optimised and error checked using pomegranate's built-in optimisation routine, which can be very slow.  These optimisation routines ensure that the leaving probabilities for all states sum to 1, there are no needless silent states with a single exit transition of probability 1, and that there are no "orphan" states.  By default, Osiris does not use these optimisation/checking routines, but instead has been subjected to a large number of tests to ensure it builds the model correctly.  If you make changes to the source code, it is strongly recommended that you re-enable the optimisation/checking.
+To import the training data, run:
+```python
+trainingData = import_HairpinTrainingData('reads.fasta','mySingleEntryReference.fasta','mySingleEntryReference.bam','template_median68pA.5mers.model',113,20)
+```
+Here, reads.fasta is the fasta file created by prepData.sh.  mySingleEntryReference.fasta is the same file that was used to build the reference, and mySingleEntryReference.bam is the BAM file created by prepData.sh that corresponds to the reference.  The 5mer model file can be found in the pore_models directory, and is required here to normalise for the Metrichor shift and scale parameters.  The input 113 is this example is the location on the reference of the A base in NNNANNN.  Please note that in Osiris, locations are indexed from zero, so the first base in the reference has index 0.  Finally, the last argument is the minimum number of reads that we're allowed to train on (20 in this case).
 
-### Model Training
-Import sequences from Nanopolish eventalign files with:
+To train the model, run:
 ```python
-trainingData = Osiris.import_sequences('training_data.eventalign')
+trainedEmissions = osi.trainForContextAnalogue(trainingData, reference, 'template_median68pA.model', 0.5, 20)
 ```
-You can run Baum-Welch training on the model with pomegranate's fit function.  This has options for parallel processing and conversion thresholds.  You can perform 30 training iterations on 20 cores by running:
+This builds a HMM for the reference, and uses the training data to adjust the emission parameters to those of the base analogue.  The inputs trainingData and reference were generated in previous steps.  The model file template_median68pA.model is provided in the pore_models directory.  Note that this is a 6mer model, as opposed to the 5mer model that was used to normalise the training data.  The function must be provided with a convergence for Baum-Welch iterations (0.5 in this case) and the number of cores that model training is allowed to run on (20 in this case).
+
+Finally, to visualise the new base analogue emission means and standard deviations, Osiris will build a new pore model file.  Run:
 ```python
-model.fit(trainingData,max_iterations=30,n_jobs=20)
+osi.export_poreModel(trainedEmissions, 'BrdU_emissions.model')
 ```
+The input trainedEmissions was created in the prevous step, and 'BrdU_emissions.model' is the filename of the pore model that you want the function to create.
+
+### Calling Base Analogues
+
 
 ### Saving/Loading Model Objects
-Building and training the model are both computationally expensive, but the actual model objects tend to be quite small.  To prevent unnecessary re-building or re-training in the result of a crash or broken pipe, Osiris automatically exports built and trained models as json files to the working directory.  In general, these files take up negligible disk space (less than 15 MB).  To reload these saved files, do the folling:
+Normalising the training data and training models can be computationally expensive, but the actual training data and model objects tend to be quite small.  To prevent having to recompute these, you can save the training data or model to a file using json.  To save and load training data, run the following:
 ```python
 import json
+
+#export
+f = open('trainingData.json','w')
+json.dump(trainingData,f)
+f.close()
+
+#import
+f = open('trainingData.json','r')
+trainingData = json.load(f)
+f.close()
+```
+To do the equivalent for a HMM object, run:
+```
+import json
 import pomegranate as pm
+
+#export
+hmm_json = hmm.to_json()
+f = open('model.json','w')
+json.dump(hmm_json,f)
+f.close()
+
+#import
 f = open('model.json','r')
 loaded_json = json.load(f)
-loaded_model = pm.HiddenMarkovModel.from_json(loaded_json)
+hmm = pm.HiddenMarkovModel.from_json(loaded_json)
 ```
-Writing and loading with json is on the order of seconds, whereas pickle and cPickle will be on the order of hours.  N.B. by default, pomegranate's from_json function will re-optimise the model with full optimisation.  It's worth turning that off.
+Writing and loading with json is on the order of seconds, whereas pickle and cPickle will be on the order of hours.  Please note that by default, pomegranate's from_json function will re-optimise the model with full optimisation.  It's worth turning that off by editing the code.
 
 ##C++ Flavour
 Under development.
