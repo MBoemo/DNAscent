@@ -1,5 +1,10 @@
 #!/bin/bash
 
+#----------------------------------------------------------
+# Copyright 2017 University of Oxford
+# Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+#----------------------------------------------------------
+
 #Description:
 #This shell script organises data from an Oxford Nanopore run for downstream analysis with Osiris.  It sorts reads by barcode, and performs a quality control on reads based on reference alignment.
 

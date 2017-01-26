@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+#----------------------------------------------------------
+# Copyright 2017 University of Oxford
+# Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+#----------------------------------------------------------
+
 from distutils.core import setup
 from distutils.extension import Extension
 import numpy as np

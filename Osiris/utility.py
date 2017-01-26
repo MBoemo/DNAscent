@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+#----------------------------------------------------------
+# Copyright 2017 University of Oxford
+# Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+#----------------------------------------------------------
 
 class BaseAnalogue():
 #	class to house properties and data associated with a base analogue
