@@ -5,30 +5,19 @@
 # Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 #----------------------------------------------------------
 
+
 class BaseAnalogue():
 #	class to house properties and data associated with a base analogue
 #	PROPERTIES
 #       ---------
-#	- emissions: 
-#	  type: dictionary (in the case of import_HairpinTrainingData) or list (in the case of import_FixedPosTrainingData)
+#	- emissions: takes a 6mer and outputs emissions, output of trainForFixedAnalogue, trainForContextAnalogue, or import_poreModel (if you're importing an analogue pore model)
+#	  type: dictionary
 #	- concentration: 
 #	  type: positive float or int
 
-	def __init__(self):
-		self.emissions
-		self.concentration = 0
-
-	def set_emissions(self, trainingData):
-		if trainingData == list or trainingData == dict:
-			self.emissions = trainingData
-		else:
-			exit('Exiting: Training data must be a dictionary or a list.')
-
-	def set_concentration(self, conc):
-		if conc >= 0:
-			self.concentration = conc
-		else:
-			exit('Exiting: Concentration must be a float greater than or equal to zero.')
+	def __init__(self, emis, conc):
+		self.emissions = emis
+		self.concentration = conc
 
 
 def reverseComplement(sequence):

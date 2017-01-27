@@ -57,7 +57,26 @@ osi.export_poreModel(trainedEmissions, 'BrdU_emissions.model')
 The input trainedEmissions was created in the prevous step, and 'BrdU_emissions.model' is the filename of the pore model that you want the function to create.
 
 ### Calling Base Analogues
+The second main use of Osiris is using trained analogue emissions to detect base analogues that have been randomly incorporated in a Nanopore read.  Assume we have a trainedEmissions dictionary, which could have been made by following the steps above or by importing an Osiris base analogue pore model file.  Create a base analogue with the analogue emissions and the concentration by running:
+```python
+import Osiris as osi
+BrdU = osi.BaseAnalogue(trainedEmissions,0.2)
+```
+Here, the base analogue (BrdU) has replaced 20% of all T's in the read.  Build an Osiris hidden markov model by running:
+```python
+hmm = osi.build_RandIncHMM('reference.fasta','template_median68pA.model',analogue=BrdU)
+```
+The 6mer template model file can be found in the pore_models directory, and the refernece fasta file should only include one reference sequence for the reads you want to analyse.
 
+Suppose we want to check read.fast5 to determine where BrdU has been incorporated.  Normalise the events for shift and scale with,
+```python
+normalisedEvents = osi.calculate_normalisedEvents(['read.fast5'], 'template_median68pA.5mers.model')
+'''
+Find the locations of BrdU in the read by running:
+```python
+BrdU_positions = osi.callAnalogue(hmm, normalisedEvents[0])
+```
+The variable BrdU_positions is a list of positions in the reference where Osiris has called a base analogue.
 
 ### Saving/Loading Model Objects
 Normalising the training data and training models can be computationally expensive, but the actual training data and model objects tend to be quite small.  To prevent having to recompute these, you can save the training data or model to a file using json.  To save and load training data, run the following:

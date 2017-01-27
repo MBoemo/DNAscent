@@ -15,50 +15,36 @@ from build_model import build_TrainingHMM
 import numpy as np
 
 
-def trainingSummary(model):
-	
-	#create a dictionary that assigns each index to its state name
-	indices = {i: state.name for i, state in enumerate(model.states)}
+def callAnalogue(hmm, readEvents):
+#	For plotting the difference between the trained mean/std and the pore model mean/std
+#	ARGUMENTS
+#       ---------
+#	- hmm: Hidden Markov Model object, built by build_RandIncHMM from build_model.py
+#	  type: pomegranate object
+#	- readEvents: normalised events from an Oxford Nanopore reads
+#	  type: list
+#	OUTPUTS
+#       -------
+#	- calledAnaloguePositions: list of positions on the reference where the model has detected a base analogue
+#	  type: list
 
- 	#create model summary
-	model_summary = model.__getstate__()
+	calledAnaloguePositions = []
 
-	translated_edges = []
-	for edge in model_summary['edges']:
-		translated_edges.append( (indices[edge[0]], indices[edge[1]], edge[2], edge[3], edge[4] ) )
+	#run the viterbi algorithm on the readEvents.  the best path of states is given by vpath and quality is given by logp
+	logp, vpath = hmm.viterbi(readEvents)
 
-	print translated_edges
+	for entry in vpath:
+		if entry[1].name != 'None-end' and entry[1].name != 'None-start': #protected pomegranate names for start and end states
+			splitName = entry[1].name.split('_') #state info: [branch (T or B), state type (I, D, M1, etc.), 'pos', position on reference]
+			
+			#if the state is a BrdU state and it was a match (either M1 or M2) then call a base analogue at that position
+			if splitName[0] == 'B' and splitName[1] in ['M1','M2']:
+				calledAnaloguePositions.append(int(splitName[3]))
 
+	#in theory, there could be both M1 and M2 matches for a single HMM module, so remove duplicates
+	calledAnaloguePositions = list(set(calledAnaloguePositions))
 
-def callAnalogue(model,sequences):
-
-	calledAnalogues = []
-	for i, sequence in enumerate(sequences):
-		analoguePositions = []
-
-		logp, vpath = model.viterbi(sequence)
-		
-		for entry in vpath:
-			if entry[1].name[0] == 'B' and entry[1].name != 'None-end' and entry[1].name != 'None-start':
-				analoguePositions.append(int(entry[1].name.rstrip().split('_')[3]))
-		
-		calledAnalogues.append(list(set(analoguePositions)))
-		print 'Called sequence ' + str(i) + ' of ' + str(len(sequences))
-	return calledAnalogues
-
-
-def plotResults(calls,reference):
-
-	binary_matrix = [ [0]*len(reference) for x in calls]
-
-	for i, call in enumerate(calls):
-		for pos in call:
-			binary_matrix[i][pos] = 1
-
-	plt.figure()
-	plt.imshow(binary_matrix, cmap='Greys_r')
-	plt.grid(False)
-	plt.savefig('result_binaryMat.png')
+	return calledAnaloguePositions
 
 
 def trainingImprovements(hmm, reference, modelFile, kmerName):
