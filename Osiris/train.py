@@ -142,7 +142,7 @@ def trainForFixedAnalogue(trainingData, reference, analoguePositions, poreModelF
 					kmer = reference[stateLoc:stateLoc+6]				
 				
 					#replace the T in the reference with a B for the base analogue
-					kmer = kmer[stateLoc:analogueLoc] + 'B' + kmer[analogueLoc+1:]
+					kmer = kmer[0:analogueLoc-stateLoc] + 'B' + kmer[analogueLoc-stateLoc+1:]
 					
 					#dictionary, keyed by the analogue 6mer, that returns the trained mean and trained standard deviation for the 6mer
 					analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1] ] 
