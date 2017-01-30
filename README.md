@@ -28,9 +28,9 @@ The first step is to sort the reads by the reference that they align to and perf
 ```shell
 bash prepData.sh
 ```
-The script will export the fast5 reads to a fasta file, perform a sequence alignment against the reference, ignore reads that have below 80% coverage of one of the references, and finally sorts the BAM file into a BAM file for each reference.
+The script will export the fast5 reads to a fasta file, perform a sequence alignment against the reference, ignore reads that have below 80% coverage of one of the references, and finally sort the BAM file into a separate BAM file for each reference.
 
-Once the script finishes, create a few reference fasta file that contains only the reference of interest (that contains an analogue).  Import the new reference file by running:
+Once the script finishes, create a new reference fasta file that contains only the reference of interest (that contains an analogue).  Import the new reference file by running:
 
 ```python
 reference = osi.import_reference('mySingleEntryReference.fasta')
@@ -38,11 +38,11 @@ reference = osi.import_reference('mySingleEntryReference.fasta')
 
 Osiris accepts two types of training data.  The first has a base analogue (BrdU, for example, which we will denote by B) in a fixed context, such as 5'-ATGCCBTCCAG-3'.  The second has an analogue flanked by three N's with its reverse complement downstream, such as 5'-ATCG...NNNBNNN...NNNANNN...-3'.  We shall follow a workflow for the latter type of training data.  The case for the former is similar.
 
-To import the training data, run:
+An example of a command that imports training data is:
 ```python
 trainingData = import_HairpinTrainingData('reads.fasta','mySingleEntryReference.fasta','mySingleEntryReference.bam','template_median68pA.5mers.model',113,20)
 ```
-Here, reads.fasta is the fasta file created by prepData.sh.  mySingleEntryReference.fasta is the same file that was used to build the reference, and mySingleEntryReference.bam is the BAM file created by prepData.sh that corresponds to the reference.  The 5mer model file can be found in the pore_models directory, and is required here to normalise for the Metrichor shift and scale parameters.  The input 113 is this example is the location on the reference of the A base in NNNANNN.  Please note that in Osiris, locations are indexed from zero, so the first base in the reference has index 0.  Finally, the last argument is the minimum number of reads that we're allowed to train on (20 in this case).
+Here, reads.fasta is the fasta file created by prepData.sh and mySingleEntryReference.fasta is the same file that was used to build the reference.  The alignment file mySingleEntryReference.bam is the BAM file created by prepData.sh that corresponds to the reference.  The 5mer model file can be found in the pore_models directory, and is required here to normalise for the Metrichor shift and scale parameters.  The input 113 is the location in the reference of the A base of the NNNANNN domain.  Please note that in Osiris, locations are indexed from zero, so the first base in the reference has index 0.  Finally, the last argument is the minimum number of reads that we're allowed to train on (20 in this case).  These input arguments, particularly the last two, will change depending on your project.
 
 To train the model, run:
 ```python
@@ -54,7 +54,7 @@ Finally, to visualise the new base analogue emission means and standard deviatio
 ```python
 osi.export_poreModel(trainedEmissions, 'BrdU_emissions.model')
 ```
-The input trainedEmissions was created in the prevous step, and 'BrdU_emissions.model' is the filename of the pore model that you want the function to create.
+The input trainedEmissions was created in the prevous step, and 'BrdU_emissions.model' is the filename of the pore model that you want the function to create.  After calling export_poreModel, you should see the pore model file appear in your working directory.
 
 ### Calling Base Analogues
 The second main use of Osiris is using trained analogue emissions to detect base analogues that have been randomly incorporated in a Nanopore read.  Assume we have a trainedEmissions dictionary, which could have been made by following the steps above or by importing an Osiris base analogue pore model file.  Create a base analogue with the analogue emissions and the concentration by running:
@@ -71,15 +71,15 @@ The 6mer template model file can be found in the pore_models directory, and the 
 Suppose we want to check read.fast5 to determine where BrdU has been incorporated.  Normalise the events for shift and scale with,
 ```python
 normalisedEvents = osi.calculate_normalisedEvents(['read.fast5'], 'template_median68pA.5mers.model')
-'''
+```
 Find the locations of BrdU in the read by running:
 ```python
 BrdU_positions = osi.callAnalogue(hmm, normalisedEvents[0])
 ```
 The variable BrdU_positions is a list of positions in the reference where Osiris has called a base analogue.
 
-### Saving/Loading Model Objects
-Normalising the training data and training models can be computationally expensive, but the actual training data and model objects tend to be quite small.  To prevent having to recompute these, you can save the training data or model to a file using json.  To save and load training data, run the following:
+### Saving/Loading Objects
+Normalising the training data and building reference-specific HMMs can be computationally expensive, but the space required by both training data and model objects tends to be quite small.  To prevent having to recompute these, you can save the training data or model to a file using JSON.  To save and load training data, run the following:
 ```python
 import json
 
@@ -109,7 +109,7 @@ f = open('model.json','r')
 loaded_json = json.load(f)
 hmm = pm.HiddenMarkovModel.from_json(loaded_json)
 ```
-Writing and loading with json is on the order of seconds, whereas pickle and cPickle will be on the order of hours.  Please note that by default, pomegranate's from_json function will re-optimise the model with full optimisation.  It's worth turning that off by editing the code.
+Writing and loading with JSON is on the order of seconds, whereas pickle and cPickle will be on the order of hours.  Please note that by default, pomegranate's from_json function will re-optimise the model with full optimisation.  It's worth turning that off by editing the code.
 
 ##C++ Flavour
 Under development.

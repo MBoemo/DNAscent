@@ -6,6 +6,7 @@
 #----------------------------------------------------------
 
 import numpy as np
+import warnings
 import h5py
 import pysam
 import re
@@ -36,7 +37,7 @@ def import_reference(filename):
 	reference = reference.upper()
 
 	if not all(c in ['A','T','G','C','N'] for c in reference):
-		exit('Exiting: Illegal character in reference.  Legal characters are A, T, G, C, and N.')
+		warnings.warn('Warning: Illegal character in reference.  Legal characters are A, T, G, C, and N.', Warning)
 
 	return reference
 

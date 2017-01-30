@@ -5,6 +5,8 @@
 # Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 #----------------------------------------------------------
 
+import warnings
+
 
 class BaseAnalogue():
 #	class to house properties and data associated with a base analogue
@@ -16,8 +18,14 @@ class BaseAnalogue():
 #	  type: positive float or int
 
 	def __init__(self, emis, conc):
-		self.emissions = emis
-		self.concentration = conc
+		if type(emis) == dict:
+			self.emissions = emis
+		else:
+			warnings.warn('Warning: First argument to BaseAnalogue constructor must be a dictionary.', Warning)
+		if type(conc) == float and conc >= 0.0 and conc <= 1.0:
+			self.concentration = conc
+		else:
+			warnings.warn('Warning: Second argument to BaseAnalogue constructor must be a positive float between 0.0 and 1.0.', Warning)
 
 
 def reverseComplement(sequence):
@@ -47,7 +55,7 @@ def reverseComplement(sequence):
 			revComp += 'C'
 		#guard against illegal characters
 		else:
-			exit('Exiting: Illegal character in sequence.  Legal characters are A, T, G, and C.')
+			warnings.warn('Warning: Illegal character in sequence.  Legal characters are A, T, G, and C.', Warning)
 
 	#take the reverse of the complement and return it
 	return revComp[::-1]
