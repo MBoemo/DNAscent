@@ -11,7 +11,6 @@
 #Dependencies:
 # -pysam
 # -samtools
-# -nanopolish (will be installed if it doesn't exist)
 # -bwa (will be installed if it doesn't exist)
 
 #Troubleshooting:
@@ -36,16 +35,10 @@ THREADS=20
 ##  DATA PREP  ##
 #################
 
-#check if bwa and nanopolish are compiled in the directory.  Clone and compile them if they're not.
+#check if bwa is compiled in the directory.  Clone the repository and compile it if it's not.
 if [ ! -d bwa ]; then
 	git clone https://github.com/lh3/bwa.git
 	make -C bwa/
-fi
-
-if [ ! -d nanopolish ]; then
-	git clone --recursive https://github.com/jts/nanopolish.git
-	make -C nanopolish/htslib/ #compile htslib first
-	make -C nanopolish/ #and nanopolish second
 fi
 
 
@@ -59,21 +52,18 @@ if [ ! -L data.fast5 ]; then
 fi
 
 
-#export the FAST5 files to FASTA files using nanopolish extract
-echo 'Exporting FAST5 files as FASTA using nanopolish...'
-nanopolish/nanopolish extract --type 2d data.fast5/ > reads.fasta
-echo 'Done.'
-
-
 #index the reference file with BWA
 echo 'Indexing with BWA alignment...'
 bwa index reference.fasta
 echo 'Done.'
 
+#create reads.fasta from data.fast5 using Osiris function import_2Dfasta
+
 
 #do the alignment with BWA-MEM
 echo 'Aligning...'
 bwa mem -t $THREADS -k 1 -x ont2d reference.fasta reads.fasta | samtools view -Sb - | samtools sort -o alignments.sorted.bam - 
+samtools index alignments.sorted.bam
 echo 'Done.'
 
 
@@ -85,5 +75,8 @@ echo 'Done.'
 
 #index the construct bam files
 echo 'Indexing BAM files...'
-samtools index *.bam
+for bamfile in *.bam
+do
+	samtools index $bamfile
+done
 echo 'Done.'

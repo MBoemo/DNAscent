@@ -40,9 +40,9 @@ Osiris accepts two types of training data.  The first has a base analogue (BrdU,
 
 An example of a command that imports training data is:
 ```python
-trainingData = import_HairpinTrainingData('reads.fasta','mySingleEntryReference.fasta','mySingleEntryReference.bam','template_median68pA.5mers.model',113,20)
+trainingData = import_HairpinTrainingData('mySingleEntryReference.fasta','mySingleEntryReference.bam','template_median68pA.5mers.model',113,20)
 ```
-Here, reads.fasta is the fasta file created by prepData.sh and mySingleEntryReference.fasta is the same file that was used to build the reference.  The alignment file mySingleEntryReference.bam is the BAM file created by prepData.sh that corresponds to the reference.  The 5mer model file can be found in the pore_models directory, and is required here to normalise for the Metrichor shift and scale parameters.  The input 113 is the location in the reference of the A base of the NNNANNN domain.  Please note that in Osiris, locations are indexed from zero, so the first base in the reference has index 0.  Finally, the last argument is the minimum number of reads that we're allowed to train on (20 in this case).  These input arguments, particularly the last two, will change depending on your project.
+Here, mySingleEntryReference.fasta is the same file that was used to build the reference.  The alignment file mySingleEntryReference.bam is the BAM file created by prepData.sh that corresponds to the reference.  The 5mer model file can be found in the pore_models directory, and is required here to normalise for the Metrichor shift and scale parameters.  The input 113 is the location in the reference of the A base of the NNNANNN domain.  Please note that in Osiris, locations are indexed from zero, so the first base in the reference has index 0.  Finally, the last argument is the minimum number of reads that we're allowed to train on (20 in this case).  These input arguments, particularly the last two, will change depending on your project.
 
 To train the model, run:
 ```python
