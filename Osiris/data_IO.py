@@ -12,6 +12,7 @@ import pysam
 import re
 import os
 import gc
+import math
 from utility import reverseComplement
 
 
@@ -106,7 +107,7 @@ def import_2Dfasta(pathToReads,outFastaFilename):
 		
 			#print progress to stdout (every 10,000 files)
 			if i % 10000 == 0:
-				print str((float(i)/float(len(directory_list)))*100.0) + '%'
+				print 'Exporting fast5 reads to fasta... ' + str(math.floor((float(i)/float(len(directory_list)))*100.0)) + '%'
 
 			try:
 				#open the fast5 file with h5py and grab the fastq
@@ -349,7 +350,7 @@ def import_HairpinTrainingData(reference, bamFile, poreModelFile, redundant_A_Lo
 
 		if len(kmer2Files[key]) > readsThreshold: #if we have enough data to train on...
 			#print progress	
-			print 'Normalising for shift and scale... ' + str(float(counter)/float(len(kmer2Files))*100) + '%'
+			print 'Normalising for shift and scale... ' + str(math.floor(float(counter)/float(len(kmer2Files))*100)) + '%'
 
 			normalisedReads = calculate_normalisedEvents(kmer2Files[key], poreModelFile)
 			kmer2normalisedReads[key] = normalisedReads
@@ -357,3 +358,57 @@ def import_HairpinTrainingData(reference, bamFile, poreModelFile, redundant_A_Lo
 		counter += 1
 
 	return kmer2normalisedReads
+
+
+def alignAndSort(readsDirectory, pathToReference, threads):
+#	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
+#	ARGUMENTS
+#       ---------
+#	- readsDirectory: full path to the directory that contains the fast5 files for the run 
+#	  type: string
+#	- pathToReference: full path to the reference file that has the reference (or references, if they're barcoded) for all sequences present in the run
+#	  type: string
+#	- threads: number of threads on which to run BWA-MEM 
+#	  type: int 
+#	OUTPUTS
+#       -------
+#	- in the present working directory, a reads.fasta file is created that has sequences of all the reads in the run, and bam files are created for each reference
+	
+	#take the directory with the fast5 reads in it and export them to a fasta file in the current working directory
+	import_2Dfasta(readsDirectory, os.getcwd()+'/reads.fasta')
+
+	#index the reference
+	os.system('bwa index ' + pathToReference)
+
+	#align the reads.fasta file created above to the reference with bwa-mem, then sort the bam file
+	os.system('bwa mem -t '+str(threads)+' -k 1 -x ont2d '+pathToReference+' reads.fasta | samtools view -Sb - | samtools sort -o alignments.sorted.bam -') 
+	os.system('samtools index alignments.sorted.bam')
+
+	sam_file = pysam.Samfile('alignments.sorted.bam')
+	out_files = list()
+
+	#take alignments.sorted.bam and separate the records into separate bam files - one for each reference
+	for x in sam_file.references:
+		print x
+		out_files.append(pysam.Samfile(x + ".bam", "wb", template=sam_file))
+
+	for record in sam_file:
+		ref_length = sam_file.lengths[record.reference_id]
+
+		if record.aend is None or record.query_alignment_length is None:
+			continue
+
+		ref_cover = float(record.aend - record.pos) / ref_length
+		query_cover = float(record.query_alignment_length) / record.query_length
+
+		#quality control for the reads that make it to the BAM file: only take >80% coverage with no reverse complement
+		if ref_cover > 0.8 and query_cover > 0.8 and record.is_reverse == False:
+			out_files[record.reference_id].write(record)
+
+	#index the newly made bam files
+	for bamfile in sam_file.references:
+		os.system('samtools index '+bamfile + '.bam')
+	
+
+	
+

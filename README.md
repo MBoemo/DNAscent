@@ -24,13 +24,13 @@ The inputs to Osiris are:
 - A reference fasta file, which should contain the reference sequence of all samples used in the run.  They should each have unique names.  The only admissable characters in the reference sequences are A, T, G, C, and N.
 - A directory that contains all of the fast5 files from the run.
 
-The first step is to sort the reads by the reference that they align to and perform a quality control on the coverage of these reads.  The shell script prepData.sh is provided in the scripts directory for this purpose.  Paths to the reference file and reads directory should be put under the "inputs" header at the top of the script.  Save the script after editing, and run it with:
-```shell
-bash prepData.sh
+The first step is to sort the reads by the reference that they align to and perform a quality control on the coverage of these reads.  This is done by the Osiris function alignAndSort.
+```python
+osi.alignAndSort('full-path-to-reads','full-path-to-reference',20)
 ```
-The script will export the fast5 reads to a fasta file, perform a sequence alignment against the reference, ignore reads that have below 80% coverage of one of the references, and finally sort the BAM file into a separate BAM file for each reference.
+Full paths to the reads and reference should be provided as strings, and the third argument specifies the number of threads on which to run BWA-MEM alignment.  The function will export the fast5 reads to a fasta file, perform a sequence alignment against the reference, ignore reads that have below 80% coverage of one of the references, and finally sort the BAM file into a separate BAM file for each reference.  The current working directory will now contain reads.fasta and a BAM file for each reference.
 
-Once the script finishes, create a new reference fasta file that contains only the reference of interest (that contains an analogue).  Import the new reference file by running:
+Once the function finishes, create a new reference fasta file that contains only the reference of interest (that contains an analogue).  Import the new reference file by running:
 
 ```python
 reference = osi.import_reference('mySingleEntryReference.fasta')
