@@ -13,34 +13,34 @@ import warnings
 from data_IO import import_reference, import_poreModel
 
 
-def build_RandIncHMM(reference_filename,emissions_filename,analogue=None):
+def build_RandIncHMM(referenceFilename,poremodelFilename,analogue):
 #	Builds a HMM from a reference sequence with a topology appropriate for detecting randomly incorporated base analogue.
 #	ARGUMENTS
 #       ---------
-#	- path to a .fasta file which contains the reference sequence
+#	- referenceFilename: path to a fasta file which contains the reference sequence (note: the fasta file should contain just one reference)
 #	  type: string
-#	- path to an ONT model file that contains the emission data for 4096 possible 6mers
+#	- poremodelFilename: path to an ONT 6mer model file that contains the emission data for all 4096 possible {A,T,G,C} 6mers
 #	  type: string
-#	- (optional) an osiris object created by import_data.py that contains the name, concentration, and emission data for a base analogue
-#	  type: object
+#	- analogue: an Osiris object created by utility.py that contains the concentration and emission data for a base analogue
+#	  type: Osiris object
 #	OUTPUTS
 #       -------
-#	- a pomegranate hmm object
+#	- hmm: a hidden Markov model with forks for base analogues
+#	  type: pomegranate object
 	
 	#set the hmm class
 	hmm = HiddenMarkovModel() 
 
 	#import the reference sequence
-	refSequence = import_reference(reference_filename)
+	refSequence = import_reference(referenceFilename)
 	refLength = len(refSequence)
 
 	#import the emission probabilities for non-analogue containing 6mers
-	allEmissions = import_poreModel(emissions_filename)
+	allEmissions = import_poreModel(poremodelFilename)
 
-	#if we have a base analogue, add their emission probabilities to the base hmm
-	if analogue is not None:
-		allEmissions.update(analogue.emissions)
-		analogueConc = analogue.concentration
+	#add analogue emissions to the emissions for A-T-G-C 6mers from the ONT pore model file
+	allEmissions.update(analogue.emissions)
+	analogueConc = analogue.concentration
 
 	#two-dimensional array for the states, where the columns are the positions in the reference
 	thymidineStates = [[0 for x in range(refLength)] for y in range(6)] 
@@ -141,38 +141,36 @@ def build_RandIncHMM(reference_filename,emissions_filename,analogue=None):
 		#    / [] - [] \
 		# [] - [] - [] - []
 
-		#If we're making an analogue branched HMM, there is a T about to enter position 3, and 
+		#If we're making an analogue branched HMM, there is a T about to enter position 3, 
 		#we're more than 4 spaces from the end (we need to reach forward to i+3 to add the 
-		#analogue branch) then we need a parallel analogue branch.
-		if (analogue is not None) and (refSequence[4] == 'T') and (i <= last_i-4):
+		#analogue branch), and we have data for at least one of the BrdU positions, then
+		#we need a parallel analogue branch.
+
+		#check if there is a T (which could be a base analogue) coming into position 4, and make sure we have analogue data for the analogue at position 3 and 4
+		makeFork = False
+		if refSequence[i + 4] == 'T':
+			analogue6merPos4 = refSequence[i+1:i+4] + 'B' + refSequence[i+5:i+7]
+			analogue6merPos3 = refSequence[i+2:i+4] + 'B' + refSequence[i+5:i+8]
+			if (analogue6merPos4 in allEmissions) and (analogue6merPos3 in allEmissions):
+				makeFork = True
+
+		#if we pass the check above and we're not at the end, create the forking structure for a base analogue 
+		if makeFork and (i <= last_i-4):
 
 			#assign a list of analogue state objects to the dictionary, keyed by the position of the 6mer in the reference
 			analogueStates[i] = [	[State( None, name='B_SS_pos_'+str(i+1)+'_branchFrom'+str(i), weight=5 ),                                     #0 SS
 					     	State( None, name='B_D_pos_'+str(i+1)+'_branchFrom'+str(i),  weight=5 ),                                      #1 D
 					     	State( UniformDistribution(30, 130), name='B_I_pos_'+str(i+1)+'_branchFrom'+str(i), weight=5 ),               #2 I
 					     	State( None, name='B_M1_pos_'+str(i+1)+'_branchFrom'+str(i), weight=5 ),                                      #3 M1 - we'll tie this to M2 in a minute
-					     	State( UniformDistribution(30,130), name='B_M2_pos_'+str(i+1)+'_branchFrom'+str(i), weight=5 ),               #4 M2
+					     	State( NormalDistribution( allEmissions[analogue6merPos4][0], allEmissions[analogue6merPos4][1] ), name='B_M2_pos_'+str(i+1)+'_branchFrom'+str(i), weight=5 ),               #4 M2
 					     	State( None, name='B_SE_pos_'+str(i+1)+'_branchFrom'+str(i), weight=5 )],                                     #5 SE
 						[State( None, name='B_SS_pos_'+str(i+2)+'_branchFrom'+str(i), weight=5 ),                                     #0 SS
 					     	State( None, name='B_D_pos_'+str(i+2)+'_branchFrom'+str(i),  weight=5 ),                                      #1 D
 					     	State( UniformDistribution(30, 130), name='B_I_pos_'+str(i+2)+'_branchFrom'+str(i), weight=5 ),               #2 I
 					     	State( None, name='B_M1_pos_'+str(i+2)+'_branchFrom'+str(i), weight=5 ),                                      #3 M1 - we'll tie this to M2 in a minute
-					     	State( UniformDistribution(30,130), name='B_M2_pos_'+str(i+2)+'_branchFrom'+str(i), weight=5 ),               #4 M2
+					     	State( NormalDistribution( allEmissions[analogue6merPos3][0], allEmissions[analogue6merPos3][1] ), name='B_M2_pos_'+str(i+2)+'_branchFrom'+str(i), weight=5 ),               #4 M2
 					     	State( None, name='B_SE_pos_'+str(i+2)+'_branchFrom'+str(i), weight=5 )]	]                             #5 SE
 			
-			#If we have emission data for the analogue in this context, replace it with the appropriate distribution.  Otherwise, leave it uniform on [0,130].
-			kmer_pos3 = list(refSequence[i:i+6])
-			kmer_pos3[3] = 'B'
-			kmer_pos3 = ''.join(kmer_pos3)
-			if kmer_pos3 in allEmissions:
-				analogueStates[i][0][4] = State( NormalDistribution( allEmissions[kmer_pos3][0], 2*allEmissions[kmer_pos3][1] ), name='B_M2_pos_'+str(i+1)+'_branchFrom'+str(i), weight=5 )
-
-			kmer_pos2 = list(refSequence[i:i+6])			
-			kmer_pos2[2] = 'B'
-			kmer_pos2 = ''.join(kmer_pos2)
-			if kmer_pos2 in allEmissions:
-				analogueStates[i][1][4] = State( NormalDistribution( allEmissions[kmer_pos2][0], 2*allEmissions[kmer_pos2][1] ), name='B_M2_pos_'+str(i+2)+'_branchFrom'+str(i), weight=5 )
-
 			#tie M1 to M2
 			analogueStates[i][0][4].tie(analogueStates[i][0][3])
 			analogueStates[i][1][4].tie(analogueStates[i][1][3])
@@ -290,20 +288,19 @@ def build_RandIncHMM(reference_filename,emissions_filename,analogue=None):
 	return hmm
 
 
-def build_TrainingHMM(refSequence,emissions_filename):
+def build_TrainingHMM(refSequence,poremodelFilename):
 #	Builds a HMM from a reference sequence with a topology appropriate for training analogue emission probability when the analogue is at a known, fixed position.  
 #	Starts with the thymidine-containing kmer as a guess, and then refines the emission probability to that of the base analogue.
 #	ARGUMENTS
 #       ---------
-#	- path to a .fasta file which contains the reference sequence
+#	- refSequence: reference sequence from import_reference
 #	  type: string
-#	- path to an ONT model file that contains the emission data for 4096 possible 6mers
+#	- poremodelFilename: path to an ONT model file that contains the emission data for 4096 possible 6mers
 #	  type: string
-#	- location of 
-#	  type: int
 #	OUTPUTS
 #       -------
-#	- a pomegranate hmm object
+#	- hmm: a training hidden Markov model for base analogues
+#	  type: pomegranate object
 	
 	#set the hmm class
 	hmm = HiddenMarkovModel() 
@@ -311,7 +308,7 @@ def build_TrainingHMM(refSequence,emissions_filename):
 	refLength = len(refSequence)
 
 	#import the emission probabilities for non-analogue containing 6mers
-	allEmissions = import_poreModel(emissions_filename)
+	allEmissions = import_poreModel(poremodelFilename)
 
 	#two-dimensional array for the states, where the columns are the positions in the reference
 	thymidineStates = [[0 for x in range(refLength)] for y in range(6)] 
