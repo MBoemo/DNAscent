@@ -87,59 +87,54 @@ def import_2Dfasta(pathToReads,outFastaFilename):
 	#output file to write on
 	fout = open(outFastaFilename,'w')
 
-	originalPath = os.getcwd()
-
 	#path through the fast5 tree to get to the fastq sequence
 	fast5path2fastq = '/Analyses/Basecall_2D_000/BaseCalled_2D/Fastq'
 
-	#change the python working directory to the directory where the reads are located to make reading easier
-	os.chdir(pathToReads)
-
-	#all the read files we have in the directory
-	directory_list = os.listdir(pathToReads)
-	print str(len(directory_list)) + ' reads in ' + pathToReads
-
-	#go through the directory and extract fasta seqs until you reach the buffer, then write, release, and garbage collect
+	#empty reads string, and count the number of subdirectories so we can print progress
 	reads = ''
-	for i, fast5file in enumerate(directory_list):
+	numSubdirectories = len(next(os.walk(pathToReads, topdown=True))[1])
 
-		if fast5file.endswith('.fast5'):
+	#recursively go through the directory and subdirectories and extract fasta seqs until you reach the buffer, then write, release, and garbage collect
+	for j, [root, dirs, files] in enumerate(os.walk(pathToReads, topdown=True)):
+
+		for i, fast5file in enumerate(files):
+
+			if fast5file.endswith('.fast5'):
 		
-			#print progress to stdout (every 10,000 files)
-			if i % 10000 == 0:
-				print 'Exporting fast5 reads to fasta... ' + str(math.floor((float(i)/float(len(directory_list)))*100.0)) + '%'
+				#print progress every 5 subdirectories of reads
+				if j % 5 == 0:
+					print 'Exporting fast5 reads to fasta... ' + str(math.floor((float(j)/float(numSubdirectories))*100.0)) + '%'
 
-			try:
-				#open the fast5 file with h5py and grab the fastq
-				ffast5 = h5py.File(fast5file,'r')
-				fastq = ffast5[fast5path2fastq].value
-				ffast5.close()
-				fasta = fastq.split('\n')[1]
+				try:
+					#open the fast5 file with h5py and grab the fastq
+					ffast5 = h5py.File(root+'/'+fast5file,'r')
+					fastq = ffast5[fast5path2fastq].value
+					ffast5.close()
+					fasta = fastq.split('\n')[1]
 			
-				#append the sequence in the fasta format, with the path to the fast5 file as the 
-				reads += '>'+pathToReads+'/'+fast5file+'\n'+fasta+'\n'
+					#append the sequence in the fasta format, with the full path to the fast5 file as the sequence name
+					reads += '>'+root+'/'+fast5file+'\n'+fasta+'\n'
 
-			except KeyError:
-				warnings.warn('File '+fast5file+' did not have a valid fastq path.', Warning)
+				except KeyError:
+					warnings.warn('File '+root+'/'+fast5file+' did not have a valid fastq path.  Skipping.', Warning)
 
-			#write to the file and release the buffer
-			if i % buffersize == 0:
-				fout.write(reads)
-				fout.flush()
-				os.fsync(fout .fileno())
-				reads = ''
-				gc.collect()
+				#write to the file and release the buffer
+				if i % buffersize == 0:
+					fout.write(reads)
+					fout.flush()
+					os.fsync(fout .fileno())
+					reads = ''
+					gc.collect()
 
-	#flush the buffer one last time and close the output file
-	fout.write(reads)
-	fout.flush()
-	os.fsync(fout .fileno())
-	reads = ''
-	gc.collect()
+		#flush the buffer and write once we're reached the end of fast5 files in the subdirectory
+		fout.write(reads)
+		fout.flush()
+		os.fsync(fout .fileno())
+		reads = ''
+		gc.collect()
+	
+	#close output fasta file	
 	fout.close()
-
-	#change the python working directory back to the original one
-	os.chdir(originalPath)
 
 
 def export_poreModel(emissions, outputFilename):
@@ -237,15 +232,13 @@ def calculate_normalisedEvents(fast5Files, poreModelFile):
 	return allNormalisedReads
 
 
-def import_FixedPosTrainingData(reference, bamFile, poreModelFile):
+def import_FixedPosTrainingData(bamFile, poreModelFile):
 #	Used to import training data from reads that have an analogue in a fixed context.
 #	Creates a map from kmer (string) to a list of lists, where each list is comprised of events from a read
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
 #	that they came from, normalises the events to a pore model, and returns the list of normalised events.
 #	ARGUMENTS
 #       ---------
-#	- reference: path to a fasta reference file
-#	  type: string
 #	- bamFile: a BAM file from the alignment
 #	  type: string
 #	- poreModelFile: ONT model file for 5mers that can be used to normalised for shift and scale
@@ -267,10 +260,7 @@ def import_FixedPosTrainingData(reference, bamFile, poreModelFile):
 	f = pysam.AlignmentFile(bamFile,'r')
 	for record in f:
 
-		sequence = record.query_sequence
-		readID = record.query_name
-
-		fast5files.append(readID)
+		fast5files.append(record.query_name)
 
 	f.close()
 
