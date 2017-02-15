@@ -93,17 +93,20 @@ def import_2Dfasta(pathToReads,outFastaFilename):
 	#empty reads string, and count the number of subdirectories so we can print progress
 	reads = ''
 	numSubdirectories = len(next(os.walk(pathToReads, topdown=True))[1])
+	readCount = 0
 
 	#recursively go through the directory and subdirectories and extract fasta seqs until you reach the buffer, then write, release, and garbage collect
-	for j, [root, dirs, files] in enumerate(os.walk(pathToReads, topdown=True)):
+	for root, dirs, files in os.walk(pathToReads, topdown=True):
 
-		for i, fast5file in enumerate(files):
+		for fast5file in files:
+
+			readCount += 1
 
 			if fast5file.endswith('.fast5'):
 		
 				#print progress every 5 subdirectories of reads
-				if j % 5 == 0:
-					print 'Exporting fast5 reads to fasta... ' + str(math.floor((float(j)/float(numSubdirectories))*100.0)) + '%'
+				if readCount % 10000 == 0:
+					print 'Exporting fast5 reads to fasta... read ' + str(readCount)
 
 				try:
 					#open the fast5 file with h5py and grab the fastq
@@ -119,7 +122,7 @@ def import_2Dfasta(pathToReads,outFastaFilename):
 					warnings.warn('File '+root+'/'+fast5file+' did not have a valid fastq path.  Skipping.', Warning)
 
 				#write to the file and release the buffer
-				if i % buffersize == 0:
+				if readCount % buffersize == 0:
 					fout.write(reads)
 					fout.flush()
 					os.fsync(fout .fileno())
