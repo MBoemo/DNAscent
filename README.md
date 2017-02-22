@@ -1,5 +1,5 @@
 # Osiris
-Python/C++ software for detecting base analogues in Oxford Nanopore reads.  The two general uses are (1) determining the current across the pore that is produced by a 6mer that contains a base analogue, and (2) determining where base analogues are incorporated in a nanopore read.  The Python flavour of Osiris uses some of the HMM libraries from pomegranate (https://github.com/jmschrei/pomegranate).  Instructions for using Osiris in Python are as follows.
+Python/C++ software for detecting base analogues in Oxford Nanopore reads.  The two general uses are (1) determining the current across the pore that is produced by a 6mer that contains a single base analogue, and (2) determining where base analogues are incorporated in a nanopore read.  The Python flavour of Osiris uses some of the HMM libraries from pomegranate (https://github.com/jmschrei/pomegranate).  Instructions for using Osiris in Python are as follows.
 
 ## Python Flavour
 Dependencies:
@@ -7,7 +7,7 @@ Dependencies:
 - pysam (https://github.com/pysam-developers/pysam),
 - pomegranate (https://github.com/jmschrei/pomegranate).
 
-Pomegranate is a Cython library of hidden markov model (HMM) algorithms that serves as a backend for Osiris.
+Pomegranate is a Cython library of hidden markov model (HMM) algorithms that serves as a backend for Osiris.  All of these dependencies should be installed before installing Osiris.
 
 ### Installation and Setup
 Install Osiris by running:
@@ -20,17 +20,17 @@ import Osiris as osi
 ```
 
 ### Finding Base Analogue Emissions
-The inputs to Osiris are:
-- A reference fasta file, which should contain the reference sequence of all samples used in the run.  They should each have unique names.  The only admissable characters in the reference sequences are A, T, G, C, and N.
-- A directory that contains all of the fast5 files from the run.
+The general inputs for Osiris are:
+- A reference fasta file, which should contain the reference sequence of all samples used in the run.  They should each have unique names.  The only admissable characters in the reference sequences are A, T, G, C, and N.  Note: if there is a base analogue, it should be replaced by the standard base in the reference.  For example, BrdU (a thymidine analogue) should be replaced by a T in the reference file.
+- A directory that contains all of the fast5 files from the run.  The fast5 files can be in subdirectories of this directory.
 
-The first step is to sort the reads by the reference that they align to and perform a quality control on the coverage of these reads.  This is done by the Osiris function alignAndSort.
+A nanopore run may contain several samples that were barcoded using the ONT barcoding kit.  The first step is to sort these reads by the reference that they best align to and perform some quality control on the reads.  This is done by the Osiris function alignAndSort.
 ```python
-osi.alignAndSort('full-path-to-reads','full-path-to-reference',20)
+osi.alignAndSort('full-path-to-top-level-reads-directory','full-path-to-reference-fasta',number-of-threads)
 ```
-Full paths to the reads and reference should be provided as strings, and the third argument specifies the number of threads on which to run BWA-MEM alignment.  The function will export the fast5 reads to a fasta file, perform a sequence alignment against the reference, ignore reads that have below 80% coverage of one of the references, and finally sort the BAM file into a separate BAM file for each reference.  The current working directory will now contain reads.fasta and a BAM file for each reference.
+Full paths to the reads and reference should be provided as strings, and the third argument specifies the number of threads on which to run BWA-MEM alignment.  The function will export all the fast5 reads to a fasta file, perform a sequence alignment against the reference, ignore reads that are reverse complements or have below 80% coverage of one of the references, and finally sort the BAM file into a separate BAM file for each reference.  The current working directory will now contain reads.fasta and a BAM file for each reference.
 
-Once the function finishes, create a new reference fasta file that contains only the reference of interest (that contains an analogue).  Import the new reference file by running:
+Once the function finishes, create a new reference fasta file that contains only the reference of interest (the one that contains an analogue).  Import the new reference file by running:
 
 ```python
 reference = osi.import_reference('mySingleEntryReference.fasta')
@@ -40,19 +40,19 @@ Osiris accepts two types of training data.  The first has a base analogue (BrdU,
 
 An example of a command that imports training data is:
 ```python
-trainingData = import_HairpinTrainingData('mySingleEntryReference.fasta','mySingleEntryReference.bam','template_median68pA.5mers.model',113,20)
+trainingData = import_HairpinTrainingData(reference,'mySingleEntryReference.bam','template_median68pA.5mers.model',location-of-redundant-A,minimum-reads-threshold)
 ```
-Here, mySingleEntryReference.fasta is the same file that was used to build the reference.  The alignment file mySingleEntryReference.bam is the BAM file created by prepData.sh that corresponds to the reference.  The 5mer model file can be found in the pore_models directory, and is required here to normalise for the Metrichor shift and scale parameters.  The input 113 is the location in the reference of the A base of the NNNANNN domain.  Please note that in Osiris, locations are indexed from zero, so the first base in the reference has index 0.  Finally, the last argument is the minimum number of reads that we're allowed to train on (20 in this case).  These input arguments, particularly the last two, will change depending on your project.
+Here, the first input is the output of the previous step.  The alignment file mySingleEntryReference.bam is the BAM file created by the alignAndSort function: it is the BAM file that corresponds to the reference.  The 5mer model file can be found in the pore_models Osiris directory, and is required here to normalise for the Metrichor shift and scale parameters.  You can either copy it to your current working directory, or put the full path as the argument.  The input location-of-redundant-A is an integer that gives the location in the reference of the A base of the NNNANNN domain.  Please note that in Osiris, locations are indexed from zero (as is typical in Python) so that the first base in the reference has index 0.  Finally, the last argument is an integer that gives a cutoff for the minimum number of reads per 6mer that Osiris will use as training data.  So if we enter 20, and your run only has less than 20 reads for a 6mer, Osiris will not incorporate that 6mer into the new pore model because it is considered to have too little data.
 
 To train the model, run:
 ```python
-trainedEmissions = osi.trainForContextAnalogue(trainingData, reference, 'template_median68pA.model', 0.5, 20)
+trainedEmissions = osi.trainForContextAnalogue(trainingData, reference, 'template_median68pA.model', baum-welch-convergence-tolerance, threads)
 ```
-This builds a HMM for the reference, and uses the training data to adjust the emission parameters to those of the base analogue.  The inputs trainingData and reference were generated in previous steps.  The model file template_median68pA.model is provided in the pore_models directory.  Note that this is a 6mer model, as opposed to the 5mer model that was used to normalise the training data.  The function must be provided with a convergence for Baum-Welch iterations (0.5 in this case) and the number of cores that model training is allowed to run on (20 in this case).
+This function builds a HMM for the reference, and uses the training data created in the previous step to adjust the emission parameters to those of the base analogue.  The inputs {trainingData, reference} were generated in previous steps.  The model file template_median68pA.model is provided in the pore_models directory.  Note that this is a 6mer model, as opposed to the 5mer model that was used to normalise the training data.  The function must be provided with a convergence for Baum-Welch iterations and the number of cores that model training is allowed to run on.
 
 Finally, to visualise the new base analogue emission means and standard deviations, Osiris will build a new pore model file.  Run:
 ```python
-osi.export_poreModel(trainedEmissions, 'BrdU_emissions.model')
+osi.export_poreModel(trainedEmissions, 'output-pore-model-file.model')
 ```
 The input trainedEmissions was created in the prevous step, and 'BrdU_emissions.model' is the filename of the pore model that you want the function to create.  After calling export_poreModel, you should see the pore model file appear in your working directory.
 
