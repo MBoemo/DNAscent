@@ -13,6 +13,8 @@ import re
 import os
 import gc
 import math
+from joblib import Parallel, delayed #for parallel processing
+import multiprocessing #for parallel processing
 from utility import reverseComplement
 
 
@@ -174,14 +176,18 @@ def export_poreModel(emissions, outputFilename):
 	f.close()
 
 
-def calculate_normalisedEvents(fast5Files, poreModelFile):
+def calculate_normalisedEvents(kmer, fast5Files, poreModelFile, progress):
 #	Uses a 5mer model to calculate the shift and scale pore-specific parameters for each individual read in a list of fast5 files
 #	ARGUMENTS
 #       ---------
+#	- kmer: redundant 6mer to identify the reads we're normalising
+#	  type: string
 #	- fast5Files: list of fast5 files whose events should be normalised
 #	  type: list of strings
 #	- poreModelFile: path to a pore model file.  This should be a 5mer model in the ONT format
 #	  type: string
+#	- progress: shows the kmer we're on to give an idea of progress
+#	  type: tuple of length two
 #	OUTPUTS
 #       -------
 #	- allNormalisedReads: a list, where each member is itself a list of events that have been normalised to the pore model
@@ -234,8 +240,10 @@ def calculate_normalisedEvents(fast5Files, poreModelFile):
 		allNormalisedReads.append(normalisedEvents)
 
 		f.close()
+
+	print 'Normalising for shift and scale... ' + 'finished ' + str(progress[0]) + ' of ' + str(progress[1])
 	
-	return allNormalisedReads
+	return (kmer, allNormalisedReads)
 
 
 def import_FixedPosTrainingData(bamFile, poreModelFile):
@@ -339,19 +347,20 @@ def import_HairpinTrainingData(reference, bamFile, poreModelFile, redundant_A_Lo
 
 	f.close()
 
-	kmer2normalisedReads = {}
-	counter = 0 #for progress
-	#for each 7mer, go through the corresponding fast5 files.  If we have enough files to train on, normalise them for shift and scale and return the normalised events
+	#if a kmer has a number of associated reads that is below the minimum number of reads we need to train on, remove that kmer from the dictionary
+	filteredKmer2Files = {}
 	for key in kmer2Files:
+		if len(kmer2Files[key]) >= readsThreshold:
+			filteredKmer2Files[key] = kmer2Files[key]
+	del kmer2Files
 
-		if len(kmer2Files[key]) > readsThreshold: #if we have enough data to train on...
-			#print progress	
-			print 'Normalising for shift and scale... ' + str(math.floor(float(counter)/float(len(kmer2Files))*100)) + '%'
+	#do the parallel processing, where a kmer (and associated reads) is given to each core.  use the maximum number of cores available
+	normalisedReadsTuples = Parallel(n_jobs = multiprocessing.cpu_count())(delayed(calculate_normalisedEvents)(key, filteredKmer2Files[key], poreModelFile, (i,len(filteredKmer2Files))) for i, key in enumerate(filteredKmer2Files))
 
-			normalisedReads = calculate_normalisedEvents(kmer2Files[key], poreModelFile)
-			kmer2normalisedReads[key] = normalisedReads
-
-		counter += 1
+	#reshape the list of tuples from parallel processing into a dictionary
+	kmer2normalisedReads = {}
+	for entry in normalisedReadsTuples:
+		kmer2normalisedReads[entry[0]] = entry[1]
 
 	return kmer2normalisedReads
 

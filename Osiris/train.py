@@ -11,17 +11,17 @@ import matplotlib.pyplot as plt
 
 from data_IO import import_poreModel
 from utility import reverseComplement
-from build_model import build_TrainingHMM
+from build_model import build_TrainingHMM, build_RandIncHMM
 import numpy as np
 
 
-def callAnalogue(hmm, readEvents):
+def callAnalogue(testData,reference,poreModelFilename,analogue):
 #	For plotting the difference between the trained mean/std and the pore model mean/std
 #	ARGUMENTS
 #       ---------
 #	- hmm: Hidden Markov Model object, built by build_RandIncHMM from build_model.py
 #	  type: pomegranate object
-#	- readEvents: normalised events from an Oxford Nanopore reads
+#	- testData: normalised events from an Oxford Nanopore reads
 #	  type: list
 #	OUTPUTS
 #       -------
@@ -30,19 +30,27 @@ def callAnalogue(hmm, readEvents):
 
 	calledAnaloguePositions = []
 
-	#run the viterbi algorithm on the readEvents.  the best path of states is given by vpath and quality is given by logp
-	logp, vpath = hmm.viterbi(readEvents)
+	#build an HMM that can detect the random incorporation of a base analogue that replaces thymidine
+	hmm = build_RandIncHMM(reference,poreModelFilename,analogue)
 
-	for entry in vpath:
-		if entry[1].name != 'None-end' and entry[1].name != 'None-start': #protected pomegranate names for start and end states
-			splitName = entry[1].name.split('_') #state info: [branch (T or B), state type (I, D, M1, etc.), 'pos', position on reference]
+	for read in testData:
+
+		#run the viterbi algorithm on the testData.  the best path of states is given by vpath and quality is given by logp
+		logp, vpath = hmm.viterbi(read)
+
+		analoguesInThisRead = []
+		for entry in vpath:
+			if entry[1].name != 'None-end' and entry[1].name != 'None-start': #protected pomegranate names for start and end states
+				splitName = entry[1].name.split('_') #state info: [branch (T or B), state type (I, D, M1, etc.), 'pos', position on reference]
 			
-			#if the state is a BrdU state and it was a match (either M1 or M2) then call a base analogue at that position
-			if splitName[0] == 'B' and splitName[1] in ['M1','M2']:
-				calledAnaloguePositions.append(int(splitName[3]))
+				#if the state is a BrdU state and it was a match (either M1 or M2) then call a base analogue at that position
+				if splitName[0] == 'B' and splitName[1] in ['M1','M2']:
+					analoguesInThisRead.append(int(splitName[3]))
 
-	#in theory, there could be both M1 and M2 matches for a single HMM module, so remove duplicates
-	calledAnaloguePositions = list(set(calledAnaloguePositions))
+		#in theory, there could be both M1 and M2 matches for a single HMM module, so remove duplicates
+		analoguesInThisRead = list(set(analoguesInThisRead))
+
+		calledAnaloguePositions.append(analoguesInThisRead)
 
 	return calledAnaloguePositions
 
@@ -103,7 +111,7 @@ def trainingImprovements(hmm, reference, modelFile, kmerName):
 	return meanImprovement, stdImprovement
 
 
-def trainForFixedAnalogue(trainingData, reference, analoguePositions, poreModelFilename, tolerance, threads):
+def trainForFixedAnalogue(trainingData, reference, analoguePositions, poreModelFilename, threads):
 #	For training data with one base analogue in a fixed context - no N's
 #	Creates a map from kmer (string) to a list that has the kmer's mean and standard deviation
 #	ARGUMENTS
@@ -116,8 +124,6 @@ def trainForFixedAnalogue(trainingData, reference, analoguePositions, poreModelF
 #	  type: list
 #	- poreModelFilename: an ONT pore model filename for a 6mer model
 #	  type: string
-#	- toerance for convergence of Baum-Welch iterations
-#	  type: float
 #	- number of threads on which to run training
 #	  type: int
 #	OUTPUTS
@@ -131,7 +137,7 @@ def trainForFixedAnalogue(trainingData, reference, analoguePositions, poreModelF
 	hmm = build_TrainingHMM(reference,poreModelFilename)
 
 	#train the HMM (Baum-Welch iterations) to the specified tolerance, using the specified number of threads	
-	hmm.fit(trainingData,stop_threshold=tolerance,n_jobs=threads)
+	hmm.fit(trainingData,stop_threshold=0.1,min_iterations=50,n_jobs=threads)
 
 	for state in hmm.states:
 		if state.name != 'None-end' and state.name != 'None-start': #these are the pomegranate protected names of start and end states
@@ -150,7 +156,7 @@ def trainForFixedAnalogue(trainingData, reference, analoguePositions, poreModelF
 	return analogueEmissions
 			
 
-def trainForContextAnalogue(trainingData, reference, poreModelFilename, tolerance, threads):
+def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads):
 #	Creates a map from kmer (string) to list of the kmer's mean and standard deviation 
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
 #	that they came from, normalises the events to a pore model, and returns the list of normalised events.
@@ -162,8 +168,6 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, toleranc
 #	  type: string
 #	- poreModelFilename: an ONT pore model filename for a 6mer model
 #	  type: string
-#	- toerance for convergence of Baum-Welch iterations
-#	  type: float
 #	- number of threads on which to run training
 #	  type: int
 #	OUTPUTS
@@ -188,7 +192,7 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, toleranc
 		hmm = build_TrainingHMM(refLocal,poreModelFilename)
 
 		#train the HMM (Baum-Welch iterations) to the specified tolerance, using the specified number of threads	
-		hmm.fit(trainingData[key],stop_threshold=tolerance,n_jobs=threads)
+		hmm.fit(trainingData[key],stop_threshold=0.1,min_iterations=50,n_jobs=threads)
 
 		for state in hmm.states:
 			if state.name != 'None-end' and state.name != 'None-start': #these are the pomegranate protected names of start and end states
@@ -206,18 +210,5 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, toleranc
 					
 					#dictionary, keyed by the analogue 6mer, that returns the trained mean and trained standard deviation for the 6mer
 					analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1] ] 
-		
-		#PLOTTING: this is to plot training improvements per kmer as a pdf , if you want to (uncomment if this is desired)
-		#NOTE: this produces two plots per kmer, so depending on what you're doing, it might produce a lot of plots
-		#row_mu, row_std = trainingImprovements(hmm, refLocal, poreModelFilename, key)
-		
-		#PLOTTING: this block of code creates numpy arrays that can be plotted if you want to visualise a heatmap of mean, std improvements across a number of kmers
-		#if first:
-		#	A = np.array(row_mu)
-		#	B = np.array(row_std)
-		#	first = False
-		#else:
-		#	A = np.vstack((A,row_mu))
-		#	B = np.vstack((B,row_std))
 
 	return analogueEmissions
