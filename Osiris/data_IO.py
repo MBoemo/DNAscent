@@ -121,6 +121,9 @@ def import_2Dfasta(pathToReads,outFastaFilename):
 				except KeyError:
 					warnings.warn('File '+root+'/'+fast5file+' did not have a valid fastq path.  Skipping.', Warning)
 
+				except IOError:
+					warnings.warn('File '+root+'/'+fast5file+' could not be opened and may be corrupted.  Skipping.', Warning)
+
 				#write to the file and release the buffer
 				if readCount % buffersize == 0:
 					fout.write(reads)
