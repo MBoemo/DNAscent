@@ -176,7 +176,10 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads)
 #	  type: dictionary
 
 	analogueEmissions = {}
-	for key in trainingData:
+	for i, key in enumerate(trainingData):
+
+		#print progress
+		print 'Training for 6mer parameters... ' + str(i) + ' of ' + str(len(trainingData.keys()))
 
 		refLocal = reference
 		revComp = reverseComplement(key)
@@ -192,7 +195,7 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads)
 		hmm = build_TrainingHMM(refLocal,poreModelFilename)
 
 		#train the HMM (Baum-Welch iterations) to the specified tolerance, using the specified number of threads	
-		hmm.fit(trainingData[key],stop_threshold=0.1,min_iterations=50,n_jobs=threads)
+		hmm.fit(trainingData[key],stop_threshold=0.1,min_iterations=30,n_jobs=threads)
 
 		for state in hmm.states:
 			if state.name != 'None-end' and state.name != 'None-start': #these are the pomegranate protected names of start and end states

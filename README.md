@@ -40,15 +40,15 @@ Osiris accepts two types of training data.  The first has a base analogue (BrdU,
 
 An example of a command that imports training data is:
 ```python
-trainingData = import_HairpinTrainingData(reference,'mySingleEntryReference.bam','template_median68pA.5mers.model',location-of-redundant-A,minimum-reads-threshold)
+trainingData = osi.import_HairpinTrainingData(reference,'mySingleEntryReference.bam','template_median68pA.5mers.model',location-of-redundant-A,minimum-reads-threshold)
 ```
 Here, the first input is the output of the previous step.  The alignment file mySingleEntryReference.bam is the BAM file created by the alignAndSort function: it is the BAM file that corresponds to the reference.  The 5mer model file can be found in the pore_models Osiris directory, and is required here to normalise for the Metrichor shift and scale parameters.  You can either copy it to your current working directory, or put the full path as the argument.  The input location-of-redundant-A is an integer that gives the location in the reference of the A base of the NNNANNN domain.  Please note that in Osiris, locations are indexed from zero (as is typical in Python) so that the first base in the reference has index 0.  Finally, the last argument is an integer that gives a cutoff for the minimum number of reads per 6mer that Osiris will use as training data.  So if we enter 20, and your run only has less than 20 reads for a 6mer, Osiris will not incorporate that 6mer into the new pore model because it is considered to have too little data.
 
 To train the model, run:
 ```python
-trainedEmissions = osi.trainForContextAnalogue(trainingData, reference, 'template_median68pA.model', baum-welch-convergence-tolerance, threads)
+trainedEmissions = osi.trainForContextAnalogue(trainingData, reference, 'template_median68pA.model', threads)
 ```
-This function builds a HMM for the reference, and uses the training data created in the previous step to adjust the emission parameters to those of the base analogue.  The inputs {trainingData, reference} were generated in previous steps.  The model file template_median68pA.model is provided in the pore_models directory.  Note that this is a 6mer model, as opposed to the 5mer model that was used to normalise the training data.  The function must be provided with a convergence for Baum-Welch iterations and the number of cores that model training is allowed to run on.
+This function builds a HMM for the reference, and uses the training data created in the previous step to adjust the emission parameters to those of the base analogue.  The inputs {trainingData, reference} were generated in previous steps.  The model file template_median68pA.model is provided in the pore_models directory.  Note that this is a 6mer model, as opposed to the 5mer model that was used to normalise the training data.  The function must be provided with the number of cores that model training is allowed to run on.
 
 Finally, to visualise the new base analogue emission means and standard deviations, Osiris will build a new pore model file.  Run:
 ```python
@@ -113,3 +113,4 @@ Writing and loading with JSON is on the order of seconds, whereas pickle and cPi
 
 ##C++ Flavour
 Under development.
+
