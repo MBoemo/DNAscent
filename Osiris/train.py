@@ -194,7 +194,7 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads)
 		refLocal = refLocal.replace('NNNTNNN',revComp)
 
 		#build a training HMM based on the reference
-		hmm = build_TrainingHMM(refLocal,poreModelFilename,analogueLoc)
+		hmm = build_TrainingHMM(refLocal,poreModelFilename)
 
 		#train the HMM (Baum-Welch iterations) to the specified tolerance, using the specified number of threads	
 		hmm.fit(trainingData[key],edge_inertia=1,stop_threshold=1,n_jobs=threads)
