@@ -13,6 +13,8 @@ from data_IO import import_poreModel
 from utility import reverseComplement
 from build_model import build_TrainingHMM, build_RandIncHMM
 import numpy as np
+from joblib import Parallel, delayed #for parallel processing
+import multiprocessing #for parallel processing
 
 
 def callAnalogue(testData,reference,poreModelFilename,analogue):
@@ -192,10 +194,10 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads)
 		refLocal = refLocal.replace('NNNTNNN',revComp)
 
 		#build a training HMM based on the reference
-		hmm = build_TrainingHMM(refLocal,poreModelFilename)
+		hmm = build_TrainingHMM(refLocal,poreModelFilename,analogueLoc)
 
 		#train the HMM (Baum-Welch iterations) to the specified tolerance, using the specified number of threads	
-		hmm.fit(trainingData[key],stop_threshold=0.1,min_iterations=30,n_jobs=threads)
+		hmm.fit(trainingData[key],edge_inertia=1,stop_threshold=1,n_jobs=threads)
 
 		for state in hmm.states:
 			if state.name != 'None-end' and state.name != 'None-start': #these are the pomegranate protected names of start and end states
@@ -212,6 +214,12 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads)
 						exit('Exiting: Problem in trainForAnalogue in identifying analogue location.')
 					
 					#dictionary, keyed by the analogue 6mer, that returns the trained mean and trained standard deviation for the 6mer
-					analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1] ] 
+					#if the kmer is already in the dictionary, check if the new one has a lower standard deviation than the one that's there
+					#if it does, it's probably the better choice so use the new one instead.  Otherwise, stick with the old one.
+					if kmer in analogueEmissions:
+						if state.distribution.parameters[1] < analogueEmissions[kmer][1]:
+							analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1] ]	
+					else:
+						analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1] ] 
 
 	return analogueEmissions

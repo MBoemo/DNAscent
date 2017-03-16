@@ -47,6 +47,30 @@ def import_reference(filename):
 	return reference
 
 
+def export_reference(reference, header, filename):
+#	takes a reference from import_reference and writes it to a fasta file, formatting it in all capitals and with 60 characters on each line
+#	ARGUMENTS
+#       ---------
+#	- reference: reference string from import_reference
+#	  type: string
+#	- header: fasta header
+#	  type: string
+#	- filename: output filename
+#	  type: string
+
+	#write the fasta header at the top of the file
+	f = open(filename,'w')
+	f.write('>'+header+'\n')
+
+	#divide the reference string into blocks of 60 characters
+	referenceBlocks = [reference[i:i+60] for i in range(0, len(reference), 60)]
+
+	for block in referenceBlocks:
+		f.write(block+'\n')
+
+	f.close()
+	
+
 def import_poreModel(filename):
 #	takes the filename of an ONT pore model file and returns a map from kmer (string) to [mean,std] (list of floats)
 #	ARGUMENTS
