@@ -12,7 +12,8 @@ import numpy as np
 filenames = [ 'build_model',
 	      'data_IO',
 	      'train',
-	      'utility'
+	      'utility',
+	      'detect'
             ]
 
 modules= ["Osiris/{}".format(name) for name in filenames]

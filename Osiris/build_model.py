@@ -13,7 +13,7 @@ import warnings
 from data_IO import import_reference, import_poreModel
 
 
-def build_RandIncHMM(refSequence,poremodelFilename,analogue):
+def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 #	Builds a HMM from a reference sequence with a topology appropriate for detecting randomly incorporated base analogue.
 #	ARGUMENTS
 #       ---------
@@ -159,13 +159,13 @@ def build_RandIncHMM(refSequence,poremodelFilename,analogue):
 			#assign a list of analogue state objects to the dictionary, keyed by the position of the 6mer in the reference
 			analogueStates[i] = [	[State( None, name='B_SS_pos_'+str(i+1)+'_branchFrom'+str(i) ),                                     #0 SS
 					     	State( None, name='B_D_pos_'+str(i+1)+'_branchFrom'+str(i) ),                                      #1 D
-					     	State( UniformDistribution(30, 130), name='B_I_pos_'+str(i+1)+'_branchFrom'+str(i) ),               #2 I
+					     	State( UniformDistribution(30, 130, frozen=True), name='B_I_pos_'+str(i+1)+'_branchFrom'+str(i) ),               #2 I
 					     	State( None, name='B_M1_pos_'+str(i+1)+'_branchFrom'+str(i) ),                                      #3 M1 - we'll tie this to M2 in a minute
 					     	State( NormalDistribution( allEmissions[analogue6merPos4][0], allEmissions[analogue6merPos4][1] ), name='B_M2_pos_'+str(i+1)+'_branchFrom'+str(i) ),               #4 M2
 					     	State( None, name='B_SE_pos_'+str(i+1)+'_branchFrom'+str(i) )],                                     #5 SE
 						[State( None, name='B_SS_pos_'+str(i+2)+'_branchFrom'+str(i) ),                                     #0 SS
 					     	State( None, name='B_D_pos_'+str(i+2)+'_branchFrom'+str(i) ),                                      #1 D
-					     	State( UniformDistribution(30, 130), name='B_I_pos_'+str(i+2)+'_branchFrom'+str(i) ),               #2 I
+					     	State( UniformDistribution(30, 130, frozen=True), name='B_I_pos_'+str(i+2)+'_branchFrom'+str(i) ),               #2 I
 					     	State( None, name='B_M1_pos_'+str(i+2)+'_branchFrom'+str(i) ),                                      #3 M1 - we'll tie this to M2 in a minute
 					     	State( NormalDistribution( allEmissions[analogue6merPos3][0], allEmissions[analogue6merPos3][1] ), name='B_M2_pos_'+str(i+2)+'_branchFrom'+str(i) ),               #4 M2
 					     	State( None, name='B_SE_pos_'+str(i+2)+'_branchFrom'+str(i) )]	]                             #5 SE
@@ -350,7 +350,7 @@ def build_TrainingHMM(refSequence,poremodelFilename):
 
 		thymidineStates[0][i] = State( None, name='T_SS_pos_'+str(i) )                                                          #0 SS
 		thymidineStates[1][i] = State( None, name='T_D_pos_'+str(i) )                                                           #1 D
-		thymidineStates[2][i] = State( UniformDistribution(30, 130), name='T_I_pos_'+str(i) )                                   #2 I  - uniformly distributed on 30pA to 130pA
+		thymidineStates[2][i] = State( UniformDistribution(30, 130, frozen=True), name='T_I_pos_'+str(i) )                                   #2 I  - uniformly distributed on 30pA to 130pA
 		thymidineStates[3][i] = State( None, name='T_M1_pos_'+str(i) )                                                          #3 M1 - we'll tie this to M2 in a minute
 		thymidineStates[4][i] = State( NormalDistribution(presentEmissions[0], presentEmissions[1]), name='T_M2_pos_'+str(i) )  #4 M2 
 		thymidineStates[5][i] = State( None, name='T_SE_pos_'+str(i) )                                                          #5 SE

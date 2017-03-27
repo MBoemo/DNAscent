@@ -11,50 +11,10 @@ import matplotlib.pyplot as plt
 
 from data_IO import import_poreModel
 from utility import reverseComplement
-from build_model import build_TrainingHMM, build_RandIncHMM
+from build_model import build_TrainingHMM
 import numpy as np
 from joblib import Parallel, delayed #for parallel processing
 import multiprocessing #for parallel processing
-
-
-def callAnalogue(testData,reference,poreModelFilename,analogue):
-#	For plotting the difference between the trained mean/std and the pore model mean/std
-#	ARGUMENTS
-#       ---------
-#	- hmm: Hidden Markov Model object, built by build_RandIncHMM from build_model.py
-#	  type: pomegranate object
-#	- testData: normalised events from an Oxford Nanopore reads
-#	  type: list
-#	OUTPUTS
-#       -------
-#	- calledAnaloguePositions: list of positions on the reference where the model has detected a base analogue
-#	  type: list
-
-	calledAnaloguePositions = []
-
-	#build an HMM that can detect the random incorporation of a base analogue that replaces thymidine
-	hmm = build_RandIncHMM(reference,poreModelFilename,analogue)
-
-	for read in testData:
-
-		#run the viterbi algorithm on the testData.  the best path of states is given by vpath and quality is given by logp
-		logp, vpath = hmm.viterbi(read)
-
-		analoguesInThisRead = []
-		for entry in vpath:
-			if entry[1].name != 'None-end' and entry[1].name != 'None-start': #protected pomegranate names for start and end states
-				splitName = entry[1].name.split('_') #state info: [branch (T or B), state type (I, D, M1, etc.), 'pos', position on reference]
-			
-				#if the state is a BrdU state and it was a match (either M1 or M2) then call a base analogue at that position
-				if splitName[0] == 'B' and splitName[1] in ['M1','M2']:
-					analoguesInThisRead.append(int(splitName[3]))
-
-		#in theory, there could be both M1 and M2 matches for a single HMM module, so remove duplicates
-		analoguesInThisRead = list(set(analoguesInThisRead))
-
-		calledAnaloguePositions.append(analoguesInThisRead)
-
-	return calledAnaloguePositions
 
 
 def trainingImprovements(hmm, reference, modelFile, kmerName):
@@ -218,8 +178,8 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads)
 					#if it does, it's probably the better choice so use the new one instead.  Otherwise, stick with the old one.
 					if kmer in analogueEmissions:
 						if state.distribution.parameters[1] < analogueEmissions[kmer][1]:
-							analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1] ]	
+							analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1], len(trainingData[key]) ]	
 					else:
-						analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1] ] 
+						analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1], len(trainingData[key]) ] 
 
 	return analogueEmissions
