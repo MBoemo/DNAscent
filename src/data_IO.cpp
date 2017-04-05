@@ -77,17 +77,4 @@ std::map< std::string, std::pair< double, double > > import_poreModel( std::stri
 }
 
 
-int main(){
 
-	std::string ref = import_reference("/data_disk_SSD/software/Osiris/examples/carolinBrdU.fasta");
-	std::cout << ref << std::endl;
-
-	std::map< std::string, std::pair< double, double > > hash = import_poreModel("/data_disk_SSD/software/Osiris/examples/brdu_poreModel_25-3-17.model");
-
-
-
-
-
-	return 0;
-
-}

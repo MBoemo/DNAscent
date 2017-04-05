@@ -1,0 +1,16 @@
+#object files and binaries
+bin/Osiris
+*.o
+Osiris/*.pyc
+
+#all Penthus stuff
+Penthus/
+
+#directories we don't want to track
+build/
+examples/
+
+#backups
+.*swp
+.*swo
+.*swm

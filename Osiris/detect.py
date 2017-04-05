@@ -7,6 +7,7 @@
 
 from build_model import build_RandIncHMM
 from utility import reverseComplement
+from data_IO import import_poreModel
 
 
 def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj):
@@ -27,6 +28,16 @@ def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj)
 #	  is a list of lists, where each entry is a list of called analogue positions in a single read
 #	  type: list
 
+	#filter the analogue emissions so that it only has the emissions that we can distinguish from thymidine
+	print "Kmers in analogue: " + str(len(analogueObj.emissions.keys()))
+	ontModel = import_poreModel(poreModelFilename)
+	filteredEmissions = {}
+	for key in analogueObj.emissions:
+		if abs(analogueObj.emissions[key][0] - ontModel[key.replace('B','T')][0]) > 3:
+			filteredEmissions[key] = analogueObj.emissions[key]
+	analogueObj.emissions = filteredEmissions
+	print "Filtered to distinguishable Kmers: " + str(len(analogueObj.emissions.keys()))
+	
 	kmerAndCalls = []
 
 	for key in kmer2normalisedReads:
@@ -41,9 +52,14 @@ def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj)
 		refLocal = refLocal.replace('NNNANNN',key)
 		refLocal = refLocal.replace('NNNTNNN',revComp)
 
-		calledAnaloguePositions = callAnalogue(kmer2normalisedReads[key], refLocal, poreModelFilename, analogueObj)
+		#if we have analogue emissions for the 7mer in this hairpin, try to call the analogue
+		candidiate = revComp[0:3] + 'B' + revComp[4:]
 
-		kmerAndCalls.append( (key, calledAnaloguePositions) )
+		if (candidiate[0:6] in analogueObj.emissions) and (candidiate[1:] in analogueObj.emissions):
+
+			calledAnaloguePositions = callAnalogue(kmer2normalisedReads[key], refLocal, poreModelFilename, analogueObj)
+
+			kmerAndCalls.append( (candidiate, calledAnaloguePositions) )
 
 	return kmerAndCalls
 
