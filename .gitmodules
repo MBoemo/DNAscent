@@ -1,0 +1,3 @@
+[submodule "Penthus"]
+	path = Penthus
+	url = https://github.com/MBoemo/Penthus.git
