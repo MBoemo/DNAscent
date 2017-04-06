@@ -10,6 +10,12 @@
 std::string import_reference( std::string fastaFilePath ){
 	
 	std::ifstream file( fastaFilePath );
+
+	if ( not file.is_open() ){
+		std::cout << "Exiting with error.  Reference file could not be opened." << std::endl;
+		exit(EXIT_FAILURE);
+	}
+
 	std::string line;
 	std::string reference;
 	
@@ -41,6 +47,12 @@ std::map< std::string, std::pair< double, double > > import_poreModel( std::stri
 
 	/*file handle, and delimiter between columns (a \t character in the case of ONT model files) */
 	std::ifstream file( poreModelFilePath );
+
+	if ( not file.is_open() ){
+		std::cout << "Exiting with error.  Pore model file could not be opened." << std::endl;
+		exit(EXIT_FAILURE);
+	}
+
 	std::string line, key, mean, std;
 	std::string delim = "\t";
 
@@ -77,4 +89,53 @@ std::map< std::string, std::pair< double, double > > import_poreModel( std::stri
 }
 
 
+std::map< std::string, std::vector< std::vector< double > > > import_foh( std::string fohFilePath ){
+	
+	std::cout << "Importing training data..." << std::endl;
+	std::ifstream file( fohFilePath );
+	
+	if ( not file.is_open() ){
+		std::cout << "Exiting with error.  Training data file could not be opened." << std::endl;
+		exit(EXIT_FAILURE);
+	}
 
+	std::string line;
+	std::string reference;
+	std::string delim = " ";
+	std::string key;
+	std::string event;
+
+	std::map< std::string, std::vector< std::vector< double > > > kmer2normalisedReads;
+	
+	/*while we have a line to read in the reference file... */
+	while ( std::getline( file, line ) ){
+
+		if ( line[0] == '>' ){
+
+			key = line.erase( 0, 1 );
+
+		}
+		/*if this line is not a fasta header line */
+		else if ( line[0] != '>' ){
+
+			std::vector< double > Events;
+
+			while ( line.length() > 14 ){
+
+				event = line.substr( 0, line.find( delim ) );
+				line.erase( 0, line.find( delim ) + delim.length() );
+
+				Events.push_back( atof( event.c_str() ) );
+
+			}
+			
+			kmer2normalisedReads[ key ].push_back( Events );
+
+		}
+
+	}
+
+	std::cout << "Done." << std::endl;
+	return kmer2normalisedReads;
+
+}

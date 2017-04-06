@@ -4,9 +4,14 @@
 //----------------------------------------------------------
 
 
-#include "data_IO.h"
-#include "../Penthus/src/hmm.h"
+/*utility functions for C++ Osiris */
+
+std::string reverseComplement( std::string DNAseq ){
+
+	std::reverse( DNAseq.begin(), DNAseq.end() );
 
 
-/*function prototypes */
-HiddenMarkovModel build_trainingHMM( std::string, std::map< std::string, std::pair< double, double > > );
+
+
+
+}

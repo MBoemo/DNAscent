@@ -14,3 +14,4 @@
 /*function prototypes */
 std::string import_reference( std::string );
 std::map< std::string, std::pair< double, double > > import_poreModel( std::string );
+std::map< std::string, std::vector< std::vector< double > > > import_foh( std::string );

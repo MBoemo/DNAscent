@@ -505,5 +505,39 @@ def alignAndSort(readsDirectory, pathToReference, threads):
 		os.system('samtools index '+bamfile + '.bam')
 	
 
+def export_trainingDataToFoh( kmer2normalisedReads, filename ):
+#	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
+#	ARGUMENTS
+#       ---------
+#	- kmer2normalisedReads: output of import_HairpinTrainingData 
+#	  type: dictionary
+#	OUTPUTS
+#       -------
+#	- exports read observation data in the .foh format, to be read by C++ Osiris
 	
+	f = open(filename,'w')
+
+	for key in kmer2normalisedReads:
+		
+		f.write( '>'+key+'\n' )
+
+		for read in kmer2normalisedReads[key]:
+			
+			readsStr = map( str, read )
+
+			f.write( ' '.join(readsStr) + '\n' )
+
+	f.close()			
+
+
+
+
+
+
+
+
+
+
+
+
 

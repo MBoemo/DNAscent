@@ -8,8 +8,8 @@
 
 
 struct Arguments {
-	std::string ref;
-	//training data
+	std::string referenceFilename;
+	std::string trainingDataFilename;
 	std::string baseModelFilename;
 };
 
@@ -32,13 +32,19 @@ Arguments parseArguments( int argc, char** argv ){
 		if ( flag == "-r" ){
 
 			std::string strArg( argv[ i + 1 ] );
-			trainArgs.ref = strArg;	
+			trainArgs.referenceFilename = strArg;	
 
 		}
 		else if ( flag == "-m" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.baseModelFilename = strArg;
+
+		}
+		else if ( flag == "-d" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			trainArgs.trainingDataFilename = strArg;
 
 		}
 		else{
@@ -59,10 +65,22 @@ int train_main( int argc, char** argv ){
 
 	Arguments trainArgs = parseArguments( argc, argv );
 
-	std::string reference = import_reference( trainArgs.ref );
+	std::string reference = import_reference( trainArgs.referenceFilename );
 	std::map< std::string, std::pair< double, double > > baseModel =  import_poreModel( trainArgs.baseModelFilename );
 
-	HiddenMarkovModel hmm = build_trainingHMM( reference, baseModel );
+	std::map< std::string, std::vector< std::vector< double > > > trainingData = import_foh( trainArgs.trainingDataFilename );
+
+	HiddenMarkovModel hmm;
+
+	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
+
+		/*write something that replaces the reference NNNTNNN and NNNANNN with appropriate values from the key */
+
+		hmm = build_trainingHMM( reference, baseModel );
+		
+		hmm.BaumWelch( iter -> second, 1.0 );
+
+	}
 
 	return 0;
 
