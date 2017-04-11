@@ -5,6 +5,7 @@
 
 
 #include "Osiris_train.h"
+#include "utility.h"
 
 
 struct Arguments {
@@ -69,16 +70,35 @@ int train_main( int argc, char** argv ){
 	std::map< std::string, std::pair< double, double > > baseModel =  import_poreModel( trainArgs.baseModelFilename );
 
 	std::map< std::string, std::vector< std::vector< double > > > trainingData = import_foh( trainArgs.trainingDataFilename );
+	std::string brduDomain, adenDomain;
 
+	int adenDomLoc, brduDomLoc;
+	
 	HiddenMarkovModel hmm;
+
+	std::string refLocal;
+	std::vector< std::vector< double > > events;
+
 
 	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
 
-		/*write something that replaces the reference NNNTNNN and NNNANNN with appropriate values from the key */
+		refLocal = reference;
 
-		hmm = build_trainingHMM( reference, baseModel );
-		
-		hmm.BaumWelch( iter -> second, 1.0 );
+		adenDomain = iter -> first;
+		brduDomain = reverseComplement( adenDomain );
+
+		adenDomLoc = refLocal.find( "NNNANNN" );
+		brduDomLoc = refLocal.find( "NNNTNNN" );
+
+		refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
+		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
+
+		hmm = build_trainingHMM( refLocal, baseModel );
+
+		events = iter -> second;
+
+		hmm.BaumWelch( events, 1.0, 30, false );
+		break;
 
 	}
 

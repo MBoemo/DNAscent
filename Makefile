@@ -14,7 +14,7 @@ data_IO.o : src/data_IO.h src/data_IO.cpp
 build_model.o : src/build_model.h src/build_model.cpp src/data_IO.h
 	$(CC) $(CFLAGS) src/build_model.cpp $(PENFLAGS)
 
-Osiris_train.o : src/Osiris_train.h src/Osiris_train.cpp src/data_IO.h src/build_model.h
+Osiris_train.o : src/Osiris_train.h src/Osiris_train.cpp src/data_IO.h src/build_model.h src/utility.h
 	$(CC) $(CFLAGS) src/Osiris_train.cpp $(PENFLAGS)
 
 Osiris.o : src/Osiris.cpp src/Osiris_train.h src/data_IO.h src/build_model.h

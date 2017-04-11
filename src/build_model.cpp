@@ -25,14 +25,17 @@ HiddenMarkovModel build_trainingHMM( std::string reference, std::map< std::strin
 
 	std::string loc;
 
-	/*there are 0.. reference.length() - 1 characters in the reference string.  If we take the last 6mer, then it's {-6, -5, -4, -3, -2, -1} so we should go i < reference.length() - 5 */
+	/*create the distributions that we need */	
+	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
+		
+		emissionMeanAndStd = basePoreModel[ reference.substr( i, 6 ) ];
+		nd.push_back( NormalDistribution( emissionMeanAndStd.first, emissionMeanAndStd.second ) );
+
+	}
+
 
 	/*add states to model, handle internal module transitions */
-	for ( unsigned int i = 0; i < reference.length() - 5; i++ ){
-
-		emissionMeanAndStd = basePoreModel[ reference.substr( i, 6 ) ];
-
-		nd.push_back( NormalDistribution( emissionMeanAndStd.first, emissionMeanAndStd.second ) );
+	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
 
 		loc = std::to_string( i );
 
@@ -74,7 +77,8 @@ HiddenMarkovModel build_trainingHMM( std::string reference, std::map< std::strin
 	}
 
 	/*add transitions between modules (external transitions) */
-	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
+	for ( unsigned int i = 0; i < reference.length() - 7; i++ ){
+
 		hmm.add_transition( states[ 1 ][ i ], states[ 1 ][ i + 1 ], externalD2D );
 		hmm.add_transition( states[ 1 ][ i ], states[ 0 ][ i + 1 ], externalD2SS );
 		hmm.add_transition( states[ 2 ][ i ], states[ 0 ][ i + 1 ], externalI2SS );
@@ -88,9 +92,9 @@ HiddenMarkovModel build_trainingHMM( std::string reference, std::map< std::strin
 	hmm.add_transition( hmm.start, states[ 1 ][ 0 ], 0.5 );
 
 	/*handle end states */
-	hmm.add_transition( states[ 1 ][ reference.length() - 6 ], hmm.end, externalD2D + externalD2SS );
-	hmm.add_transition( states[ 2 ][ reference.length() - 6 ], hmm.end, externalI2SS );
-	hmm.add_transition( states[ 5 ][ reference.length() - 6 ], hmm.end, externalSE2SS + externalSE2D );
+	hmm.add_transition( states[ 1 ][ reference.length() - 7 ], hmm.end, externalD2D + externalD2SS );
+	hmm.add_transition( states[ 2 ][ reference.length() - 7 ], hmm.end, externalI2SS );
+	hmm.add_transition( states[ 5 ][ reference.length() - 7 ], hmm.end, externalSE2SS + externalSE2D );
 
 	hmm.finalise();
 

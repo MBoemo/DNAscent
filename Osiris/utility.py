@@ -6,6 +6,7 @@
 #----------------------------------------------------------
 
 import warnings
+import math
 
 
 class BaseAnalogue():
@@ -59,3 +60,18 @@ def reverseComplement(sequence):
 
 	#take the reverse of the complement and return it
 	return revComp[::-1]
+
+
+def hellingerDistance(mu1, std1, mu2, std2):
+#	returns the Hellinger distance between normal distributions N(mu1,std1) and N(mu2,std2)
+
+	h = 1 - math.sqrt( ( 2*std1*std2 )/( std1**2+std2**2 ) )*math.exp( ( -0.25*( mu1 - mu2 )**2 )/( std1**2 + std2**2 ) )
+	h = math.sqrt( h )
+
+	return h
+
+
+
+
+
+

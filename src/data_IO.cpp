@@ -116,7 +116,7 @@ std::map< std::string, std::vector< std::vector< double > > > import_foh( std::s
 
 		}
 		/*if this line is not a fasta header line */
-		else if ( line[0] != '>' ){
+		else{
 
 			std::vector< double > Events;
 

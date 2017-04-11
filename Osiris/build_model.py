@@ -11,6 +11,7 @@ import json
 import time
 import warnings
 from data_IO import import_reference, import_poreModel
+from utility import hellingerDistance
 
 
 def build_RandIncHMM(refSequence, poremodelFilename, analogue):
@@ -146,12 +147,16 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 		#we need a parallel analogue branch.
 
 		#check if there is a T (which could be a base analogue) coming into position 4, and make sure we have analogue data for the analogue at position 3 and 4
+		#if at least one of the modules in the branch could have a Hellinger distance of >0.5, make that branch
 		makeFork = False
 		if refSequence[i + 4] == 'T':
 			analogue6merPos4 = refSequence[i+1:i+4] + 'B' + refSequence[i+5:i+7]
 			analogue6merPos3 = refSequence[i+2:i+4] + 'B' + refSequence[i+5:i+8]
 			if (analogue6merPos4 in allEmissions) and (analogue6merPos3 in allEmissions):
-				makeFork = True
+				h1 = hellingerDistance( allEmissions[analogue6merPos3][0], allEmissions[analogue6merPos3][1], allEmissions[refSequence[i+1:i+7]][0], allEmissions[refSequence[i+1:i+7]][1] )
+				h2 = hellingerDistance( allEmissions[analogue6merPos4][0], allEmissions[analogue6merPos4][1], allEmissions[refSequence[i+2:i+8]][0], allEmissions[refSequence[i+2:i+8]][1] )
+				if h1 > 0.75 and h2 > 0.75:
+					makeFork = True
 
 		#if we pass the check above and we're not at the end, create the forking structure for a base analogue 
 		if makeFork and (i <= last_i-4):
