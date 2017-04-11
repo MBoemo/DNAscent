@@ -153,9 +153,11 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 			analogue6merPos4 = refSequence[i+1:i+4] + 'B' + refSequence[i+5:i+7]
 			analogue6merPos3 = refSequence[i+2:i+4] + 'B' + refSequence[i+5:i+8]
 			if (analogue6merPos4 in allEmissions) and (analogue6merPos3 in allEmissions):
-				h1 = hellingerDistance( allEmissions[analogue6merPos3][0], allEmissions[analogue6merPos3][1], allEmissions[refSequence[i+1:i+7]][0], allEmissions[refSequence[i+1:i+7]][1] )
-				h2 = hellingerDistance( allEmissions[analogue6merPos4][0], allEmissions[analogue6merPos4][1], allEmissions[refSequence[i+2:i+8]][0], allEmissions[refSequence[i+2:i+8]][1] )
-				if h1 > 0.75 and h2 > 0.75:
+				#h1 = hellingerDistance( allEmissions[analogue6merPos3][0], allEmissions[analogue6merPos3][1], allEmissions[refSequence[i+1:i+7]][0], allEmissions[refSequence[i+1:i+7]][1] )
+				#h2 = hellingerDistance( allEmissions[analogue6merPos4][0], allEmissions[analogue6merPos4][1], allEmissions[refSequence[i+2:i+8]][0], allEmissions[refSequence[i+2:i+8]][1] )
+				h1 = abs( allEmissions[analogue6merPos3][0] - allEmissions[refSequence[i+1:i+7]][0] )
+				h2 = abs( allEmissions[analogue6merPos4][0] - allEmissions[refSequence[i+2:i+8]][0] )
+				if h1 > 4 and h2 > 4:
 					makeFork = True
 
 		#if we pass the check above and we're not at the end, create the forking structure for a base analogue 
