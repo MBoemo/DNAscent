@@ -6,7 +6,7 @@
 
 /*utility functions for C++ Osiris */
 
-std::string reverseComplement( std::string &DNAseq ){
+std::string reverseComplement( std::string DNAseq ){
 
 	std::reverse( DNAseq.begin(), DNAseq.end() );
 	std::string revComp;

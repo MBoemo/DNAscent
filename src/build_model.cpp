@@ -96,7 +96,9 @@ HiddenMarkovModel build_trainingHMM( std::string reference, std::map< std::strin
 	hmm.add_transition( states[ 2 ][ reference.length() - 7 ], hmm.end, externalI2SS );
 	hmm.add_transition( states[ 5 ][ reference.length() - 7 ], hmm.end, externalSE2SS + externalSE2D );
 
+	std::cout << "\tFinalising and sorting states..." << std::endl;
 	hmm.finalise();
+	std::cout << "\tDone." << std::endl;
 
 	std::cout << "Done." << std::endl;
 

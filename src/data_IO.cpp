@@ -120,15 +120,14 @@ std::map< std::string, std::vector< std::vector< double > > > import_foh( std::s
 
 			std::vector< double > Events;
 
-			while ( line.length() > 14 ){
-
-				event = line.substr( 0, line.find( delim ) );
-				line.erase( 0, line.find( delim ) + delim.length() );
+			std::istringstream ss( line );
+			std::string event;
+			while ( std::getline( ss, event, ' ' ) ){
 
 				Events.push_back( atof( event.c_str() ) );
-
-			}
 			
+			}
+
 			kmer2normalisedReads[ key ].push_back( Events );
 
 		}

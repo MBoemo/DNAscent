@@ -70,7 +70,7 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 	externalSE2SS = 0.87
 
 	#this is really just a safety thing... get the last index in the iterator
-	for last_i,x in enumerate(refSequence[:-6]): 
+	for last_i,x in enumerate(refSequence[:-5]): 
 		pass
 		
 	###########################################################################################################################
@@ -78,7 +78,7 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 	
 	#Create the HMM states.  Iterate through the reference sequence, and make the repeating HMM module for each position in the sequence.
 	#Stop 7 characters before the end, because we'll need to reach forward by 7 to handle the branching.
-	for i, char in enumerate(refSequence[:-6]): 
+	for i, char in enumerate(refSequence[:-5]): 
 
 		###################################################
 		# Handle Thymidine Branch States
@@ -134,7 +134,7 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 	# Handle Transitions Between Modules, Handle Analogue Branch
 
 	#We have to reach forward to the next state (state i+1) so it's easier to just do this in a separate loop from the internal transitions one
-	for i, char in enumerate(refSequence[:-6]): 
+	for i, char in enumerate(refSequence[:-5]): 
 
 		###################################################
 		# Handle Base Analogue Branch
@@ -339,7 +339,7 @@ def build_TrainingHMM(refSequence,poremodelFilename):
 	externalSE2SS = 0.87
 
 	#this is really just a safety thing... get the last index in the iterator
-	for last_i,x in enumerate(refSequence[:-6]): 
+	for last_i,x in enumerate(refSequence[:-5]): 
 		pass
 		
 	###########################################################################################################################
@@ -347,7 +347,7 @@ def build_TrainingHMM(refSequence,poremodelFilename):
 	
 	#Create the HMM states.  Iterate through the reference sequence, and make the repeating HMM module for each position in the sequence.
 	#Stop 7 characters before the end, because we'll need to reach forward by 7 to handle the branching.
-	for i, char in enumerate(refSequence[:-6]): 
+	for i, char in enumerate(refSequence[:-5]): 
 
 		###################################################
 		# Handle Thymidine Branch States
@@ -403,7 +403,7 @@ def build_TrainingHMM(refSequence,poremodelFilename):
 	# Handle Transitions Between Modules, Handle Analogue Branch
 
 	#We have to reach forward to the next state (state i+1) so it's easier to just do this in a separate loop from the internal transitions one
-	for i, char in enumerate(refSequence[:-6]): 
+	for i, char in enumerate(refSequence[:-5]): 
 
 		#Don't execute this if we're at the end, because there's no i+1 to reach forward to.
 		if i != last_i:

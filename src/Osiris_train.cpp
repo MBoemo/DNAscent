@@ -96,9 +96,13 @@ int train_main( int argc, char** argv ){
 		hmm = build_trainingHMM( refLocal, baseModel );
 
 		events = iter -> second;
+	
+		//std::cout << hmm.sequenceProbability(events[0]) << std::endl;
+		hmm.summarise();
 
-		hmm.BaumWelch( events, 1.0, 30, false );
-		break;
+		hmm.BaumWelch( events, 1e-20, 30, false );
+
+		hmm.summarise();
 
 	}
 

@@ -530,6 +530,34 @@ def export_trainingDataToFoh( kmer2normalisedReads, filename ):
 	f.close()			
 
 
+def import_trainingDataFromFoh( filename ):
+#	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
+#	ARGUMENTS
+#       ---------
+#	- kmer2normalisedReads: output of import_HairpinTrainingData 
+#	  type: dictionary
+#	OUTPUTS
+#       -------
+#	- exports read observation data in the .foh format, to be read by C++ Osiris
+	
+	f = open(filename,'r')
+
+	g = f.readlines()
+
+	f.close()
+
+	trainingData = {}
+
+	for line in g:
+
+		if line[0] == '>':
+			key = line[1:].rstrip()
+			trainingData[key] = []
+		else:
+			trainingData[key].append(line.rstrip().split(' '))
+
+	return trainingData	
+
 
 
 
