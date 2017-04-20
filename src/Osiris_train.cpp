@@ -12,6 +12,7 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string trainingDataFilename;
 	std::string baseModelFilename;
+	std::string trainingOutputFilename;
 };
 
 
@@ -48,6 +49,12 @@ Arguments parseArguments( int argc, char** argv ){
 			trainArgs.trainingDataFilename = strArg;
 
 		}
+		else if ( flag == "-o" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			trainArgs.trainingOutputFilename = strArg;
+
+		}
 		else{
 
 			std::cout << "Exiting with error.  Invalid argument passed to Osiris train." << std::endl;
@@ -73,12 +80,18 @@ int train_main( int argc, char** argv ){
 	std::string brduDomain, adenDomain;
 
 	int adenDomLoc, brduDomLoc;
-	
-	HiddenMarkovModel hmm;
 
 	std::string refLocal;
 	std::vector< std::vector< double > > events;
 
+	/*IO */
+	std::stringstream ss;
+	std::ofstream outFile;
+	outFile.open( trainArgs.trainingOutputFilename );
+	if ( not outFile.is_open() ){
+		std::cout << "Exiting with error.  Training data file could not be opened." << std::endl;
+		exit(EXIT_FAILURE);
+	}
 
 	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
 
@@ -93,18 +106,21 @@ int train_main( int argc, char** argv ){
 		refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
 		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
 
-		hmm = build_trainingHMM( refLocal, baseModel );
+		HiddenMarkovModel *hmm = build_trainingHMM( refLocal, baseModel );
 
 		events = iter -> second;
 	
-		//std::cout << hmm.sequenceProbability(events[0]) << std::endl;
-		hmm.summarise();
+		hmm -> BaumWelch( events, 1e-9, 4, false );
 
-		hmm.BaumWelch( events, 1e-20, 30, false );
+		/*write training summary to output file */
+		ss = hmm -> summarise();
+		outFile << adenDomain << std::endl << ss.rdbuf();
 
-		hmm.summarise();
+		delete hmm;
 
 	}
+
+	outFile.close();
 
 	return 0;
 

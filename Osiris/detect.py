@@ -10,6 +10,7 @@ from utility import reverseComplement
 from data_IO import import_poreModel
 from joblib import Parallel, delayed # for parallel processing
 import multiprocessing
+from utility import hellingerDistance
 
 
 def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj):
@@ -31,18 +32,19 @@ def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj)
 #	  type: list
 
 	#filter the analogue emissions so that it only has the emissions that we can distinguish from thymidine
-	#print "Kmers in analogue: " + str(len(analogueObj.emissions.keys()))
-	#ontModel = import_poreModel(poreModelFilename)
-	#filteredEmissions = {}
-	#for key in analogueObj.emissions:
-	#	#if abs(analogueObj.emissions[key][0] - ontModel[key.replace('B','T')][0]) > 3:
-	#	if hellingerDistance( analogueObj.emissions[key][0], analogueObj.emissions[key][1], ontModel[key.replace('B','T')][0], ontModel[key.replace('B','T')][1] ) > 0.5:
-	#		filteredEmissions[key] = analogueObj.emissions[key]
-	#analogueObj.emissions = filteredEmissions
-	#print "Filtered to distinguishable Kmers: " + str(len(analogueObj.emissions.keys()))
+	print "Kmers in analogue: " + str(len(analogueObj.emissions.keys()))
+	ontModel = import_poreModel(poreModelFilename)
+	filteredEmissions = {}
+	for key in analogueObj.emissions:
+		#if abs(analogueObj.emissions[key][0] - ontModel[key.replace('B','T')][0]) > 3:
+		if hellingerDistance( analogueObj.emissions[key][0], analogueObj.emissions[key][1], ontModel[key.replace('B','T')][0], ontModel[key.replace('B','T')][1] ) > 0.6:
+			filteredEmissions[key] = analogueObj.emissions[key]
+	analogueObj.emissions = filteredEmissions
+	print "Filtered to distinguishable Kmers: " + str(len(analogueObj.emissions.keys()))
 	
 	kmerAndCalls = []
 	filtered = {}
+	references = {}
 
 	for key in kmer2normalisedReads:
 		
@@ -61,13 +63,17 @@ def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj)
 
 		if (candidiate[0:6] in analogueObj.emissions) and (candidiate[1:] in analogueObj.emissions):
 
+			references[key] = refLocal
 			filtered[key] = kmer2normalisedReads[key]
 
+			#uncomment for serial
 			#calledAnaloguePositions = callAnalogue(kmer2normalisedReads[key], refLocal, poreModelFilename, analogueObj)
 
+			#uncomment for serial
 			#kmerAndCalls.append( (candidiate, calledAnaloguePositions) )
 
-	results = Parallel( n_jobs = multiprocessing.cpu_count() )( delayed( callAnalogue )( filtered[ key ], refLocal, poreModelFilename, analogueObj ) for key in filtered )
+	#comment for serial
+	results = Parallel( n_jobs = multiprocessing.cpu_count() )( delayed( callAnalogue )( filtered[ key ], references[ key ], poreModelFilename, analogueObj ) for key in filtered )
 
 	return results
 
@@ -111,6 +117,6 @@ def callAnalogue( normalisedReads, reference, poreModelFilename, analogueObj ):
 		#in theory, there could be both M1 and M2 matches for a single HMM module, so remove duplicates
 		analoguesInThisRead = list(set(analoguesInThisRead))
 
-		calledAnaloguePositions.append(analoguesInThisRead)
+		calledAnaloguePositions.append( (logp, analoguesInThisRead ) )
 
 	return calledAnaloguePositions
