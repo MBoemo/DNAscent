@@ -75,17 +75,9 @@ int train_main( int argc, char** argv ){
 
 	std::string reference = import_reference( trainArgs.referenceFilename );
 	std::map< std::string, std::pair< double, double > > baseModel =  import_poreModel( trainArgs.baseModelFilename );
-
 	std::map< std::string, std::vector< std::vector< double > > > trainingData = import_foh( trainArgs.trainingDataFilename );
-	std::string brduDomain, adenDomain;
-
-	int adenDomLoc, brduDomLoc;
-
-	std::string refLocal;
-	std::vector< std::vector< double > > events;
 
 	/*IO */
-	std::stringstream ss;
 	std::ofstream outFile;
 	outFile.open( trainArgs.trainingOutputFilename );
 	if ( not outFile.is_open() ){
@@ -95,28 +87,22 @@ int train_main( int argc, char** argv ){
 
 	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
 
-		refLocal = reference;
+		std::string refLocal = reference;
 
-		adenDomain = iter -> first;
-		brduDomain = reverseComplement( adenDomain );
+		std::string adenDomain = iter -> first;
+		std::string brduDomain = reverseComplement( adenDomain );
 
-		adenDomLoc = refLocal.find( "NNNANNN" );
-		brduDomLoc = refLocal.find( "NNNTNNN" );
+		int adenDomLoc = refLocal.find( "NNNANNN" );
+		int brduDomLoc = refLocal.find( "NNNTNNN" );
 
 		refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
 		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
 
-		HiddenMarkovModel *hmm = build_trainingHMM( refLocal, baseModel );
+		std::vector< std::vector< double > > events = iter -> second;
 
-		events = iter -> second;
-	
-		hmm -> BaumWelch( events, 1e-9, 4, false );
+		std::stringstream ss = buildAndTrainHMM( refLocal, baseModel, events );
 
-		/*write training summary to output file */
-		ss = hmm -> summarise();
 		outFile << adenDomain << std::endl << ss.rdbuf();
-
-		delete hmm;
 
 	}
 

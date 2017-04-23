@@ -9,4 +9,4 @@
 
 
 /*function prototypes */
-HiddenMarkovModel *build_trainingHMM( std::string &, std::map< std::string, std::pair< double, double > > & );
+std::stringstream buildAndTrainHMM( std::string &, std::map< std::string, std::pair< double, double > > &, std::vector< std::vector< double > > & );

@@ -8,21 +8,21 @@
 #include "poreSpecificParameters.h"
 
 
-HiddenMarkovModel *build_trainingHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel ){
+std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::vector< std::vector< double > > &events ){
 
 	std::cout << "Building HMM... " << std::endl;
 
-	HiddenMarkovModel *hmm = new HiddenMarkovModel( 3*reference.length(), 3*reference.length() + 2 );
+	HiddenMarkovModel hmm = HiddenMarkovModel( 3*reference.length(), 3*reference.length() + 2 );
 
 	std::pair< double, double > emissionMeanAndStd;
 
 	/*STATES - vector (of vectors) to hold the states at each position on the reference - fill with dummy values */
-	static std::vector< std::vector< State > > states( 6, std::vector< State >( reference.length() - 5, State( NULL,"","", 1.0 ) ) );
+	std::vector< std::vector< State > > states( 6, std::vector< State >( reference.length() - 5, State( NULL,"","", 1.0 ) ) );
 
 	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
-	static std::vector< NormalDistribution > nd;
-	static SilentDistribution sd( 0.0, 0.0 );
-	static UniformDistribution ud( 30.0, 130.0 );
+	std::vector< NormalDistribution > nd;
+	SilentDistribution sd( 0.0, 0.0 );
+	UniformDistribution ud( 30.0, 130.0 );
 
 	std::string loc;
 
@@ -48,60 +48,64 @@ HiddenMarkovModel *build_trainingHMM( std::string &reference, std::map< std::str
 
 		/*add state to the model */
 		for ( unsigned int j = 0; j < 6; j++ ){
-			hmm -> add_state( states[ j ][ i ] );
+			hmm.add_state( states[ j ][ i ] );
 		}
 
 		/*transitions between states, internal to a single base */
 		/*from SS */
-		hmm -> add_transition( states[0][i], states[3][i], internalSS2M1 );
-		hmm -> add_transition( states[0][i], states[4][i], internalSS2M2 );
+		hmm.add_transition( states[0][i], states[3][i], internalSS2M1 );
+		hmm.add_transition( states[0][i], states[4][i], internalSS2M2 );
 
 		/*from D */
-		hmm -> add_transition( states[1][i], states[2][i], internalD2I );
+		hmm.add_transition( states[1][i], states[2][i], internalD2I );
 
 		/*from I */
-		hmm -> add_transition( states[2][i], states[2][i], internalI2I );
-		hmm -> add_transition( states[2][i], states[0][i], internalI2SS );
+		hmm.add_transition( states[2][i], states[2][i], internalI2I );
+		hmm.add_transition( states[2][i], states[0][i], internalI2SS );
 
 		/*from M1 */
-		hmm -> add_transition( states[3][i], states[3][i], internalM12M1 );
-		hmm -> add_transition( states[3][i], states[5][i], internalM12SE );
+		hmm.add_transition( states[3][i], states[3][i], internalM12M1 );
+		hmm.add_transition( states[3][i], states[5][i], internalM12SE );
 
 		/*from M2 */
-		hmm -> add_transition( states[4][i], states[4][i], internalM22M2 );
-		hmm -> add_transition( states[4][i], states[5][i], internalM22SE );
+		hmm.add_transition( states[4][i], states[4][i], internalM22M2 );
+		hmm.add_transition( states[4][i], states[5][i], internalM22SE );
 
 		/*from SE */
-		hmm -> add_transition( states[5][i], states[2][i], internalSE2I );		
+		hmm.add_transition( states[5][i], states[2][i], internalSE2I );		
 
 	}
 
 	/*add transitions between modules (external transitions) */
 	for ( unsigned int i = 0; i < reference.length() - 7; i++ ){
 
-		hmm -> add_transition( states[ 1 ][ i ], states[ 1 ][ i + 1 ], externalD2D );
-		hmm -> add_transition( states[ 1 ][ i ], states[ 0 ][ i + 1 ], externalD2SS );
-		hmm -> add_transition( states[ 2 ][ i ], states[ 0 ][ i + 1 ], externalI2SS );
-		hmm -> add_transition( states[ 5 ][ i ], states[ 0 ][ i + 1 ], externalSE2SS );
-		hmm -> add_transition( states[ 5 ][ i ], states[ 1 ][ i + 1 ], externalSE2D );
+		hmm.add_transition( states[ 1 ][ i ], states[ 1 ][ i + 1 ], externalD2D );
+		hmm.add_transition( states[ 1 ][ i ], states[ 0 ][ i + 1 ], externalD2SS );
+		hmm.add_transition( states[ 2 ][ i ], states[ 0 ][ i + 1 ], externalI2SS );
+		hmm.add_transition( states[ 5 ][ i ], states[ 0 ][ i + 1 ], externalSE2SS );
+		hmm.add_transition( states[ 5 ][ i ], states[ 1 ][ i + 1 ], externalSE2D );
 
 	}
 
 	/*handle start states */
-	hmm -> add_transition( hmm -> start, states[ 0 ][ 0 ], 0.5 );
-	hmm -> add_transition( hmm -> start, states[ 1 ][ 0 ], 0.5 );
+	hmm.add_transition( hmm.start, states[ 0 ][ 0 ], 0.5 );
+	hmm.add_transition( hmm.start, states[ 1 ][ 0 ], 0.5 );
 
 	/*handle end states */
-	hmm -> add_transition( states[ 1 ][ reference.length() - 7 ], hmm -> end, externalD2D + externalD2SS );
-	hmm -> add_transition( states[ 2 ][ reference.length() - 7 ], hmm -> end, externalI2SS );
-	hmm -> add_transition( states[ 5 ][ reference.length() - 7 ], hmm -> end, externalSE2SS + externalSE2D );
+	hmm.add_transition( states[ 1 ][ reference.length() - 7 ], hmm.end, externalD2D + externalD2SS );
+	hmm.add_transition( states[ 2 ][ reference.length() - 7 ], hmm.end, externalI2SS );
+	hmm.add_transition( states[ 5 ][ reference.length() - 7 ], hmm.end, externalSE2SS + externalSE2D );
 
 	std::cout << "\tFinalising and sorting states..." << std::endl;
-	hmm -> finalise();
+	hmm.finalise();
 	std::cout << "\tDone." << std::endl;
 
 	std::cout << "Done." << std::endl;
 
-	return hmm;
+	hmm.BaumWelch( events, 1e-9, 4, false );
+
+	std::stringstream ss = hmm.summarise();
+
+	return ss;
 
 }
