@@ -1,5 +1,5 @@
 # Osiris
-Python/C++ software for detecting base analogues in Oxford Nanopore reads.  The two general uses are (1) determining the current across the pore that is produced by a 6mer that contains a single base analogue, and (2) determining where base analogues are incorporated in a nanopore read.  The Python flavour of Osiris uses some of the HMM libraries from pomegranate (https://github.com/jmschrei/pomegranate).  Instructions for using Osiris in Python are as follows.
+Python/C++ software for detecting base analogues in Oxford Nanopore reads.  The two general uses are (1) determining the current across the pore that is produced by a 6mer that contains a single base analogue, and (2) determining where base analogues are incorporated in a nanopore read.  The Python flavour of Osiris uses some of the HMM libraries from pomegranate (https://github.com/jmschrei/pomegranate) while the C++ flavour of Osiris uses Penthus (https://github.com/MBoemo/Penthus).  Instructions for using Osiris in Python are as follows.
 
 ## Python Flavour
 Dependencies:
@@ -111,6 +111,35 @@ hmm = pm.HiddenMarkovModel.from_json(loaded_json)
 ```
 Writing and loading with JSON is on the order of seconds, whereas pickle and cPickle will be on the order of hours.  Please note that by default, pomegranate's from_json function will re-optimise the model with full optimisation.  It's worth turning that off by editing the code.
 
-##C++ Flavour
-Under development.
+## C++ Flavour
+The C++ flavour of Osiris uses Penthus as its machine learning core.  You can compile Osiris by navigating to the Osiris directory and running:
+```shell
+make
+```
+This will build the main Osiris executable in the Osiris/bin directory.  To train a base analogue pore model on hairpin primer training data, run:
+```shell
+./Osiris train -r /full/path/to/reference.fasta -m /full/path/to/template_median68pA.model -d /full/path/to/trainingData.foh -o /full/path/to/desiredOutputFile.txt
+```
+You can also use the optional -t flag, which specifies the number of threads for parallel processing.  The output file should look like:
+```c++
+>CCAATCG
+state	info	oriMu	trMu	oriSig	trSig
+0_M1	AATGTA	107.047	101.258	3.28075	6.2622
+1_M1	ATGTAC	80.9837	72.0795	2.32535	2.39806
+2_M1	TGTACT	97.6125	97.8708	2.27356	3.54221
+3_M1	GTACTT	85.0232	85.4749	1.48386	0.89079
+4_M1	TACTTC	81.5373	80.7603	1.57174	1.13429
+5_M1	ACTTCG	95.3118	93.7051	1.66458	2.20321
+6_M1	CTTCGT	103.454	102.039	2.38881	1.34545
+7_M1	TTCGTT	89.9279	90.747	2.01772	2.10616
+8_M1	TCGTTC	62.4801	62.7164	1.84319	2.16708
+9_M1	CGTTCA	93.5076	91.8787	2.18633	1.82847
+```
+The columns, from left to right, are:
+- position on the reference,
+- 6mer for that state,
+- original mean (before training),
+- trained mean (after training),
+- original standard deviation (before training),
+- trained standard deviation (after training).
 

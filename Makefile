@@ -2,8 +2,8 @@ OBJS = build_model.o data_IO.o Osiris_train.o Osiris.o
 CC = g++
 DEBUG = -g
 LIBFLAGS = -L Penthus/ -lPenthus -fopenmp
-CXXFLAGS = -Wall -c -std=c++11 -fopenmp $(DEBUG)
-LFLAGS = -Wall $(DEBUG)
+CXXFLAGS = -Wall -c -O2 -std=c++11 -fopenmp $(DEBUG)
+LFLAGS = -Wall -O2 $(DEBUG)
 
 MAIN_EXECUTABLE = bin/Osiris
 

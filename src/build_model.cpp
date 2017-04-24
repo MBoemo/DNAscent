@@ -8,7 +8,7 @@
 #include "poreSpecificParameters.h"
 
 
-std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::vector< std::vector< double > > &events ){
+std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::vector< std::vector< double > > &events, int &threads ){
 
 	std::cout << "Building HMM... " << std::endl;
 
@@ -48,7 +48,10 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 		/*add state to the model */
 		for ( unsigned int j = 0; j < 6; j++ ){
+
+			states[ j ][ i ].meta = reference.substr( i, 6 );
 			hmm.add_state( states[ j ][ i ] );
+
 		}
 
 		/*transitions between states, internal to a single base */
@@ -102,7 +105,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 	std::cout << "Done." << std::endl;
 
-	hmm.BaumWelch( events, 1e-9, 4, false );
+	hmm.BaumWelch( events, 2, 50, false, threads );
 
 	std::stringstream ss = hmm.summarise();
 
