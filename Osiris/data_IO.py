@@ -163,7 +163,8 @@ def import_2Dfasta(pathToReads,outFastaFilename):
 		
 				#print progress every 5 subdirectories of reads
 				if readCount % 10000 == 0:
-					print 'Exporting fast5 reads to fasta... read ' + str(readCount)
+					sys.stdout.write("\rExporting fast5 reads to fasta... read " + str(readCount))
+					sys.stdout.flush()
 
 				try:
 					#open the fast5 file with h5py and grab the fastq
@@ -266,7 +267,8 @@ def parallel_calculate_normalisedEvents(kmer, fast5Files, poreModelFile, progres
 
 		f.close()
 
-	print 'Normalising for shift and scale... ' + 'finished ' + str(progress[0]) + ' of ' + str(progress[1])
+	sys.stdout.write("\rNormalising for shift and scale... " + str(progress[0]) + " of " + str(progress[1]))
+	sys.stdout.flush()
 	
 	return (kmer, allNormalisedReads)
 
@@ -381,7 +383,7 @@ def import_HairpinTrainingData(reference, bamFile, poreModelFile, redundant_A_Lo
 #	that they came from, normalises the events to a pore model, and returns the list of normalised events.
 #	ARGUMENTS
 #       ---------
-#	- reference: path to a fasta reference file
+#	- reference: reference string from Osiris import_reference
 #	  type: string
 #	- bamFile: a BAM file from the alignment
 #	  type: string
@@ -554,7 +556,7 @@ def import_trainingDataFromFoh( filename ):
 			key = line[1:].rstrip()
 			trainingData[key] = []
 		else:
-			trainingData[key].append(line.rstrip().split(' '))
+			trainingData[key].append( map(float,line.rstrip().split(' ')))
 
 	return trainingData	
 

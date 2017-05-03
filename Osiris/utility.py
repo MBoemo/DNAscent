@@ -7,6 +7,7 @@
 
 import warnings
 import math
+import numpy as np
 
 
 class BaseAnalogue():
@@ -71,7 +72,135 @@ def hellingerDistance(mu1, std1, mu2, std2):
 	return h
 
 
+def dynamicTimeWarping(x, y):
+#	dyanmic time warping implementation for softclipping
+#	ARGUMENTS
+#       ---------
+#	- x: vector of floats, which should be the generated desired events
+#	  type: list of floats
+#	- y: vector of floats, which should be all of the unfiltered events from the read
+#	  type: list of floats
+#	OUTPUTS
+#       -------
+#	- dtw: the dynamic time warping array for the two signals
+#	  type: numpy array of floats
+	
+	#initialise matrix
+	dtw = np.zeros( [len(x)+1, len(y)+1] )
+	dtw[:,0] = np.inf
+	dtw[0,:] = np.inf
+	dtw[(0,0)] = 0
+	
+	#fill matrix at O(len(x)*len(y)) complexity
+	for x_i, x_char in enumerate(x):
+		x_i += 1
+		for y_i, y_char in enumerate(y):
+			y_i += 1
+			dtw[ (x_i, y_i) ] = abs( x_char - y_char ) + min( [ dtw[ (x_i-1, y_i) ], dtw[ (x_i, y_i-1) ], dtw[ (x_i-1, y_i-1) ] ] )
 
+	return dtw
+
+
+def warpPath(dtw):
+#	dyanmic time warping path for softclipping
+#	ARGUMENTS
+#       ---------
+#	- x: "small" vector of floats, which should be the generated desired events
+#	  type: list of floats
+#	- y: "big" vector of floats, which should be all of the unfiltered events from the read
+#	  type: list of floats
+#	OUTPUTS
+#       -------
+#	- path: the best fit dynamic time warping path
+#	  type: list of pairs of ints
+
+	rows = dtw.shape[0] - 1
+	cols = dtw.shape[1] - 1
+
+	path = []
+
+	i = rows
+	j = cols
+
+	while not ( i == 0 and j == 0):
+
+		path.append( [i, j] )
+		if i == 0:
+			j -= 1
+		elif j == 0:
+			i -= 1
+		else:
+			m = np.argmin( [ dtw[(i-1,j-1)], dtw[(i-1,j)], dtw[ (i,j-1)] ] )
+			if m == 0:
+				j -= 1
+				i -= 1
+			elif m == 1:
+				i -= 1
+			elif m == 2:
+				j -= 1
+			else:
+				exit(1)		
+
+	return path
+
+
+def subsequenceDynamicTimeWarping(x, y):
+#	dyanmic time warping implementation for softclipping, specifically designed for subsequences
+#	ARGUMENTS
+#       ---------
+#	- x: "small" vector of floats, which should be the generated desired events
+#	  type: list of floats
+#	- y: "big" vector of floats, which should be all of the unfiltered events from the read
+#	  type: list of floats
+#	OUTPUTS
+#       -------
+#	- (start,end): start index and end index of the portion of the long signal that best fits the short signal
+#	  type: tuple of ints
+	
+	#initialise matrix, which is a little more complicated for this subsequence DTW variant
+	dtw = np.zeros( [len(x), len(y)] )
+
+	runningSum = 0
+	for i in range(len(x)):
+		runningSum += abs( x[i] - y[0] )
+		dtw[i,0] = runningSum
+	
+	for j in range(len(y)):
+		dtw[0,j] = abs( x[0] - y[j] )
+
+
+	#fill matrix at O(len(x)*len(y)) complexity
+	for x_i, x_char in enumerate(x[1:],start=1):
+		for y_i, y_char in enumerate(y[1:],start=1):
+			dtw[ (x_i, y_i) ] = abs( x_char - y_char ) + min( [ dtw[ (x_i-1, y_i) ], dtw[ (x_i, y_i-1) ], dtw[ (x_i-1, y_i-1) ] ] )
+
+	#calculate path, starting from bStar
+	bStar = np.argmin( dtw[ len(x) - 1, : ] )
+	path = []
+	i = len(x) - 1
+	j = bStar
+
+	#iterate back until one of i or j is 0
+	while not ( i == 0 or j == 0 ):
+
+		path.append( [i, j] )
+
+		m = np.argmin( [ dtw[(i-1,j-1)], dtw[(i-1,j)], dtw[ (i,j-1)] ] )
+		if m == 0:
+			j -= 1
+			i -= 1
+		elif m == 1:
+			i -= 1
+		elif m == 2:
+			j -= 1
+		else:
+			exit(1)		
+
+	#take the start and end positions in the long signal and return them as a tuple
+	start = path[-1][1]
+	end = path[0][1]
+
+	return (start,end)
 
 
 

@@ -6,6 +6,7 @@
 
 #include "Osiris_train.h"
 #include "utility.h"
+#include <ctime>
 
 
 static const char *help=
@@ -123,6 +124,8 @@ int train_main( int argc, char** argv ){
 
 	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
 
+		std::clock_t start = std::clock();
+
 		std::string refLocal = reference;
 
 		std::string adenDomain = iter -> first;
@@ -139,6 +142,7 @@ int train_main( int argc, char** argv ){
 		std::stringstream ss = buildAndTrainHMM( refLocal, baseModel, events, trainArgs.threads );
 
 		outFile << ">" << adenDomain << std::endl << ss.rdbuf();
+    		std::cout << "Time for iteration: " << (std::clock() - start) / (double)(CLOCKS_PER_SEC) << " sec" << std::endl;
 
 	}
 

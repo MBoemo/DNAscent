@@ -8,13 +8,24 @@
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import sys
 
 from data_IO import import_poreModel
-from utility import reverseComplement
+from utility import reverseComplement, dynamicTimeWarping, warpPath, subsequenceDynamicTimeWarping
 from build_model import build_TrainingHMM
 import numpy as np
 from joblib import Parallel, delayed #for parallel processing
 import multiprocessing #for parallel processing
+
+
+def generateSignal(reference,poreModelFilename):
+
+	ONT_model = import_poreModel(poreModelFilename)
+
+	signal = []
+	for i in range(0, len(reference)-5):
+		signal.append(ONT_model[reference[i:i+6]][0])
+	return signal
 
 
 def trainingImprovements(hmm, reference, modelFile, kmerName):
@@ -118,7 +129,7 @@ def trainForFixedAnalogue(trainingData, reference, analoguePositions, poreModelF
 	return analogueEmissions
 			
 
-def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads):
+def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads, softClip = False):
 #	Creates a map from kmer (string) to list of the kmer's mean and standard deviation 
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
 #	that they came from, normalises the events to a pore model, and returns the list of normalised events.
@@ -137,17 +148,47 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads)
 #	- analogueEmissions: keyed by a 6mer of the form NNBNNN or NNNBNN, and returns a list of [trained_mean, trained_std]
 #	  type: dictionary
 
+	
+	#calculate analogue location in the reference
+	analogueLoc = reference.find('NNNTNNN')
+
+	if softClip:
+		
+		#redefine reference as something shorter, and redefine analogueLoc as the location of the analogue in the truncated reference
+		reference = reference[ max(analogueLoc-10, 0) : min(analogueLoc+16, len(reference)-1) ] 
+		analogueLoc = reference.find('NNNTNNN')
+
+		#now redefine the training data to the events that most likely correspond to the region of interest
+		for progress, key in enumerate(trainingData):
+		
+			#print progress
+			sys.stdout.write("\rSoft clipping training data... " + str(progress) + " of " + str(len(trainingData.keys())))
+			sys.stdout.flush()
+
+			refLocal = reference
+			revComp = reverseComplement(key)
+
+			#replace the NNNANNN and NNNBNNN sequences in the reference with the 7mer for these reads
+			refLocal = refLocal.replace('NNNANNN',key)
+			refLocal = refLocal.replace('NNNTNNN',revComp)				
+
+			signalSnippet = generateSignal(refLocal, poreModelFilename)
+
+			for i, read in enumerate(trainingData[key]):
+				subseq = subsequenceDynamicTimeWarping( signalSnippet, read )
+				padding = 5
+				trainingData[key][i] = read[ max( [subseq[0] - padding, 0] ) : min( [subseq[1] + padding, len(read) - 1] ) ]
+
+
 	analogueEmissions = {}
 	for i, key in enumerate(trainingData):
 
 		#print progress
-		print 'Training for 6mer parameters... ' + str(i) + ' of ' + str(len(trainingData.keys()))
-
+		sys.stdout.write("\rTraining for 6mer parameters... " + str(i) + " of " + str(len(trainingData.keys()))
+		sys.stdout.flush()
+		
 		refLocal = reference
 		revComp = reverseComplement(key)
-
-		#calculate analogue location in the reference
-		analogueLoc = refLocal.find('NNNTNNN')
 
 		#replace the NNNANNN and NNNBNNN sequences in the reference with the 7mer for these reads
 		refLocal = refLocal.replace('NNNANNN',key)
