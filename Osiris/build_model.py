@@ -28,6 +28,9 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 #	- hmm: a hidden Markov model with forks for base analogues
 #	  type: pomegranate object
 	
+	#positions where we create an analogue module
+	analoguePositions = []
+
 	#set the hmm class
 	hmm = HiddenMarkovModel() 
 
@@ -153,6 +156,8 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 			analogue6merPos3 = refSequence[i+2:i+4] + 'B' + refSequence[i+5:i+8]
 			if (analogue6merPos4 in allEmissions) and (analogue6merPos3 in allEmissions):
 				makeFork = True
+				analoguePositions.append(i + 1)
+				analoguePositions.append(i + 2)
 
 		#if we pass the check above and we're not at the end, create the forking structure for a base analogue 
 		if makeFork and (i <= last_i-4):
@@ -284,7 +289,7 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 	#	json.dump(hmm.to_json(),f)
 	#f.close()
 
-	return hmm
+	return (analoguePositions, hmm)
 
 
 def build_TrainingHMM(refSequence,poremodelFilename):
@@ -429,6 +434,164 @@ def build_TrainingHMM(refSequence,poremodelFilename):
 
 	return hmm
 	
+
+def build_softHMM(refSequence,poremodelFilename,analogueEmissions=None,analoguePos=None):
+#	Builds a HMM from a reference sequence with a topology appropriate for training analogue emission probability when the analogue is at a known, fixed position.  
+#	Starts with the thymidine-containing kmer as a guess, and then refines the emission probability to that of the base analogue.
+#	ARGUMENTS
+#       ---------
+#	- refSequence: reference sequence from import_reference
+#	  type: string
+#	- poremodelFilename: path to an ONT model file that contains the emission data for 4096 possible 6mers
+#	  type: string
+#	OUTPUTS
+#       -------
+#	- hmm: a training hidden Markov model for base analogues
+#	  type: pomegranate object
+	
+	#set the hmm class
+	hmm = HiddenMarkovModel() 
+
+	refLength = len(refSequence)
+
+	#import the emission probabilities for non-analogue containing 6mers
+	allEmissions = import_poreModel(poremodelFilename)
+
+	#two-dimensional array for the states, where the columns are the positions in the reference
+	thymidineStates = [[0 for x in range(refLength)] for y in range(6)] 
+
+	#Initial transitions within modules (internal transitions)
+	internalSS2M1 = 0.97
+	internalSS2M2 = 0.03
+	internalD2I = 0.01
+	internalI2I = 0.50
+	internalI2SS = 0.49
+	internalM12M1 = 0.51
+	internalM12SE = 0.49
+	internalM22M2 = 0.97
+	internalM22SE = 0.03
+	internalSE2I = 0.01
+
+	#Initial transitions between modules (external transitions)
+	externalD2D = 0.85
+	externalD2SS = 0.14
+	externalI2SS = 0.01
+	externalSE2D = 0.12
+	externalSE2SS = 0.87
+
+	#this is really just a safety thing... get the last index in the iterator
+	for last_i,x in enumerate(refSequence[:-5]): 
+		pass
+		
+	###########################################################################################################################
+	# Add States to Model
+	
+	#Create the HMM states.  Iterate through the reference sequence, and make the repeating HMM module for each position in the sequence.
+	#Stop 7 characters before the end, because we'll need to reach forward by 7 to handle the branching.
+	for i, char in enumerate(refSequence[:-5]): 
+
+		###################################################
+		# Handle Thymidine Branch States
+
+		#grab the appropriate emission probabilities for the 6mer that we're on
+		if analogueEmissions is not None:
+			if i == analougePos - 3:
+				presentEmissions = analogueEmissions[ reference[ i : analoguePos ] + 'B' + reference[ analogue + 1 : analogue + 3 ] ]
+			elif i == analoguePos - 2:
+				presentEmissions = analogueEmissions[ reference[ i : analoguePos ] + 'B' + reference[ analogue + 1 : analogue + 4 ] ]				 
+		else:
+			presentEmissions = allEmissions[refSequence[i:i+6]]
+
+		thymidineStates[0][i] = State( None, name='T_SS_pos_'+str(i) )                                                          #0 SS
+		thymidineStates[1][i] = State( None, name='T_D_pos_'+str(i) )                                                           #1 D
+		thymidineStates[2][i] = State( UniformDistribution(30, 130, frozen=True), name='T_I_pos_'+str(i) )                                   #2 I  - uniformly distributed on 30pA to 130pA
+		thymidineStates[3][i] = State( None, name='T_M1_pos_'+str(i) )                                                          #3 M1 - we'll tie this to M2 in a minute
+		thymidineStates[4][i] = State( NormalDistribution(presentEmissions[0], presentEmissions[1]), name='T_M2_pos_'+str(i) )  #4 M2 
+		thymidineStates[5][i] = State( None, name='T_SE_pos_'+str(i) )                                                          #5 SE
+
+ 		#tie the emission probability of M1 to M2 so that they update together as the model learns
+		thymidineStates[4][i].tie( thymidineStates[3][i] )                  
+
+		#tie the insertion probabilities together so that we just get one uniform distribution
+		if i != 0:
+			thymidineStates[2][0].tie( thymidineStates[2][i] )
+
+		#add the state objects to the hmm model object
+		for j in range(6):
+			hmm.add_state(thymidineStates[j][i])
+
+		#internal transitions for the thymidine branch branch.  Group them so that they update together.
+		#from SS
+		hmm.add_transition(thymidineStates[0][i], thymidineStates[3][i], internalSS2M1 , group='internal_SS-to-M1')
+		hmm.add_transition(thymidineStates[0][i], thymidineStates[4][i], internalSS2M2, group='internal_SS-to-M2')
+
+		#from D
+		hmm.add_transition(thymidineStates[1][i], thymidineStates[2][i], internalD2I, group='internal_D-to-I')
+
+		#from I
+		hmm.add_transition(thymidineStates[2][i], thymidineStates[2][i], internalI2I, group='internal_I-to-I')
+		hmm.add_transition(thymidineStates[2][i], thymidineStates[0][i], internalI2SS, group='internal_I-to-SS')
+
+		#from M1
+		hmm.add_transition(thymidineStates[3][i], thymidineStates[3][i], internalM12M1, group='internal_M1-to-M1')
+		hmm.add_transition(thymidineStates[3][i], thymidineStates[5][i], internalM12SE, group='internal_M1-to-SE')
+
+		#from M2
+		hmm.add_transition(thymidineStates[4][i], thymidineStates[4][i], internalM22M2, group='internal_M2-to-M2')
+		hmm.add_transition(thymidineStates[4][i], thymidineStates[5][i], internalM22SE, group='internal_M2-to-SE')
+
+		#from SE
+		hmm.add_transition(thymidineStates[5][i], thymidineStates[2][i], internalSE2I, group='internal_SE-to-I')
+
+
+		
+
+	###########################################################################################################################
+	# Handle Transitions Between Modules, Handle Analogue Branch
+
+	#We have to reach forward to the next state (state i+1) so it's easier to just do this in a separate loop from the internal transitions one
+	for i, char in enumerate(refSequence[:-5]): 
+
+		#Don't execute this if we're at the end, because there's no i+1 to reach forward to.
+		if i != last_i:
+			# [] *- []
+			#T module to T module
+			hmm.add_transition(thymidineStates[1][i], thymidineStates[1][i+1], externalD2D, group='external_T2T_D-to-D')
+			hmm.add_transition(thymidineStates[1][i], thymidineStates[0][i+1], externalD2SS, group='external_T2T_D-to-SS')
+			hmm.add_transition(thymidineStates[2][i], thymidineStates[0][i+1], externalI2SS, group='external_T2T_I-to-SS')
+			hmm.add_transition(thymidineStates[5][i], thymidineStates[0][i+1], externalSE2SS, group='external_T2T_SE-to-SS')
+			hmm.add_transition(thymidineStates[5][i], thymidineStates[1][i+1], externalSE2D, group='external_T2T_SE-to-D')
+
+
+	###########################################################################################################################
+	# Handle Start and End
+
+	#add beginning and end garbage collection states
+	gcStart = State( UniformDistribution(30, 130, frozen=True), name='startGarbageCollection' )
+	gcEnd = State( UniformDistribution(30, 130, frozen=True), name='endGarbageCollection' )
+	hmm.add_state( gcStart )
+	hmm.add_state( gcEnd )
+
+	#garbage collection start transitions
+	hmm.add_transition(hmm.start, gcStart, 1.0 )
+	hmm.add_transition(gcStart, gcStart, 0.8 )
+	hmm.add_transition(gcStart, thymidineStates[0][0], 0.1)
+	hmm.add_transition(gcStart, thymidineStates[1][0], 0.1)
+
+	#handle garbage collection end states
+	hmm.add_transition(gcEnd, gcEnd, 0.8 )
+	hmm.add_transition(gcEnd, hmm.end, 0.2 )
+	hmm.add_transition(thymidineStates[1][last_i], gcEnd, externalD2D+externalD2SS)
+	hmm.add_transition(thymidineStates[2][last_i], gcEnd, externalI2SS)
+	hmm.add_transition(thymidineStates[5][last_i], gcEnd, externalSE2SS+externalSE2D)
+
+	#bake the model
+	t0 = time.time()
+	hmm.bake(merge='None',verbose=True)
+	t1 = time.time()
+	print('Model optimised in '+str(t1-t0)+' seconds.')
+
+	return hmm
 
 		
 		

@@ -12,7 +12,7 @@ import sys
 
 from data_IO import import_poreModel
 from utility import reverseComplement, dynamicTimeWarping, warpPath, subsequenceDynamicTimeWarping
-from build_model import build_TrainingHMM
+from build_model import build_TrainingHMM, build_softHMM
 import numpy as np
 from joblib import Parallel, delayed #for parallel processing
 import multiprocessing #for parallel processing
@@ -129,6 +129,69 @@ def trainForFixedAnalogue(trainingData, reference, analoguePositions, poreModelF
 	return analogueEmissions
 			
 
+def parallelSoftClip(key, Reads, reference, poreModelFilename, progress, total):
+
+	#print progress
+	sys.stdout.write("\rSoft clipping training data... " + str(progress) + " of " + str(total) )
+	sys.stdout.flush()
+
+	refLocal = reference
+	revComp = reverseComplement(key)
+
+	#replace the NNNANNN and NNNBNNN sequences in the reference with the 7mer for these reads
+	refLocal = refLocal.replace('NNNANNN',key)
+	refLocal = refLocal.replace('NNNTNNN',revComp)				
+
+	signalSnippet = generateSignal(refLocal, poreModelFilename)
+
+	truncatedReads = []
+	for i, read in enumerate(Reads):
+		subseq = subsequenceDynamicTimeWarping( signalSnippet, read )
+		if subseq is not None:
+			truncatedReads.append(read[ max( [subseq[0], 0] ) : min( [subseq[1], len(read) - 1] ) ])
+
+	return (key, truncatedReads)
+
+
+def parallelTrainForSC(key, Reads, reference, poreModelFilename, progress, total):
+
+	#print progress
+	sys.stdout.write("\rTraining for 6mer parameters... " + str(progress) + " of " + str(total) + ": ")
+	sys.stdout.flush()
+		
+	refLocal = reference
+	revComp = reverseComplement(key)
+
+	#replace the NNNANNN and NNNBNNN sequences in the reference with the 7mer for these reads
+	analogueLoc = reference.find('NNNTNNN')
+	refLocal = refLocal.replace('NNNANNN',key)
+	refLocal = refLocal.replace('NNNTNNN',revComp)
+
+	#build a training HMM based on the reference
+	hmm = build_softHMM(refLocal,poreModelFilename)
+
+	#train the HMM (Baum-Welch iterations) to the specified tolerance, using the specified number of threads	
+	hmm.fit(Reads,edge_inertia=0,stop_threshold=1e-6,n_jobs=1,verbose=False)
+
+	analogueEmissions = {}
+	for state in hmm.states:
+		if state.name not in ['None-end', 'None-start', 'startGarbageCollection', 'endGarbageCollection']: #these are the pomegranate protected names of start and end states
+			stateInfo = state.name.split('_') #state info: [branch (T or B), state type (I, D, M1, etc.), 'pos', position on reference]
+			stateLoc = int(stateInfo[3])
+			if (stateInfo[1] in ['M1','M2']) and (stateLoc in [analogueLoc, analogueLoc + 1]):
+				#replace the T in the reference with a B for the base analogue
+				kmer = refLocal[stateLoc:stateLoc+6]
+				if stateLoc == analogueLoc:
+					kmer = kmer[0:3] + 'B' + kmer[4:]
+				elif stateLoc == analogueLoc + 1:
+					kmer = kmer[0:2] + 'B' + kmer[3:]
+				else:
+					exit('Exiting: Problem in trainForAnalogue in identifying analogue location.')
+					
+				analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1], len(Reads) ] 
+
+	return analogueEmissions
+
 def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads, softClip = False):
 #	Creates a map from kmer (string) to list of the kmer's mean and standard deviation 
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
@@ -151,76 +214,85 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads,
 	
 	#calculate analogue location in the reference
 	analogueLoc = reference.find('NNNTNNN')
+	verboseFlag = True
 
 	if softClip:
-		
+
 		#redefine reference as something shorter, and redefine analogueLoc as the location of the analogue in the truncated reference
-		reference = reference[ max(analogueLoc-10, 0) : min(analogueLoc+16, len(reference)-1) ] 
+		reference = reference[ max(analogueLoc-20, 0) : min(analogueLoc+26, len(reference)-1) ] 
 		analogueLoc = reference.find('NNNTNNN')
+		verboseFlag = False
 
-		#now redefine the training data to the events that most likely correspond to the region of interest
-		for progress, key in enumerate(trainingData):
-		
+		#do soft clipping in parallel
+		results = Parallel(n_jobs=threads)(delayed(parallelSoftClip)(key, trainingData[key], reference, poreModelFilename, progress, len(trainingData.keys())) for progress,key in enumerate(trainingData))
+
+		#reshape results into dictionary
+		truncatedTrainingData = {}
+		for pair in results:
+			truncatedTrainingData[pair[0]] = pair[1]
+
+		results = Parallel(n_jobs=threads)(delayed(parallelTrainForSC)(key, truncatedTrainingData[key], reference, poreModelFilename, progress, len(truncatedTrainingData.keys())) for progress,key in enumerate(truncatedTrainingData))
+
+		#reshape results into dictionary
+		analogueEmissions = {}
+		for emissDic in results:
+			for key in emissDic:
+				if key in analogueEmissions:
+					if analogueEmissions[key][1] < emissDic[key][1]:
+						pass
+					else:
+						analogueEmissions[key] = emissDic[key]
+				else:
+					analogueEmissions[key] = emissDic[key]
+
+		return analogueEmissions
+
+
+	else:
+		analogueEmissions = {}
+		for i, key in enumerate(trainingData):
+
 			#print progress
-			sys.stdout.write("\rSoft clipping training data... " + str(progress) + " of " + str(len(trainingData.keys())))
+			sys.stdout.write("\rTraining for 6mer parameters... " + str(i) + " of " + str(len(trainingData.keys())) + ": ")
 			sys.stdout.flush()
-
+		
 			refLocal = reference
 			revComp = reverseComplement(key)
 
 			#replace the NNNANNN and NNNBNNN sequences in the reference with the 7mer for these reads
 			refLocal = refLocal.replace('NNNANNN',key)
-			refLocal = refLocal.replace('NNNTNNN',revComp)				
+			refLocal = refLocal.replace('NNNTNNN',revComp)
 
-			signalSnippet = generateSignal(refLocal, poreModelFilename)
+			#build a training HMM based on the reference
+			if softClip:
+				hmm = build_softHMM(refLocal,poreModelFilename)
+			else:
+				hmm = build_TrainingHMM(refLocal,poreModelFilename)
 
-			for i, read in enumerate(trainingData[key]):
-				subseq = subsequenceDynamicTimeWarping( signalSnippet, read )
-				padding = 5
-				trainingData[key][i] = read[ max( [subseq[0] - padding, 0] ) : min( [subseq[1] + padding, len(read) - 1] ) ]
+			#train the HMM (Baum-Welch iterations) to the specified tolerance, using the specified number of threads	
+			hmm.fit(trainingData[key],edge_inertia=1,stop_threshold=0.1,n_jobs=threads,verbose=verboseFlag)
 
-
-	analogueEmissions = {}
-	for i, key in enumerate(trainingData):
-
-		#print progress
-		sys.stdout.write("\rTraining for 6mer parameters... " + str(i) + " of " + str(len(trainingData.keys()))
-		sys.stdout.flush()
-		
-		refLocal = reference
-		revComp = reverseComplement(key)
-
-		#replace the NNNANNN and NNNBNNN sequences in the reference with the 7mer for these reads
-		refLocal = refLocal.replace('NNNANNN',key)
-		refLocal = refLocal.replace('NNNTNNN',revComp)
-
-		#build a training HMM based on the reference
-		hmm = build_TrainingHMM(refLocal,poreModelFilename)
-
-		#train the HMM (Baum-Welch iterations) to the specified tolerance, using the specified number of threads	
-		hmm.fit(trainingData[key],edge_inertia=1,stop_threshold=1,n_jobs=threads)
-
-		for state in hmm.states:
-			if state.name != 'None-end' and state.name != 'None-start': #these are the pomegranate protected names of start and end states
-				stateInfo = state.name.split('_') #state info: [branch (T or B), state type (I, D, M1, etc.), 'pos', position on reference]
-				stateLoc = int(stateInfo[3])
-				if (stateInfo[1] in ['M1','M2']) and (stateLoc in [analogueLoc, analogueLoc + 1]):
-					#replace the T in the reference with a B for the base analogue
-					kmer = refLocal[stateLoc:stateLoc+6]
-					if stateLoc == analogueLoc:
-						kmer = kmer[0:3] + 'B' + kmer[4:]
-					elif stateLoc == analogueLoc + 1:
-						kmer = kmer[0:2] + 'B' + kmer[3:]
-					else:
-						exit('Exiting: Problem in trainForAnalogue in identifying analogue location.')
+			for state in hmm.states:
+				if state.name not in ['None-end', 'None-start', 'startGarbageCollection', 'endGarbageCollection']: #these are the pomegranate protected names of start and end states
+					stateInfo = state.name.split('_') #state info: [branch (T or B), state type (I, D, M1, etc.), 'pos', position on reference]
+					stateLoc = int(stateInfo[3])
+					if (stateInfo[1] in ['M1','M2']) and (stateLoc in [analogueLoc, analogueLoc + 1]):
+						#replace the T in the reference with a B for the base analogue
+						kmer = refLocal[stateLoc:stateLoc+6]
+						if stateLoc == analogueLoc:
+							kmer = kmer[0:3] + 'B' + kmer[4:]
+						elif stateLoc == analogueLoc + 1:
+							kmer = kmer[0:2] + 'B' + kmer[3:]
+						else:
+							exit('Exiting: Problem in trainForAnalogue in identifying analogue location.')
 					
-					#dictionary, keyed by the analogue 6mer, that returns the trained mean and trained standard deviation for the 6mer
-					#if the kmer is already in the dictionary, check if the new one has a lower standard deviation than the one that's there
-					#if it does, it's probably the better choice so use the new one instead.  Otherwise, stick with the old one.
-					if kmer in analogueEmissions:
-						if state.distribution.parameters[1] < analogueEmissions[kmer][1]:
-							analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1], len(trainingData[key]) ]	
-					else:
-						analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1], len(trainingData[key]) ] 
+						#dictionary, keyed by the analogue 6mer, that returns the trained mean and trained standard deviation for the 6mer
+						#if the kmer is already in the dictionary, check if the new one has a lower standard deviation than the one that's there
+						#if it does, it's probably the better choice so use the new one instead.  Otherwise, stick with the old one.
+						if kmer in analogueEmissions:
+							if state.distribution.parameters[1] < analogueEmissions[kmer][1]:
+								analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1], len(trainingData[key]) ]	
+						else:
+							analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1], len(trainingData[key]) ] 
 
-	return analogueEmissions
+		return analogueEmissions

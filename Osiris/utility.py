@@ -157,7 +157,7 @@ def subsequenceDynamicTimeWarping(x, y):
 #	- (start,end): start index and end index of the portion of the long signal that best fits the short signal
 #	  type: tuple of ints
 	
-	#initialise matrix, which is a little more complicated for this subsequence DTW variant
+	#initialise dtw and cost matrices
 	dtw = np.zeros( [len(x), len(y)] )
 
 	runningSum = 0
@@ -169,23 +169,22 @@ def subsequenceDynamicTimeWarping(x, y):
 		dtw[0,j] = abs( x[0] - y[j] )
 
 
-	#fill matrix at O(len(x)*len(y)) complexity
+	#fill in dtw and cost matrices
 	for x_i, x_char in enumerate(x[1:],start=1):
 		for y_i, y_char in enumerate(y[1:],start=1):
 			dtw[ (x_i, y_i) ] = abs( x_char - y_char ) + min( [ dtw[ (x_i-1, y_i) ], dtw[ (x_i, y_i-1) ], dtw[ (x_i-1, y_i-1) ] ] )
 
-	#calculate path, starting from bStar
-	bStar = np.argmin( dtw[ len(x) - 1, : ] )
-	path = []
+	#calculate optimal path
+	j = np.argmin( dtw[ -1, : ] )
 	i = len(x) - 1
-	j = bStar
+	path = []
 
 	#iterate back until one of i or j is 0
-	while not ( i == 0 or j == 0 ):
+	while not ( i == 0 ):
 
 		path.append( [i, j] )
-
 		m = np.argmin( [ dtw[(i-1,j-1)], dtw[(i-1,j)], dtw[ (i,j-1)] ] )
+	
 		if m == 0:
 			j -= 1
 			i -= 1
@@ -194,13 +193,15 @@ def subsequenceDynamicTimeWarping(x, y):
 		elif m == 2:
 			j -= 1
 		else:
-			exit(1)		
+			exit(1)
+
+		#if j goes to 0 before i, then we've run out of big signal.  
+		#Don't return anything because the subsequence isn't fully contained in the read
+		if j == 0 and i > 0:
+			return
 
 	#take the start and end positions in the long signal and return them as a tuple
 	start = path[-1][1]
 	end = path[0][1]
 
 	return (start,end)
-
-
-

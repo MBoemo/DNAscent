@@ -10,7 +10,10 @@ from utility import reverseComplement
 from data_IO import import_poreModel
 from joblib import Parallel, delayed # for parallel processing
 import multiprocessing
-from utility import hellingerDistance
+from train import generateSignal
+from utility import hellingerDistance, subsequenceDynamicTimeWarping
+import numpy as np
+import math
 
 
 def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj):
@@ -36,9 +39,10 @@ def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj)
 	ontModel = import_poreModel(poreModelFilename)
 	filteredEmissions = {}
 	for key in analogueObj.emissions:
-		#if abs(analogueObj.emissions[key][0] - ontModel[key.replace('B','T')][0]) > 3:
-		if hellingerDistance( analogueObj.emissions[key][0], analogueObj.emissions[key][1], ontModel[key.replace('B','T')][0], ontModel[key.replace('B','T')][1] ) > 0.6:
+		if analogueObj.emissions[key][1] < 3 and hellingerDistance( analogueObj.emissions[key][0], analogueObj.emissions[key][1], ontModel[key.replace('B','T')][0], ontModel[key.replace('B','T')][1] ) > 0.2:
+
 			filteredEmissions[key] = analogueObj.emissions[key]
+
 	analogueObj.emissions = filteredEmissions
 	print "Filtered to distinguishable Kmers: " + str(len(analogueObj.emissions.keys()))
 	
@@ -67,18 +71,18 @@ def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj)
 			filtered[key] = kmer2normalisedReads[key]
 
 			#uncomment for serial
-			#calledAnaloguePositions = callAnalogue(kmer2normalisedReads[key], refLocal, poreModelFilename, analogueObj)
+			#calledAnaloguePositions = softCallAnalogue(kmer2normalisedReads[key], refLocal, poreModelFilename, analogueObj)
 
 			#uncomment for serial
 			#kmerAndCalls.append( (candidiate, calledAnaloguePositions) )
 
 	#comment for serial
-	results = Parallel( n_jobs = multiprocessing.cpu_count() )( delayed( callAnalogue )( filtered[ key ], references[ key ], poreModelFilename, analogueObj ) for key in filtered )
+	results = Parallel( n_jobs = multiprocessing.cpu_count() )( delayed( softCallAnalogue )( filtered[ key ], references[ key ], poreModelFilename, analogueObj ) for key in filtered )
 
 	return results
 
 
-def callAnalogue( normalisedReads, reference, poreModelFilename, analogueObj ):
+def hardCallAnalogue( normalisedReads, reference, poreModelFilename, analogueObj ):
 #	Calls the positions of a base analogue in a single read
 #	ARGUMENTS
 #       ---------
@@ -118,5 +122,97 @@ def callAnalogue( normalisedReads, reference, poreModelFilename, analogueObj ):
 		analoguesInThisRead = list(set(analoguesInThisRead))
 
 		calledAnaloguePositions.append( (logp, analoguesInThisRead ) )
+
+	return calledAnaloguePositions
+
+def logSum(x,y):
+	if math.isnan(x) or math.isnan(y):
+		if math.isnan(x) and math.isnan(y):
+			return float('nan')
+		elif math.isnan(x):
+			return y
+		else:
+			return x
+	else:
+		if x > y:
+			return x + np.log( 1 + np.exp(y - x))
+		else:
+			return y + np.log(1 + np.exp(x - y))
+	
+
+def logProd(x,y):
+	if math.isnan(x) or math.isnan(y):
+		return float('nan')
+	else:
+		return x + y	
+
+
+def softCallAnalogue( normalisedReads, reference, poreModelFilename, analogueObj ):
+#	Calls the positions of a base analogue in a single read
+#	ARGUMENTS
+#       ---------
+#	- normalisedReads: list of normalised events for a single read
+#	  type: list
+#	- reference: output of import_reference from data_IO.py.
+#	  type: string
+#	- poreModelFilename: filename for the ONT 6mer poremodel over {A,T,G,C}
+#	  type: string
+#	- analogueObj: Osiris analogue object from utility.py
+#	  type: Osiris object
+#	OUTPUTS
+#       -------
+#	- calledAnaloguePositions: list of positions on the reference where the model has detected a base analogue
+#	  type: list
+
+	calledAnaloguePositions = []
+
+	#build an HMM that can detect the random incorporation of a base analogue that replaces thymidine
+	detectHMM = build_RandIncHMM(reference, poreModelFilename, analogueObj)
+	analoguePositions = detectHMM[0]
+	hmm = detectHMM[1]
+	stateIndices = { state:i for i, state in enumerate( hmm.states ) }
+	
+	for read in normalisedReads:
+
+		probabilityAtPos = {}
+		Tprob = {}
+		Bprob = {}
+
+		#initialise the T and B probabilities at each position to 0
+		for position in analoguePositions:
+			Tprob[position] = float('nan')
+			Bprob[position] = float('nan')
+
+		#run the forward algorithm on this read
+		#forwardLattice = hmm.forward(read)
+		#backwardLattice = hmm.backward(read)
+		forwardLattice = hmm.predict_log_proba(read)
+
+		#for each state in the HMM...
+		for state in hmm.states:
+			
+			if state.name != 'None-end' and state.name != 'None-start': #protected pomegranate names for start and end states
+				stateSplit = state.name.split('_')
+				posOnRef = int(stateSplit[3])
+				stateName = stateSplit[1]
+				TorB = stateSplit[0]
+
+				#if this state is at a position on the reference where we can make a BrdU call
+				if (posOnRef in analoguePositions) and (stateName in ['M1','M2']):
+					rowInForward = stateIndices[state]
+					
+					if TorB == 'T':
+						for i,j in enumerate(forwardLattice[:,rowInForward]):
+							Tprob[posOnRef] = logSum(Tprob[posOnRef], j)#logProd(j,backwardLattice[i,rowInForward]))
+
+					elif TorB == 'B':
+						for i,j in enumerate(forwardLattice[:,rowInForward]):
+							Bprob[posOnRef] = logSum(Bprob[posOnRef], j)#logProd(j,backwardLattice[i,rowInForward]))
+
+		for key in Tprob:
+
+			probabilityAtPos[key] = Bprob[key] - Tprob[key]
+
+		calledAnaloguePositions.append(probabilityAtPos)
 
 	return calledAnaloguePositions
