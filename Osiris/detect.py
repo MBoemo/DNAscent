@@ -30,11 +30,14 @@ def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj)
 #	  type: Osiris object
 #	OUTPUTS
 #       -------
-#	- calledAnaloguePositions: a list of tuples, where the first entry is the NNNANNN kmer and the second entry 
+#	- results: a list of tuples, where the first entry is the NNNANNN kmer and the second entry 
 #	  is a list of lists, where each entry is a list of called analogue positions in a single read
 #	  type: list
 
 	#filter the analogue emissions so that it only has the emissions that we can distinguish from thymidine
+	#filters we use:
+	# - hellinger distance between BrdU distribution and its equivalent thymidine distribution must be > 0.2
+	# - BrdU should have a standard deviation of < 3 (noting that bad training usually results in high standard deviations)
 	print "Kmers in analogue: " + str(len(analogueObj.emissions.keys()))
 	ontModel = import_poreModel(poreModelFilename)
 	filteredEmissions = {}
@@ -49,8 +52,11 @@ def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj)
 	kmerAndCalls = []
 	filtered = {}
 	references = {}
+	totalReads = 0
 
 	for key in kmer2normalisedReads:
+
+		totalReads += len(kmer2normalisedReads[key])
 		
 		refLocal = reference
 		revComp = reverseComplement(key)
@@ -71,18 +77,20 @@ def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj)
 			filtered[key] = kmer2normalisedReads[key]
 
 			#uncomment for serial
-			#calledAnaloguePositions = softCallAnalogue(kmer2normalisedReads[key], refLocal, poreModelFilename, analogueObj)
+			#calledAnaloguePositions = softCallAnalogue(kmer2normalisedReads[key], refLocal, ontModel, analogueObj)
 
 			#uncomment for serial
 			#kmerAndCalls.append( (candidiate, calledAnaloguePositions) )
 
 	#comment for serial
-	results = Parallel( n_jobs = multiprocessing.cpu_count() )( delayed( softCallAnalogue )( filtered[ key ], references[ key ], poreModelFilename, analogueObj ) for key in filtered )
+	results = Parallel( n_jobs = multiprocessing.cpu_count() )( delayed( softCallAnalogue )( filtered[ key ], references[ key ], ontModel, analogueObj ) for key in filtered )
+
+	print "Attempted to detect analogues in " + str(totalReads) + " reads."
 
 	return results
 
 
-def hardCallAnalogue( normalisedReads, reference, poreModelFilename, analogueObj ):
+def hardCallAnalogue( normalisedReads, reference, poreModel, analogueObj ):
 #	Calls the positions of a base analogue in a single read
 #	ARGUMENTS
 #       ---------
@@ -90,8 +98,8 @@ def hardCallAnalogue( normalisedReads, reference, poreModelFilename, analogueObj
 #	  type: list
 #	- reference: output of import_reference from data_IO.py.
 #	  type: string
-#	- poreModelFilename: filename for the ONT 6mer poremodel over {A,T,G,C}
-#	  type: string
+#	- poreModel: the imported ONT pore model (from import_poreModel)
+#	  type: dictionary
 #	- analogueObj: Osiris analogue object from utility.py
 #	  type: Osiris object
 #	OUTPUTS
@@ -102,7 +110,7 @@ def hardCallAnalogue( normalisedReads, reference, poreModelFilename, analogueObj
 	calledAnaloguePositions = []
 
 	#build an HMM that can detect the random incorporation of a base analogue that replaces thymidine
-	hmm = build_RandIncHMM(reference, poreModelFilename, analogueObj)
+	hmm = build_RandIncHMM(reference, poreModel, analogueObj)
 
 	for read in normalisedReads:
 
@@ -125,7 +133,10 @@ def hardCallAnalogue( normalisedReads, reference, poreModelFilename, analogueObj
 
 	return calledAnaloguePositions
 
+
 def logSum(x,y):
+#	computes ln(x+y)
+
 	if math.isnan(x) or math.isnan(y):
 		if math.isnan(x) and math.isnan(y):
 			return float('nan')
@@ -141,13 +152,15 @@ def logSum(x,y):
 	
 
 def logProd(x,y):
+#	computes ln(xy)
+
 	if math.isnan(x) or math.isnan(y):
 		return float('nan')
 	else:
 		return x + y	
 
 
-def softCallAnalogue( normalisedReads, reference, poreModelFilename, analogueObj ):
+def softCallAnalogue( normalisedReads, reference, poreModel, analogueObj ):
 #	Calls the positions of a base analogue in a single read
 #	ARGUMENTS
 #       ---------
@@ -155,8 +168,8 @@ def softCallAnalogue( normalisedReads, reference, poreModelFilename, analogueObj
 #	  type: list
 #	- reference: output of import_reference from data_IO.py.
 #	  type: string
-#	- poreModelFilename: filename for the ONT 6mer poremodel over {A,T,G,C}
-#	  type: string
+#	- poreModel: the imported ONT pore model (from import_poreModel)
+#	  type: dictionary
 #	- analogueObj: Osiris analogue object from utility.py
 #	  type: Osiris object
 #	OUTPUTS
@@ -167,7 +180,7 @@ def softCallAnalogue( normalisedReads, reference, poreModelFilename, analogueObj
 	calledAnaloguePositions = []
 
 	#build an HMM that can detect the random incorporation of a base analogue that replaces thymidine
-	detectHMM = build_RandIncHMM(reference, poreModelFilename, analogueObj)
+	detectHMM = build_RandIncHMM(reference, poreModel, analogueObj)
 	analoguePositions = detectHMM[0]
 	hmm = detectHMM[1]
 	stateIndices = { state:i for i, state in enumerate( hmm.states ) }

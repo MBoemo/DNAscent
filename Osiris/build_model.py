@@ -13,14 +13,14 @@ import warnings
 from data_IO import import_reference, import_poreModel
 
 
-def build_RandIncHMM(refSequence, poremodelFilename, analogue):
+def build_RandIncHMM(refSequence, poreModel, analogue):
 #	Builds a HMM from a reference sequence with a topology appropriate for detecting randomly incorporated base analogue.
 #	ARGUMENTS
 #       ---------
 #	- refSequence: reference sequence from import_reference
 #	  type: string
-#	- poremodelFilename: path to an ONT 6mer model file that contains the emission data for all 4096 possible {A,T,G,C} 6mers
-#	  type: string
+#	- poreModel: the imported ONT pore model (from import_poreModel)
+#	  type: dictionary
 #	- analogue: an Osiris object created by utility.py that contains the concentration and emission data for a base analogue
 #	  type: Osiris object
 #	OUTPUTS
@@ -37,11 +37,8 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 	#get length of reference
 	refLength = len(refSequence)
 
-	#import the emission probabilities for non-analogue containing 6mers
-	allEmissions = import_poreModel(poremodelFilename)
-
 	#add analogue emissions to the emissions for A-T-G-C 6mers from the ONT pore model file
-	allEmissions.update(analogue.emissions)
+	poreModel.update(analogue.emissions)
 	analogueConc = analogue.concentration
 
 	#two-dimensional array for the states, where the columns are the positions in the reference
@@ -86,7 +83,7 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 		# Handle Thymidine Branch States
 
 		#grab the appropriate emission probabilities for the 6mer that we're on
-		presentEmissions = allEmissions[refSequence[i:i+6]]
+		presentEmissions = poreModel[refSequence[i:i+6]]
 
 		thymidineStates[0][i] = State( None, name='T_SS_pos_'+str(i) )                                                          #0 SS
 		thymidineStates[1][i] = State( None, name='T_D_pos_'+str(i) )                                                           #1 D
@@ -154,7 +151,7 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 		if refSequence[i + 4] == 'T':
 			analogue6merPos4 = refSequence[i+1:i+4] + 'B' + refSequence[i+5:i+7]
 			analogue6merPos3 = refSequence[i+2:i+4] + 'B' + refSequence[i+5:i+8]
-			if (analogue6merPos4 in allEmissions) and (analogue6merPos3 in allEmissions):
+			if (analogue6merPos4 in poreModel) and (analogue6merPos3 in poreModel):
 				makeFork = True
 				analoguePositions.append(i + 1)
 				analoguePositions.append(i + 2)
@@ -167,13 +164,13 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 					     	State( None, name='B_D_pos_'+str(i+1)+'_branchFrom'+str(i) ),                                      #1 D
 					     	State( UniformDistribution(30, 130, frozen=True), name='B_I_pos_'+str(i+1)+'_branchFrom'+str(i) ),               #2 I
 					     	State( None, name='B_M1_pos_'+str(i+1)+'_branchFrom'+str(i) ),                                      #3 M1 - we'll tie this to M2 in a minute
-					     	State( NormalDistribution( allEmissions[analogue6merPos4][0], allEmissions[analogue6merPos4][1] ), name='B_M2_pos_'+str(i+1)+'_branchFrom'+str(i) ),               #4 M2
+					     	State( NormalDistribution( poreModel[analogue6merPos4][0], poreModel[analogue6merPos4][1] ), name='B_M2_pos_'+str(i+1)+'_branchFrom'+str(i) ),               #4 M2
 					     	State( None, name='B_SE_pos_'+str(i+1)+'_branchFrom'+str(i) )],                                     #5 SE
 						[State( None, name='B_SS_pos_'+str(i+2)+'_branchFrom'+str(i) ),                                     #0 SS
 					     	State( None, name='B_D_pos_'+str(i+2)+'_branchFrom'+str(i) ),                                      #1 D
 					     	State( UniformDistribution(30, 130, frozen=True), name='B_I_pos_'+str(i+2)+'_branchFrom'+str(i) ),               #2 I
 					     	State( None, name='B_M1_pos_'+str(i+2)+'_branchFrom'+str(i) ),                                      #3 M1 - we'll tie this to M2 in a minute
-					     	State( NormalDistribution( allEmissions[analogue6merPos3][0], allEmissions[analogue6merPos3][1] ), name='B_M2_pos_'+str(i+2)+'_branchFrom'+str(i) ),               #4 M2
+					     	State( NormalDistribution( poreModel[analogue6merPos3][0], poreModel[analogue6merPos3][1] ), name='B_M2_pos_'+str(i+2)+'_branchFrom'+str(i) ),               #4 M2
 					     	State( None, name='B_SE_pos_'+str(i+2)+'_branchFrom'+str(i) )]	]                             #5 SE
 			
 			#tie M1 to M2
@@ -292,15 +289,15 @@ def build_RandIncHMM(refSequence, poremodelFilename, analogue):
 	return (analoguePositions, hmm)
 
 
-def build_TrainingHMM(refSequence,poremodelFilename):
+def build_TrainingHMM(refSequence, poreModel):
 #	Builds a HMM from a reference sequence with a topology appropriate for training analogue emission probability when the analogue is at a known, fixed position.  
 #	Starts with the thymidine-containing kmer as a guess, and then refines the emission probability to that of the base analogue.
 #	ARGUMENTS
 #       ---------
 #	- refSequence: reference sequence from import_reference
 #	  type: string
-#	- poremodelFilename: path to an ONT model file that contains the emission data for 4096 possible 6mers
-#	  type: string
+#	- poreModel: the imported ONT pore model (from import_poreModel)
+#	  type: dictionary
 #	OUTPUTS
 #       -------
 #	- hmm: a training hidden Markov model for base analogues
@@ -310,9 +307,6 @@ def build_TrainingHMM(refSequence,poremodelFilename):
 	hmm = HiddenMarkovModel() 
 
 	refLength = len(refSequence)
-
-	#import the emission probabilities for non-analogue containing 6mers
-	allEmissions = import_poreModel(poremodelFilename)
 
 	#two-dimensional array for the states, where the columns are the positions in the reference
 	thymidineStates = [[0 for x in range(refLength)] for y in range(6)] 
@@ -351,7 +345,7 @@ def build_TrainingHMM(refSequence,poremodelFilename):
 		# Handle Thymidine Branch States
 
 		#grab the appropriate emission probabilities for the 6mer that we're on
-		presentEmissions = allEmissions[refSequence[i:i+6]]
+		presentEmissions = poreModel[refSequence[i:i+6]]
 
 		thymidineStates[0][i] = State( None, name='T_SS_pos_'+str(i) )                                                          #0 SS
 		thymidineStates[1][i] = State( None, name='T_D_pos_'+str(i) )                                                           #1 D
@@ -435,15 +429,15 @@ def build_TrainingHMM(refSequence,poremodelFilename):
 	return hmm
 	
 
-def build_softHMM(refSequence,poremodelFilename,analogueEmissions=None,analoguePos=None):
+def build_softHMM(refSequence, poreModel, analogueEmissions=None, analoguePos=None):
 #	Builds a HMM from a reference sequence with a topology appropriate for training analogue emission probability when the analogue is at a known, fixed position.  
 #	Starts with the thymidine-containing kmer as a guess, and then refines the emission probability to that of the base analogue.
 #	ARGUMENTS
 #       ---------
 #	- refSequence: reference sequence from import_reference
 #	  type: string
-#	- poremodelFilename: path to an ONT model file that contains the emission data for 4096 possible 6mers
-#	  type: string
+#	- poreModel: the imported ONT pore model (from import_poreModel)
+#	  type: dictionary
 #	OUTPUTS
 #       -------
 #	- hmm: a training hidden Markov model for base analogues
@@ -453,9 +447,6 @@ def build_softHMM(refSequence,poremodelFilename,analogueEmissions=None,analogueP
 	hmm = HiddenMarkovModel() 
 
 	refLength = len(refSequence)
-
-	#import the emission probabilities for non-analogue containing 6mers
-	allEmissions = import_poreModel(poremodelFilename)
 
 	#two-dimensional array for the states, where the columns are the positions in the reference
 	thymidineStates = [[0 for x in range(refLength)] for y in range(6)] 
@@ -500,7 +491,7 @@ def build_softHMM(refSequence,poremodelFilename,analogueEmissions=None,analogueP
 			elif i == analoguePos - 2:
 				presentEmissions = analogueEmissions[ reference[ i : analoguePos ] + 'B' + reference[ analogue + 1 : analogue + 4 ] ]				 
 		else:
-			presentEmissions = allEmissions[refSequence[i:i+6]]
+			presentEmissions = poreModel[refSequence[i:i+6]]
 
 		thymidineStates[0][i] = State( None, name='T_SS_pos_'+str(i) )                                                          #0 SS
 		thymidineStates[1][i] = State( None, name='T_D_pos_'+str(i) )                                                           #1 D
@@ -542,9 +533,6 @@ def build_softHMM(refSequence,poremodelFilename,analogueEmissions=None,analogueP
 
 		#from SE
 		hmm.add_transition(thymidineStates[5][i], thymidineStates[2][i], internalSE2I, group='internal_SE-to-I')
-
-
-		
 
 	###########################################################################################################################
 	# Handle Transitions Between Modules, Handle Analogue Branch
