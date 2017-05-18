@@ -4,9 +4,16 @@
 //----------------------------------------------------------
 
 
-/*utility functions for C++ Osiris */
+#include "math.h"
+#include <algorithm>
+#include <vector>
+#include <utility>
+#include <iostream>
+#include <map>
+#include <iterator>
 
-std::string reverseComplement( std::string DNAseq ){
+
+inline std::string reverseComplement( std::string &DNAseq ){
 
 	std::reverse( DNAseq.begin(), DNAseq.end() );
 	std::string revComp;
@@ -36,3 +43,9 @@ std::string reverseComplement( std::string DNAseq ){
 	return revComp;
 
 }
+
+
+/*function prototypes */
+std::vector< std::vector< double > > filterEvents( std::string &, std::map< std::string, std::pair< double, double > > &, std::vector< std::vector< double > > & );
+std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &, std::vector< double > & );
+std::vector< double > generateSignal( std::string &, std::map< std::string, std::pair< double, double > > & );

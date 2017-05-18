@@ -6,6 +6,7 @@
 #----------------------------------------------------------
 
 import numpy as np
+import sys
 import warnings
 import h5py
 import pysam
@@ -338,6 +339,88 @@ def serial_calculate_normalisedEvents(fast5Files, poreModelFile):
 	return allNormalisedReads
 
 
+def normaliseSingleRead(fast5File, bases, kmer2MeanStd, progress, total):
+#	For fixed position training data - small enough to be done in serial.  Uses a 5mer model to calculate the shift and scale
+#	pore-specific parameters for each individual read in a list of fast5 files
+#	ARGUMENTS
+#       ---------
+#	- fast5File: single fast5 file
+#	  type: string
+#	- poreModelFile: path to a pore model file.  This should be a 5mer model in the ONT format
+#	  type: string
+#	OUTPUTS
+#       -------
+#	- allNormalisedRead: normalised events for the read
+#	  type: list
+
+	sys.stdout.write("\rNormalising in vivo reads... " + str(progress) + " of " + str(total))
+	sys.stdout.flush()
+
+	#use 5mer model to calculate shift, scale, drift, and var to normalise events for the pore
+	f = h5py.File(fast5File,'r')
+	path = '/Analyses/Basecall_1D_000/BaseCalled_template/Events'
+	Events = f[path]
+	A = np.zeros((2,2))
+	b = np.zeros((2,1))
+	for event in Events:
+		 if float(event[7]) > 0.30: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
+			model_5mer = event[4]
+			event_mean = float(event[0])
+			model_mean = kmer2MeanStd[model_5mer][0]
+			model_std = kmer2MeanStd[model_5mer][1]
+				
+			#update matrix A
+			A[0,0] += 1/(model_std**2)
+			A[1,0] += 1/(model_std**2)*model_mean
+			A[1,1] += 1/(model_std**2)*model_mean**2
+
+			#update vector b
+			b[0] += 1/(model_std**2)*event_mean
+			b[1] += 1/(model_std**2)*event_mean*model_mean
+
+	#use symmetry of A
+	A[0,1] = A[1,0]
+
+	#solve Ax = b to find shift and scale
+	x = np.linalg.solve(A,b)
+	shift = x[0][0]
+	scale = x[1][0]
+
+	#go through the same events as before and normalise them to the pore model using scale and shift
+	normalisedEvents = []
+	for event in Events:
+		if float(event[7]) > 0.30: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
+			event_mean = float(event[0])
+			normalisedEvents.append( event_mean/scale - shift)
+
+	f.close()
+	
+	return (normalisedEvents, bases, fast5File)
+
+
+def import_inVivoData(readsFile, fiveMerPoreModelFile):
+	f = open(readsFile,'r')
+	g = f.readlines()
+	f.close()
+
+	linesDic = {}
+	for i, line in enumerate(g):
+		if line[0] == '>':
+			if i != 0:
+				linesDic[filename] = bases				
+
+			filename = line.split('|')[2].rstrip()
+			bases = ''
+		else:
+			bases += line.rstrip()
+
+	poreModel = import_poreModel(fiveMerPoreModelFile)
+
+	results = Parallel(n_jobs = multiprocessing.cpu_count())(delayed(normaliseSingleRead)(filename, linesDic[filename], poreModel,i,len(linesDic.keys())) for i, filename in enumerate(linesDic))
+	
+	return results
+
+
 def import_FixedPosTrainingData(bamFile, poreModelFile):
 #	Used to import training data from reads that have an analogue in a fixed context.
 #	Creates a map from kmer (string) to a list of lists, where each list is comprised of events from a read
@@ -457,7 +540,7 @@ def import_HairpinTrainingData(reference, bamFile, poreModelFile, redundant_A_Lo
 	return kmer2normalisedReads
 
 
-def alignAndSort(readsDirectory, pathToReference, threads):
+def alignAndSort(readsDirectory, pathToReference, qualityControl=True, threads=1):
 #	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
 #	ARGUMENTS
 #       ---------
@@ -465,6 +548,8 @@ def alignAndSort(readsDirectory, pathToReference, threads):
 #	  type: string
 #	- pathToReference: full path to the reference file that has the reference (or references, if they're barcoded) for all sequences present in the run
 #	  type: string
+#	- qualityControl: whether to filter the BAM file so that it only contains reads with 80% coverage to the reference
+#	  type: bool
 #	- threads: number of threads on which to run BWA-MEM 
 #	  type: int 
 #	OUTPUTS
@@ -499,7 +584,11 @@ def alignAndSort(readsDirectory, pathToReference, threads):
 		query_cover = float(record.query_alignment_length) / record.query_length
 
 		#quality control for the reads that make it to the BAM file: only take >80% coverage with no reverse complement
-		if ref_cover > 0.8 and query_cover > 0.8 and record.is_reverse == False:
+		if qualityControl:
+			if ref_cover > 0.8 and query_cover > 0.8 and record.is_reverse == False:
+				out_files[record.reference_id].write(record)
+
+		else:
 			out_files[record.reference_id].write(record)
 
 	#index the newly made bam files
@@ -558,16 +647,4 @@ def import_trainingDataFromFoh( filename ):
 		else:
 			trainingData[key].append( map(float,line.rstrip().split(' ')))
 
-	return trainingData	
-
-
-
-
-
-
-
-
-
-
-
-
+	return trainingData

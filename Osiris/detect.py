@@ -16,6 +16,75 @@ import numpy as np
 import math
 
 
+def callInVivo(readEventsTupleList, poreModelFilename, analogueObj):
+
+	#filter analogue emissions to those that we'll be able to distinguish from thymidine
+	ontModel = import_poreModel(poreModelFilename)
+	filteredEmissions = {}
+	for key in analogueObj.emissions:
+		if analogueObj.emissions[key][1] < 3 and hellingerDistance( analogueObj.emissions[key][0], analogueObj.emissions[key][1], ontModel[key.replace('B','T')][0], ontModel[key.replace('B','T')][1] ) > 0.2:
+
+			filteredEmissions[key] = analogueObj.emissions[key]
+
+	analogueObj.emissions = filteredEmissions
+
+	results = []
+	c = 0
+	for readEventsTuple in readEventsTupleList[0:100]:
+		print c
+		results.append(ParallelCallInVivoHelper( readEventsTuple[0], readEventsTuple[1], ontModel, analogueObj ))
+		c += 1 
+	return results
+
+
+def ParallelCallInVivoHelper(events, basecalls, poreModel, analogueObj):
+
+	#build an HMM that can detect the random incorporation of a base analogue that replaces thymidine
+	detectHMM = build_RandIncHMM(basecalls, poreModel, analogueObj)
+	analoguePositions = detectHMM[0]
+	hmm = detectHMM[1]
+	stateIndices = { state:i for i, state in enumerate( hmm.states ) }
+	
+	probabilityAtPos = {}
+	Tprob = {}
+	Bprob = {}
+
+	#initialise the T and B probabilities at each position to 0
+	for position in analoguePositions:
+		Tprob[position] = float('nan')
+		Bprob[position] = float('nan')
+
+	#run the forward algorithm on this read
+	forwardLattice = hmm.predict_log_proba(events)
+
+	#for each state in the HMM...
+	for state in hmm.states:
+			
+		if state.name != 'None-end' and state.name != 'None-start': #protected pomegranate names for start and end states
+			stateSplit = state.name.split('_')
+			posOnRef = int(stateSplit[3])
+			stateName = stateSplit[1]
+			TorB = stateSplit[0]
+
+			#if this state is at a position on the reference where we can make a BrdU call
+			if (posOnRef in analoguePositions) and (stateName in ['M1','M2']):
+				rowInForward = stateIndices[state]
+					
+				if TorB == 'T':
+					for i,j in enumerate(forwardLattice[:,rowInForward]):
+						Tprob[posOnRef] = logSum(Tprob[posOnRef], j)#logProd(j,backwardLattice[i,rowInForward]))
+
+				elif TorB == 'B':
+					for i,j in enumerate(forwardLattice[:,rowInForward]):
+						Bprob[posOnRef] = logSum(Bprob[posOnRef], j)#logProd(j,backwardLattice[i,rowInForward]))
+
+	for key in Tprob:
+
+		probabilityAtPos[key] = Bprob[key] - Tprob[key]
+
+	return (basecalls,probabilityAtPos)	
+
+
 def callHairpin(kmer2normalisedReads, reference, poreModelFilename, analogueObj):
 #	Test function for calling analogues in hairpin primer data (data of the type that we used for training)
 #	ARGUMENTS

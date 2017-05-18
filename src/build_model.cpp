@@ -3,7 +3,6 @@
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 //----------------------------------------------------------
 
-
 #include "build_model.h"
 #include "poreSpecificParameters.h"
 
@@ -21,6 +20,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
 	std::vector< NormalDistribution > nd;
+	nd.reserve( reference.length() - 6 );
 	SilentDistribution sd( 0.0, 0.0 );
 	UniformDistribution ud( 30.0, 130.0 );
 
@@ -105,7 +105,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 	std::cout << "Done." << std::endl;
 
-	hmm.BaumWelch( events, 2, 50, false, threads );
+	hmm.BaumWelch( events, 1.0, 50.0, false, threads );
 
 	std::stringstream ss = hmm.summarise();
 
