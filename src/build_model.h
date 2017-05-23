@@ -4,9 +4,14 @@
 //----------------------------------------------------------
 
 
-#include "data_IO.h"
-#include "../Penthus/src/hmm.h"
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <iostream>
+#include <algorithm>
+#include <map>
 
 
 /*function prototypes */
 std::stringstream buildAndTrainHMM( std::string &, std::map< std::string, std::pair< double, double > > &, std::vector< std::vector< double > > &, int & );
+double buildAndDetectHMM( std::string &, std::map< std::string, std::pair< double, double > > &, std::map< std::string, std::pair< double, double > > &, std::vector< double > &, int &, bool );

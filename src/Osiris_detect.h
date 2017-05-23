@@ -5,4 +5,4 @@
 
 
 /*function prototypes */
-int train_main( int argc, char** argv );
+int detect_main( int argc, char** argv );

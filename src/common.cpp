@@ -69,31 +69,98 @@ std::vector< std::vector< double > > filterEvents( std::string &reference, std::
 }
 
 
-std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &x, std::vector< double > &y ){
+std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &events, std::vector< double > &generatedSignal ){
 
 	/*allocate the dynamic time warping lattice */
-	std::vector< std::vector< double > > dtw( x.size(), std::vector< double >( y.size(), 0.0 ) );
+	std::vector< std::vector< double > > dtw( events.size(), std::vector< double >( generatedSignal.size(), 0.0 ) );
 
-	/*initialisation: set the first row and first column of the dynamic time warping lattice */
+	/*initialisation */
 	double runningSum = 0.0;
-	for ( int i = 0; i < x.size(); i++ ){
+	for ( unsigned int i = 0; i < events.size(); i++ ){
 
-		runningSum += std::abs( x[ i ] - y[ 0 ] );
+		runningSum += std::abs( events[ i ] - generatedSignal[ 0 ] );
 		dtw[ i ][ 0 ] = runningSum;
 
 	}
 
-	for ( int i = 0; i < y.size(); i++ ){
+	runningSum = 0.0;
+	for ( unsigned int i = 0; i < generatedSignal.size(); i++ ){
 
-		dtw[ 0 ][ i ] = std::abs( x[ 0 ] - y[ i ] );
+		runningSum += std::abs( events[ 0 ] - generatedSignal[ i ] );
+		dtw[ 0 ][ i ] = runningSum; 
 
 	}
 
 	/*recursion: fill in the dynamic time warping lattice */
-	for ( int i = 1; i < x.size(); i++ ){
-		for ( int j = 1; j < y.size(); j++ ){
+	for ( int i = 1; i < events.size(); i++ ){
+		for ( int j = 1; j < generatedSignal.size(); j++ ){
 
-			dtw[ i ][ j ] = std::abs( x[ i ] - y[ j ] ) + std::min( dtw[ i - 1 ][ j ], std::min( dtw[ i ][ j - 1 ], dtw[ i - 1 ][ j - 1 ] ) );
+			dtw[ i ][ j ] = std::abs( events[ i ] - generatedSignal[ j ] ) + std::min( dtw[ i - 1 ][ j ], std::min( dtw[ i ][ j - 1 ], dtw[ i - 1 ][ j - 1 ] ) );
+
+		}
+	
+	}
+
+	/*termination: calculate the optimal warping path */
+	int j = generatedSignal.size() - 1;
+	int i = events.size() - 1;
+	std::map< int, std::vector< int > > readPosToEventPos;
+
+	while ( i != 0 or j != 0 ){
+
+		readPosToEventPos[ j ].push_back( i );
+
+		std::vector< double > mCand = { dtw[ i - 1 ][ j - 1 ], dtw[ i ][ j - 1 ], dtw[ i - 1 ][ j ] };
+
+		int m = std::min_element( mCand.begin(), mCand.end() ) - mCand.begin();
+
+		if ( m == 0 ){
+			j--;
+			i--;
+		}
+		else if ( m == 1 ){
+			i--;
+		}
+		else if ( m == 2 ){
+			j--;
+		}
+		else{
+			std::cout << "Exiting with error.  Out of bounds error in dynmaic time warping." << std::endl;
+			exit(EXIT_FAILURE);
+		}
+
+	}
+
+	return readPosToEventPos;
+
+}
+
+
+std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &shortSignal, std::vector< double > &longSignal ){
+
+	/*allocate the dynamic time warping lattice */
+	std::vector< std::vector< double > > dtw( shortSignal.size(), std::vector< double >( longSignal.size(), 0.0 ) );
+
+	/*initialisation: set the first row and first column of the dynamic time warping lattice */
+	double runningSum = 0.0;
+	for ( int i = 0; i < shortSignal.size(); i++ ){
+
+		runningSum += std::abs( shortSignal[ i ] - longSignal[ 0 ] );
+		dtw[ i ][ 0 ] = runningSum;
+
+	}
+
+	for ( int i = 0; i < longSignal.size(); i++ ){
+
+		dtw[ 0 ][ i ] = std::abs( shortSignal[ 0 ] - longSignal[ i ] );
+
+	}
+
+	/*recursion: fill in the dynamic time warping lattice */
+	for ( int i = 1; i < shortSignal.size(); i++ ){
+		for ( int j = 1; j < longSignal.size(); j++ ){
+
+			dtw[ i ][ j ] = std::abs( shortSignal[ i ] - longSignal[ j ] ) + std::min( dtw[ i - 1 ][ j ], std::min( dtw[ i ][ j - 1 ], dtw[ i - 1 ][ j - 1 ] ) );
 
 		}
 	
@@ -101,7 +168,7 @@ std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &x, s
 
 	/*termination: calculate the optimal warping path */
 	int j = argMin( dtw.back() );
-	int i = x.size() - 1;
+	int i = shortSignal.size() - 1;
 	std::vector< std::pair< int, int > > path;
 	while ( i != 0 ){
 
@@ -122,7 +189,7 @@ std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &x, s
 			j--;
 		}
 		else{
-			std::cout << "Exiting with error.  Out of bounds error in dynmaic time warping." << std::endl;
+			std::cout << "Exiting with error.  Out of bounds error in subsequence dynmaic time warping." << std::endl;
 			exit(EXIT_FAILURE);
 		}
 

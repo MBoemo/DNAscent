@@ -6,7 +6,8 @@
 
 #include "Osiris_train.h"
 #include "common.h"
-#include <ctime>
+#include "build_model.h"
+#include "data_IO.h"
 
 
 static const char *help=
@@ -14,27 +15,27 @@ static const char *help=
 "To run Osiris train, do:\n"
 "  ./Osiris train [arguments]\n"
 "Example:\n"
-"  ./Osiris train -r /path/to/reference.fasta -m /path/to/template_median68pA.model -d /path/to/data.foh -o output.txt -t 20 -sc 30\n"
+"  ./Osiris train -r /path/to/reference.fasta -bm /path/to/template_median68pA.model -d /path/to/data.foh -o output.txt -t 20 -sc 30\n"
 "Required arguments are:\n"
 "  -r,--reference            full path to reference file in fasta format,\n"
-"  -m,--model                full path to Oxford Nanopore pore model file,\n"
+"  -om,--ont-model           full path to 6mer pore model file (provided by ONT) over bases {A,T,G,C},\n"
 "  -d,--trainingData         full path to training data in the .foh format (can be made with Python Osiris\n"
 "  -o,--output               full path to the output file which will contain the trained values.\n"
 "Optional arguments are:\n"
-"  -t,--threads              number of threads (default is 1 thread).\n"
+"  -t,--threads              number of threads (default is 1 thread),\n"
 "  -sc,--soft-clipping       restrict training to this window size around a region of interest.\n";
 
 struct Arguments {
 	std::string referenceFilename;
 	std::string trainingDataFilename;
-	std::string baseModelFilename;
+	std::string ontModelFilename;
 	std::string trainingOutputFilename;
 	int threads;
 	bool softClip;
 	int SCwindow;
 };
 
-Arguments parseArguments( int argc, char** argv ){
+Arguments parseTrainingArguments( int argc, char** argv ){
 
 	if( argc < 2 ){
 
@@ -73,10 +74,10 @@ Arguments parseArguments( int argc, char** argv ){
 			i+=2;	
 
 		}
-		else if ( flag == "-m" or flag == "--model" ){
+		else if ( flag == "-om" or flag == "--ont-model" ){
 
 			std::string strArg( argv[ i + 1 ] );
-			trainArgs.baseModelFilename = strArg;
+			trainArgs.ontModelFilename = strArg;
 			i+=2;
 
 		}
@@ -125,10 +126,10 @@ Arguments parseArguments( int argc, char** argv ){
 
 int train_main( int argc, char** argv ){
 
-	Arguments trainArgs = parseArguments( argc, argv );
+	Arguments trainArgs = parseTrainingArguments( argc, argv );
 
 	std::string reference = import_reference( trainArgs.referenceFilename );
-	std::map< std::string, std::pair< double, double > > baseModel =  import_poreModel( trainArgs.baseModelFilename );
+	std::map< std::string, std::pair< double, double > > ontModel =  import_poreModel( trainArgs.ontModelFilename );
 	std::map< std::string, std::vector< std::vector< double > > > trainingData = import_foh( trainArgs.trainingDataFilename );
 
 	/*IO */
@@ -163,13 +164,13 @@ int train_main( int argc, char** argv ){
 
 			}
 
-			refLocal = refLocal.substr( brduDomLoc - trainArgs.SCwindow, brduDomLoc + trainArgs.SCwindow );
-			events = filterEvents( refLocal, baseModel, events );
+			refLocal = refLocal.substr( brduDomLoc - trainArgs.SCwindow, 6 + 2*trainArgs.SCwindow );
+			events = filterEvents( refLocal, ontModel, events );
 			
 		}
 
 		/*do the training */
-		std::stringstream ss = buildAndTrainHMM( refLocal, baseModel, events, trainArgs.threads );
+		std::stringstream ss = buildAndTrainHMM( refLocal, ontModel, events, trainArgs.threads );
 
 		outFile << ">" << adenDomain << std::endl << ss.rdbuf();
 

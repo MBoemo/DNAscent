@@ -49,3 +49,4 @@ inline std::string reverseComplement( std::string &DNAseq ){
 std::vector< std::vector< double > > filterEvents( std::string &, std::map< std::string, std::pair< double, double > > &, std::vector< std::vector< double > > & );
 std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &, std::vector< double > & );
 std::vector< double > generateSignal( std::string &, std::map< std::string, std::pair< double, double > > & );
+std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &, std::vector< double > & );

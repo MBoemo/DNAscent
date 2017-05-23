@@ -4,5 +4,18 @@
 //----------------------------------------------------------
 
 
-/*function prototypes */
-int train_main( int argc, char** argv );
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <iostream>
+#include <algorithm>
+#include <map>
+
+
+struct detectionTuple{
+
+	std::string filename;
+	std::string basecalls;
+	std::vector< double > events;
+
+};

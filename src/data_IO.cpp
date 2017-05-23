@@ -138,3 +138,54 @@ std::map< std::string, std::vector< std::vector< double > > > import_foh( std::s
 	return kmer2normalisedReads;
 
 }
+
+
+std::vector< detectionTuple > import_fdh( std::string &fdhFilePath ){
+	
+	std::cout << "Importing detection data..." << std::endl;
+	std::ifstream file( fdhFilePath );
+	
+	if ( not file.is_open() ){
+		std::cout << "Exiting with error.  Detection data file could not be opened." << std::endl;
+		exit(EXIT_FAILURE);
+	}
+
+	std::string line;
+	std::string event;
+
+	std::vector< detectionTuple > detectionTuples;
+	
+	/*while we have a line to read in the reference file... */
+	while ( std::getline( file, line ) ){
+
+		if ( line[0] == '>' ){
+
+			detectionTuple readTuple;
+
+			/*extract filename */
+			readTuple.filename = line.erase( 0, 1 );
+
+			/*extract basecalls */
+			std::getline( file, line );
+			readTuple.basecalls = line;
+
+			/*extract events */
+			std::getline( file, line );
+			std::istringstream ss( line );
+			std::string event;
+			while ( std::getline( ss, event, ' ' ) ){
+
+				(readTuple.events).push_back( atof( event.c_str() ) );
+			
+			}
+
+			detectionTuples.push_back( readTuple );
+
+		}
+
+	}
+
+	std::cout << "Done." << std::endl;
+	return detectionTuples;
+
+}

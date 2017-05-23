@@ -395,7 +395,7 @@ def normaliseSingleRead(fast5File, bases, kmer2MeanStd, progress, total):
 
 	f.close()
 	
-	return (normalisedEvents, bases, fast5File)
+	return (fast5File, bases, normalisedEvents)
 
 
 def import_inVivoData(readsFile, fiveMerPoreModelFile):
@@ -409,14 +409,14 @@ def import_inVivoData(readsFile, fiveMerPoreModelFile):
 			if i != 0:
 				linesDic[filename] = bases				
 
-			filename = line.split('|')[2].rstrip()
+			filename = line[1:].rstrip()
 			bases = ''
 		else:
 			bases += line.rstrip()
 
 	poreModel = import_poreModel(fiveMerPoreModelFile)
 
-	results = Parallel(n_jobs = multiprocessing.cpu_count())(delayed(normaliseSingleRead)(filename, linesDic[filename], poreModel,i,len(linesDic.keys())) for i, filename in enumerate(linesDic))
+	results = Parallel(n_jobs = multiprocessing.cpu_count())(delayed(normaliseSingleRead)(filename, linesDic[filename], poreModel, i, len(linesDic.keys())) for i, filename in enumerate(linesDic))
 	
 	return results
 
@@ -648,3 +648,32 @@ def import_trainingDataFromFoh( filename ):
 			trainingData[key].append( map(float,line.rstrip().split(' ')))
 
 	return trainingData
+
+
+def export_toFdh( fileTuples, filename ):
+#	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
+#	ARGUMENTS
+#       ---------
+#	- fileTuples: result of import_inVivoData which is a list of tuples of the form (fast5 filename, basecalls, normalised events)
+#	  type: list of tuples
+#	- filename: output .fdh filename
+#	  type: string
+#	OUTPUTS
+#       -------
+#	- exports read observation data in the .fdh format, to be read by C++ Osiris
+	
+	f = open(filename,'w')
+
+	for threeTuple in fileTuples:
+
+		#if any of the fields are empty, skip this read
+		if ('' in [threeTuple[0], threeTuple[1]]) or (threeTuple[2] == []):
+			continue
+		
+		f.write('>' + threeTuple[0] + '\n' + threeTuple[1] + '\n')
+			
+		eventsStr = map(str, threeTuple[2])
+
+		f.write( ' '.join(eventsStr) + '\n' )
+
+	f.close()
