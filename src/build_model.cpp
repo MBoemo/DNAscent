@@ -116,9 +116,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 }
 
 
-double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::map< std::string, std::pair< double, double > > &analogueModel, std::vector< double > &events, int &threads, bool analogue ){
-
-	std::cout << "Building HMM... " << std::endl;
+double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::map< std::string, std::pair< double, double > > &analogueModel, std::vector< double > &events, bool analogue ){
 
 	HiddenMarkovModel hmm = HiddenMarkovModel( 3*reference.length() + 2, 3*reference.length() + 2 );
 
@@ -233,11 +231,7 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	hmm.add_transition( gcEnd, gcEnd, 0.8 );
 	hmm.add_transition( gcEnd, hmm.end, 0.2 );
 
-	std::cout << "\tFinalising and sorting states..." << std::endl;
 	hmm.finalise();
-	std::cout << "\tDone." << std::endl;
-
-	std::cout << "Done." << std::endl;
 
 	double seqProb = hmm.sequenceProbability( events );
 

@@ -414,6 +414,10 @@ def import_inVivoData(readsFile, fiveMerPoreModelFile):
 		else:
 			bases += line.rstrip()
 
+		if i > 50:#this is meant to shorten the input for testing - delete this later
+			break;
+
+
 	poreModel = import_poreModel(fiveMerPoreModelFile)
 
 	results = Parallel(n_jobs = multiprocessing.cpu_count())(delayed(normaliseSingleRead)(filename, linesDic[filename], poreModel, i, len(linesDic.keys())) for i, filename in enumerate(linesDic))

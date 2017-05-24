@@ -148,25 +148,29 @@ int detect_main( int argc, char** argv ){
 		/*get a rough alignment from the basecalls to events with dynamic time warping */
 		std::map< int, std::vector< int > > warpPath = dynamicTimewarping( events, generatedSignal );
 
-		/*bound these - things tend to be rubbish at the start and end */
-		for ( unsigned int i = 20; i < basecalls.length() - 20; i++ ){
-			
-			if ( basecalls.substr( i, 1 ) == "T"){
+		/*if we can't get an alignment that goes to the beginning of the read, don't try to detect anything in this read and skip to the next one */
+		if ( warpPath.count( 10 ) == 0 ){
+			continue;
+		}
 
-				std::string readSnippet = basecalls.substr( i - 10, 26 );
-				std::vector< double >::const_iterator first = events.begin() + warpPath[ i - 10 ].back();
-				std::vector< double >::const_iterator last = events.begin() + warpPath[ i + 16 ].front();				
+		/*bound these - things tend to be rubbish at the start and end so start 15 bases in and end 30 bases early */
+		for ( unsigned int j = 20; j < basecalls.length() - 30; j++ ){
+			
+			if ( basecalls.substr( j, 1 ) == "T"){
+
+				std::string readSnippet = basecalls.substr( j - 10, 26 );
+				std::vector< double >::const_iterator first = events.begin() + warpPath[ j - 10 ].back();
+				std::vector< double >::const_iterator last = events.begin() + warpPath[ j + 16 ].front();				
 				std::vector< double > eventSnippet( first, last );
 
-				double logProbThymidine = buildAndDetectHMM( readSnippet, ontModel, analogueModel, eventSnippet, trainArgs.threads, false );
-				double logProbAnalogue = buildAndDetectHMM( readSnippet, ontModel, analogueModel, eventSnippet, trainArgs.threads, true );
+				double logProbThymidine = buildAndDetectHMM( readSnippet, ontModel, analogueModel, eventSnippet, false );
+				double logProbAnalogue = buildAndDetectHMM( readSnippet, ontModel, analogueModel, eventSnippet, true );
 
 				double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
-				ss << i << "\t" << logLikelihoodRatio << std::endl;
+				ss << j << "\t" << logLikelihoodRatio << std::endl;
 
 			}
-
 
 		}
 

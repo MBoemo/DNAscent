@@ -95,8 +95,13 @@ std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &e
 	for ( int i = 1; i < events.size(); i++ ){
 		for ( int j = 1; j < generatedSignal.size(); j++ ){
 
-			dtw[ i ][ j ] = std::abs( events[ i ] - generatedSignal[ j ] ) + std::min( dtw[ i - 1 ][ j ], std::min( dtw[ i ][ j - 1 ], dtw[ i - 1 ][ j - 1 ] ) );
+			if ( i == 1 or j == 1 ){
+				dtw[ i ][ j ] = std::abs( events[ i ] - generatedSignal[ j ] ) + std::min( dtw[ i - 1 ][ j ], std::min( dtw[ i ][ j - 1 ], dtw[ i - 1 ][ j - 1 ] ) );			
+			}
+			else{
+				dtw[ i ][ j ] = std::abs( events[ i ] - generatedSignal[ j ] ) + std::min( dtw[ i - 1 ][ j - 1 ], std::abs( events[ i - 1 ] - generatedSignal[ j ] ) + std::min( dtw[ i - 2 ][ j - 1 ], std::min( dtw[ i - 1 ][ j ], std::abs( events[ i - 1 ] - generatedSignal[ j ] ) + dtw[ i - 2 ][ j ] ) ) );
 
+			}
 		}
 	
 	}
@@ -106,23 +111,28 @@ std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &e
 	int i = events.size() - 1;
 	std::map< int, std::vector< int > > readPosToEventPos;
 
-	while ( i != 0 or j != 0 ){
+	while ( i > 2 and j > 2 ){
 
 		readPosToEventPos[ j ].push_back( i );
+		std::cout << j << " " << i << std::endl;
 
-		std::vector< double > mCand = { dtw[ i - 1 ][ j - 1 ], dtw[ i ][ j - 1 ], dtw[ i - 1 ][ j ] };
+		std::vector< double > mCand = { dtw[ i - 1 ][ j - 1 ], dtw[ i - 2 ][ j - 1 ], dtw[ i - 1 ][ j ], dtw[ i - 2 ][ j ] };
 
 		int m = std::min_element( mCand.begin(), mCand.end() ) - mCand.begin();
 
 		if ( m == 0 ){
-			j--;
 			i--;
+			j--;
 		}
 		else if ( m == 1 ){
-			i--;
+			i-=2;
+			j--;
 		}
 		else if ( m == 2 ){
-			j--;
+			i--;
+		}
+		else if ( m == 3 ){
+			i-=2;
 		}
 		else{
 			std::cout << "Exiting with error.  Out of bounds error in dynmaic time warping." << std::endl;
