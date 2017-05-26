@@ -128,7 +128,7 @@ def export_poreModel(emissions, outputFilename):
 	f.close()
 
 
-def import_2Dfasta(pathToReads,outFastaFilename):
+def import_fasta(pathToReads, outFastaFilename, callType='2D'):
 #	takes a directory with fast5 nanopore reads at the top level, and extracts the 2D sequences in fasta format with the path to the file as the fasta header
 #	ARGUMENTS
 #       ---------
@@ -146,7 +146,12 @@ def import_2Dfasta(pathToReads,outFastaFilename):
 	fout = open(outFastaFilename,'w')
 
 	#path through the fast5 tree to get to the fastq sequence
-	fast5path2fastq = '/Analyses/Basecall_2D_000/BaseCalled_2D/Fastq'
+	if callType == '2D':
+		fast5path2fastq = '/Analyses/Basecall_2D_000/BaseCalled_2D/Fastq'
+	elif callType == '1D':
+		fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
+	else:
+		warnings.warn('Warning: Invalid callType passed to import_fasta in data_IO.py.', Warning)
 
 	#empty reads string, and count the number of subdirectories so we can print progress
 	reads = ''
@@ -544,13 +549,15 @@ def import_HairpinTrainingData(reference, bamFile, poreModelFile, redundant_A_Lo
 	return kmer2normalisedReads
 
 
-def alignAndSort(readsDirectory, pathToReference, qualityControl=True, threads=1):
+def alignAndSort(readsDirectory, pathToReference, basecallType='2D', qualityControl=True, threads=1):
 #	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
 #	ARGUMENTS
 #       ---------
 #	- readsDirectory: full path to the directory that contains the fast5 files for the run 
 #	  type: string
 #	- pathToReference: full path to the reference file that has the reference (or references, if they're barcoded) for all sequences present in the run
+#	  type: string
+#	- basecallType: 2D or 1D
 #	  type: string
 #	- qualityControl: whether to filter the BAM file so that it only contains reads with 80% coverage to the reference
 #	  type: bool
@@ -561,7 +568,7 @@ def alignAndSort(readsDirectory, pathToReference, qualityControl=True, threads=1
 #	- in the present working directory, a reads.fasta file is created that has sequences of all the reads in the run, and bam files are created for each reference
 	
 	#take the directory with the fast5 reads in it and export them to a fasta file in the current working directory
-	import_2Dfasta(readsDirectory, os.getcwd()+'/reads.fasta')
+	import_fasta(readsDirectory, os.getcwd()+'/reads.fasta', basecallType)
 
 	#index the reference
 	os.system('bwa index ' + pathToReference)

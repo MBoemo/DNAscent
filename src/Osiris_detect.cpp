@@ -130,6 +130,8 @@ int detect_main( int argc, char** argv ){
 
 	std::stringstream ss; //out stringstream
 
+
+	#pragma omp parallel for default(none) schedule(dynamic) shared(ontModel, analogueModel, trainArgs, detectData, outFile) private(ss) num_threads(trainArgs.threads)
 	for( unsigned int i = 0; i < detectData.size(); i++ ){
 
 		/*take the read, and if it's really short, toss it out */
@@ -173,7 +175,7 @@ int detect_main( int argc, char** argv ){
 			}
 
 		}
-
+		#pragma omp critical
 		/*write the log probabilities for this file to the output file */
 		outFile << ss.rdbuf();
 

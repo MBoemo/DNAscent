@@ -114,7 +114,7 @@ std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &e
 	while ( i > 2 and j > 2 ){
 
 		readPosToEventPos[ j ].push_back( i );
-		std::cout << j << " " << i << std::endl;
+		//std::cout << j << " " << i << std::endl;
 
 		std::vector< double > mCand = { dtw[ i - 1 ][ j - 1 ], dtw[ i - 2 ][ j - 1 ], dtw[ i - 1 ][ j ], dtw[ i - 2 ][ j ] };
 
