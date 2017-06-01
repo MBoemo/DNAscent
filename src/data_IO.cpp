@@ -89,6 +89,30 @@ std::map< std::string, std::pair< double, double > > import_poreModel( std::stri
 }
 
 
+void export_poreModel( std::map< std::string, std::vector< double > > &trainedMap, std::string &outputFilename ){
+
+	std::ofstream outFile;
+	outFile.open( outputFilename );
+	if ( not outFile.is_open() ){
+		std::cout << "Exiting with error.  Output model file could not be opened." << std::endl;
+		exit(EXIT_FAILURE);
+	}
+
+	/*write headers */
+	outFile << "#Analogue pore model file trained by Osiris." << std::endl;
+	outFile << "kmer\ttrMu\ttrSig\toriMu\toriSig" << std::endl;
+
+	for( auto iter = trainedMap.cbegin(); iter != trainedMap.cend(); ++iter ){
+
+		outFile << iter -> first << "\t" << ( iter -> second )[ 0 ] << "\t" << ( iter -> second )[ 1 ] << "\t" << ( iter -> second )[ 2 ] << "\t" << ( iter -> second )[ 3 ] << std::endl;
+
+	}
+
+	outFile.close();
+
+}
+
+
 std::map< std::string, std::vector< std::vector< double > > > import_foh( std::string fohFilePath ){
 	
 	std::cout << "Importing training data..." << std::endl;

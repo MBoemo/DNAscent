@@ -18,7 +18,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 	std::pair< double, double > emissionMeanAndStd;
 
 	/*STATES - vector (of vectors) to hold the states at each position on the reference - fill with dummy values */
-	std::vector< std::vector< State > > states( 6, std::vector< State >( reference.length() - 5, State( NULL,"","", 1.0 ) ) );
+	std::vector< std::vector< State > > states( 6, std::vector< State >( reference.length() - 5, State( NULL, "", "", "", 1.0 ) ) );
 
 	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
 	std::vector< NormalDistribution > nd;
@@ -41,12 +41,12 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 		loc = std::to_string( i );
 
-		states[ 0 ][ i ] = State( &sd, 		loc + "_SS", 	"", 		1.0 );
-		states[ 1 ][ i ] = State( &sd,		loc + "_D", 	"", 		1.0 );		
-		states[ 2 ][ i ] = State( &ud,	 	loc + "_I", 	"", 		1.0 );
-		states[ 3 ][ i ] = State( &nd[ i ], 	loc + "_M1", 	loc + "_match", 1.0 );
-		states[ 4 ][ i ] = State( &nd[ i ], 	loc + "_M2", 	loc + "_match", 1.0 );
-		states[ 5 ][ i ] = State( &sd, 		loc + "_SE", 	"", 		1.0 );
+		states[ 0 ][ i ] = State( &sd, 		loc + "_SS",	reference.substr( i, 6 ),	"", 		1.0 );
+		states[ 1 ][ i ] = State( &sd,		loc + "_D", 	reference.substr( i, 6 ),	"", 		1.0 );		
+		states[ 2 ][ i ] = State( &ud,	 	loc + "_I", 	reference.substr( i, 6 ),	"", 		1.0 );
+		states[ 3 ][ i ] = State( &nd[ i ], 	loc + "_M1", 	reference.substr( i, 6 ),	loc + "_match", 1.0 );
+		states[ 4 ][ i ] = State( &nd[ i ], 	loc + "_M2", 	reference.substr( i, 6 ),	loc + "_match", 1.0 );
+		states[ 5 ][ i ] = State( &sd, 		loc + "_SE", 	reference.substr( i, 6 ),	"", 		1.0 );
 
 		/*add state to the model */
 		for ( unsigned int j = 0; j < 6; j++ ){
@@ -123,7 +123,7 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	std::pair< double, double > emissionMeanAndStd;
 
 	/*STATES - vector (of vectors) to hold the states at each position on the reference - fill with dummy values */
-	std::vector< std::vector< State > > states( 6, std::vector< State >( reference.length() - 5, State( NULL,"","", 1.0 ) ) );
+	std::vector< std::vector< State > > states( 6, std::vector< State >( reference.length() - 5, State( NULL, "", "", "", 1.0 ) ) );
 
 	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
 	std::vector< NormalDistribution > nd;
@@ -132,8 +132,8 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	UniformDistribution ud( 30.0, 130.0 );
 
 	/*garbage collection states to make up for inaccuracies in dynamic time warping */
-	State gcStart( &ud, "gcStart", "", 1.0 );
-	State gcEnd( &ud, "gcEnd", "", 1.0 );
+	State gcStart( &ud, "gcStart", "", "", 1.0 );
+	State gcEnd( &ud, "gcEnd", "", "", 1.0 );
 	hmm.add_state( gcStart );
 	hmm.add_state( gcEnd );
 
@@ -167,12 +167,12 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 
 		loc = std::to_string( i );
 
-		states[ 0 ][ i ] = State( &sd, 		loc + "_SS", 	"", 		1.0 );
-		states[ 1 ][ i ] = State( &sd,		loc + "_D", 	"", 		1.0 );		
-		states[ 2 ][ i ] = State( &ud,	 	loc + "_I", 	"", 		1.0 );
-		states[ 3 ][ i ] = State( &nd[ i ], 	loc + "_M1", 	loc + "_match", 1.0 );
-		states[ 4 ][ i ] = State( &nd[ i ], 	loc + "_M2", 	loc + "_match", 1.0 );
-		states[ 5 ][ i ] = State( &sd, 		loc + "_SE", 	"", 		1.0 );
+		states[ 0 ][ i ] = State( &sd, 		loc + "_SS", 	reference.substr( i, 6 ),	"", 		1.0 );
+		states[ 1 ][ i ] = State( &sd,		loc + "_D", 	reference.substr( i, 6 ),	"", 		1.0 );		
+		states[ 2 ][ i ] = State( &ud,	 	loc + "_I", 	reference.substr( i, 6 ),	"", 		1.0 );
+		states[ 3 ][ i ] = State( &nd[ i ], 	loc + "_M1", 	reference.substr( i, 6 ),	loc + "_match", 1.0 );
+		states[ 4 ][ i ] = State( &nd[ i ], 	loc + "_M2", 	reference.substr( i, 6 ),	loc + "_match", 1.0 );
+		states[ 5 ][ i ] = State( &sd, 		loc + "_SE", 	reference.substr( i, 6 ),	"", 		1.0 );
 
 		/*add state to the model */
 		for ( unsigned int j = 0; j < 6; j++ ){

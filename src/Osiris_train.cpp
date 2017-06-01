@@ -23,13 +23,16 @@ static const char *help=
 "  -o,--output               full path to the output file which will contain the trained values.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
-"  -sc,--soft-clipping       restrict training to this window size around a region of interest.\n";
+"  -sc,--soft-clipping       restrict training to this window size around a region of interest,\n"
+"  -l,--log-file             training log file for the training values at each position on the reference.\n";
 
 struct Arguments {
 	std::string referenceFilename;
 	std::string trainingDataFilename;
 	std::string ontModelFilename;
 	std::string trainingOutputFilename;
+	bool logFile;
+	std::string logFilename;
 	int threads;
 	bool softClip;
 	int SCwindow;
@@ -61,6 +64,7 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 	/*defaults - we'll override these if the option was specified by the user */
 	trainArgs.threads = 1;
 	trainArgs.softClip = false;
+	trainArgs.logFile = false;
 
 	/*parse the command line arguments */
 	for ( unsigned int i = 1; i < argc; ){
@@ -110,6 +114,14 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 			i+=2;
 
 		}
+		else if ( flag == "-l" or flag == "--log-file" ){
+
+			trainArgs.logFile = true;
+			std::string strArg( argv[ i + 1 ] );
+			trainArgs.logFilename = strArg;
+			i+=2;
+
+		}
 		else{
 
 			std::cout << "Exiting with error.  Invalid argument passed to Osiris train." << std::endl;
@@ -132,12 +144,16 @@ int train_main( int argc, char** argv ){
 	std::map< std::string, std::pair< double, double > > ontModel =  import_poreModel( trainArgs.ontModelFilename );
 	std::map< std::string, std::vector< std::vector< double > > > trainingData = import_foh( trainArgs.trainingDataFilename );
 
-	/*IO */
-	std::ofstream outFile;
-	outFile.open( trainArgs.trainingOutputFilename );
-	if ( not outFile.is_open() ){
-		std::cout << "Exiting with error.  Training data file could not be opened." << std::endl;
-		exit(EXIT_FAILURE);
+	std::map< std::string, std::vector< double> > trainedModel;
+
+	/*log file IO */
+	std::ofstream logFile;
+	if ( trainArgs.logFile == true ){
+		logFile.open( trainArgs.logFilename );
+		if ( not logFile.is_open() ){
+			std::cout << "Exiting with error.  Output training log file could not be opened." << std::endl;
+			exit(EXIT_FAILURE);
+		}
 	}
 
 	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
@@ -165,6 +181,7 @@ int train_main( int argc, char** argv ){
 			}
 
 			refLocal = refLocal.substr( brduDomLoc - trainArgs.SCwindow, 6 + 2*trainArgs.SCwindow );
+			brduDomLoc = trainArgs.SCwindow;
 			events = filterEvents( refLocal, ontModel, events );
 			
 		}
@@ -172,11 +189,77 @@ int train_main( int argc, char** argv ){
 		/*do the training */
 		std::stringstream ss = buildAndTrainHMM( refLocal, ontModel, events, trainArgs.threads );
 
-		outFile << ">" << adenDomain << std::endl << ss.rdbuf();
+		/*if we specified that we want a log file, read the ss buffer into it now */
+		std::stringstream ssLog( ss.str() );
+		if ( trainArgs.logFile == true ){
+			logFile << ">" << adenDomain << std::endl << ssLog.rdbuf();
+		}
+
+		/*hacky bodge to get the training data out at the relevant position without making Penthus specialised */
+		unsigned int i = 0;
+		std::string line;
+		while ( std::getline( ss, line ) ){
+
+			if ( i == brduDomLoc ){
+
+				std::string atPos4 = ( brduDomain.substr( 0, 6 ) ).replace( 3, 1, "B" );
+				std::vector< std::string > splitLine = split( line, '\t' );
+				
+				if ( trainedModel.count( atPos4 ) > 0 ){
+
+					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atPos4 ][ 1 ] ){
+
+						trainedModel[ atPos4 ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
+					
+					}
+
+				}
+				else{
+
+					trainedModel[ atPos4 ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
+
+				}
+
+			}
+			else if ( i == brduDomLoc + 1 ){
+
+				std::string atPos3 = ( brduDomain.substr( 1, 6 ) ).replace( 2, 1, "B" );
+				std::vector< std::string > splitLine = split( line, '\t' );
+
+				if ( trainedModel.count( atPos3 ) > 0 ){
+
+					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atPos3 ][ 1 ] ){
+
+						trainedModel[ atPos3 ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
+					
+					}
+
+				}
+				else{
+
+					trainedModel[ atPos3 ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
+
+				}
+
+
+			}
+			else if ( i > brduDomLoc + 1 ){
+		
+				break;
+
+			}
+			i++;
+		}
 
 	}
 
-	outFile.close();
+	/*make a pore model file from the map */
+	export_poreModel( trainedModel, trainArgs.trainingOutputFilename );
+
+	/*if we opened a log file to write on, close it now */
+	if ( trainArgs.logFile == true ){
+		logFile.close();
+	}
 
 	return 0;
 

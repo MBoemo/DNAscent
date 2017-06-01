@@ -7,6 +7,23 @@
 #include "common.h"
 
 
+std::vector< std::string > split( std::string s, char delim ){
+
+	std::stringstream ssString( s );
+	std::vector< std::string > splitString;
+	std::string entry;
+
+	while ( std::getline( ssString, entry, delim ) ){
+
+		splitString.push_back( entry );
+
+	}
+
+	return splitString;
+
+}
+
+
 int argMin( std::vector< double > &vec ){
 
 	double smallest = vec[0];
@@ -71,12 +88,18 @@ std::vector< std::vector< double > > filterEvents( std::string &reference, std::
 
 std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &events, std::vector< double > &generatedSignal ){
 
+	int numOfEvents = events.size();
+	int numOfBases = generatedSignal.size();
+
 	/*allocate the dynamic time warping lattice */
-	std::vector< std::vector< double > > dtw( events.size(), std::vector< double >( generatedSignal.size(), 0.0 ) );
+	std::vector< std::vector< double > > dtw( numOfEvents, std::vector< double >( numOfBases, std::numeric_limits< double >::max() ) );
+
+	/*set the width of the Sakoe-Chiba band */
+	int T = 25;
 
 	/*initialisation */
 	double runningSum = 0.0;
-	for ( unsigned int i = 0; i < events.size(); i++ ){
+	for ( unsigned int i = 0; i < T; i++ ){
 
 		runningSum += std::abs( events[ i ] - generatedSignal[ 0 ] );
 		dtw[ i ][ 0 ] = runningSum;
@@ -84,7 +107,7 @@ std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &e
 	}
 
 	runningSum = 0.0;
-	for ( unsigned int i = 0; i < generatedSignal.size(); i++ ){
+	for ( unsigned int i = 0; i < T; i++ ){
 
 		runningSum += std::abs( events[ 0 ] - generatedSignal[ i ] );
 		dtw[ 0 ][ i ] = runningSum; 
@@ -92,8 +115,12 @@ std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &e
 	}
 
 	/*recursion: fill in the dynamic time warping lattice */
-	for ( int i = 1; i < events.size(); i++ ){
-		for ( int j = 1; j < generatedSignal.size(); j++ ){
+	for ( int j = 1; j < numOfBases; j++ ){
+		
+		int SCbandLower = std::max( 1, j - T );
+		int SCbandUpper = std::min( numOfEvents, j + T );
+
+		for ( int i = SCbandLower; i < SCbandUpper; i++ ){
 
 			if ( i == 1 or j == 1 ){
 				dtw[ i ][ j ] = std::abs( events[ i ] - generatedSignal[ j ] ) + std::min( dtw[ i - 1 ][ j ], std::min( dtw[ i ][ j - 1 ], dtw[ i - 1 ][ j - 1 ] ) );			
@@ -102,13 +129,14 @@ std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &e
 				dtw[ i ][ j ] = std::abs( events[ i ] - generatedSignal[ j ] ) + std::min( dtw[ i - 1 ][ j - 1 ], std::abs( events[ i - 1 ] - generatedSignal[ j ] ) + std::min( dtw[ i - 2 ][ j - 1 ], std::min( dtw[ i - 1 ][ j ], std::abs( events[ i - 1 ] - generatedSignal[ j ] ) + dtw[ i - 2 ][ j ] ) ) );
 
 			}
+
 		}
 	
 	}
 
 	/*termination: calculate the optimal warping path */
-	int j = generatedSignal.size() - 1;
-	int i = events.size() - 1;
+	int j = numOfBases - 1;
+	int i = numOfEvents - 1;
 	std::map< int, std::vector< int > > readPosToEventPos;
 
 	while ( i > 2 and j > 2 ){

@@ -549,7 +549,7 @@ def import_HairpinTrainingData(reference, bamFile, poreModelFile, redundant_A_Lo
 	return kmer2normalisedReads
 
 
-def alignAndSort(readsDirectory, pathToReference, basecallType='2D', qualityControl=True, threads=1):
+def alignAndSort(readsDirectory, pathToReference, basecallType='2D', dataType, threads=1):
 #	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
 #	ARGUMENTS
 #       ---------
@@ -559,8 +559,8 @@ def alignAndSort(readsDirectory, pathToReference, basecallType='2D', qualityCont
 #	  type: string
 #	- basecallType: 2D or 1D
 #	  type: string
-#	- qualityControl: whether to filter the BAM file so that it only contains reads with 80% coverage to the reference
-#	  type: bool
+#	- dataType: acceptable values are 'training' or 'detection'
+#	  type: string
 #	- threads: number of threads on which to run BWA-MEM 
 #	  type: int 
 #	OUTPUTS
@@ -574,11 +574,13 @@ def alignAndSort(readsDirectory, pathToReference, basecallType='2D', qualityCont
 	os.system('bwa index ' + pathToReference)
 
 	#align the reads.fasta file created above to the reference with bwa-mem, then sort the bam file
+	#os.system('bwa mem -t '+str(threads)+' -k 1 -x ont2d '+pathToReference+' reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted.bam') 
 	os.system('bwa mem -t '+str(threads)+' -k 1 -x ont2d '+pathToReference+' reads.fasta | samtools view -Sb - | samtools sort -o alignments.sorted.bam -') 
 	os.system('samtools index alignments.sorted.bam')
 
 	sam_file = pysam.Samfile('alignments.sorted.bam')
 	out_files = list()
+	reference = import_reference(pathToReference)
 
 	#take alignments.sorted.bam and separate the records into separate bam files - one for each reference
 	for x in sam_file.references:
@@ -588,19 +590,26 @@ def alignAndSort(readsDirectory, pathToReference, basecallType='2D', qualityCont
 	for record in sam_file:
 		ref_length = sam_file.lengths[record.reference_id]
 
-		if record.aend is None or record.query_alignment_length is None:
+		if (record.aend is None) or (record.query_alignment_length is None) or record.is_reverse:
 			continue
 
-		ref_cover = float(record.aend - record.pos) / ref_length
-		query_cover = float(record.query_alignment_length) / record.query_length
+		if dataType == 'training':
 
-		#quality control for the reads that make it to the BAM file: only take >80% coverage with no reverse complement
-		if qualityControl:
-			if ref_cover > 0.8 and query_cover > 0.8 and record.is_reverse == False:
-				out_files[record.reference_id].write(record)
+			analogueLoc = reference.find('NNNTNNN')
+			thymidineLoc = reference.find('NNNANNN')
 
-		else:
+			#if the alignment indicates that this read doesn't have the critical regions, then ignore it and don't use it for training		
+			if (record.reference_start > analogueLoc - 15) or (record.reference_end < thymidineLoc + 15):
+				continue
+			
 			out_files[record.reference_id].write(record)
+
+		#for detection, we're going to use the basecalled read as a reference anyway, so we don't need to throw anything out
+		elif dataType == 'detection':
+			out_files[record.reference_id].write(record)
+		
+		else:
+			warnings.warn('Warning: Invalid argument passed as dataType.  Valid options are `training` or `detection`.', Warning)
 
 	#index the newly made bam files
 	for bamfile in sam_file.references:
