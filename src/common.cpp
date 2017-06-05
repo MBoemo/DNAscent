@@ -7,6 +7,29 @@
 #include "common.h"
 
 
+void displayProgress( int current, int total ){
+/*poached from https://stackoverflow.com/questions/14539867/how-to-display-a-progress-indicator-in-pure-c-c-cout-printf */
+
+	double progress = (double) current / (double) total;
+	int barWidth = 70;
+
+	if ( progress < 1.0 ){
+
+		std::cout << "[";
+		int pos = barWidth * progress;
+		for (int i = 0; i < barWidth; ++i) {
+			if (i < pos) std::cout << "=";
+			else if (i == pos) std::cout << ">";
+			else std::cout << " ";
+		}
+		std::cout << "] " << int(progress * 100.0) << " %\r";
+		std::cout.flush();
+
+	}
+
+}
+
+
 std::vector< std::string > split( std::string s, char delim ){
 
 	std::stringstream ssString( s );
@@ -74,7 +97,6 @@ std::vector< std::vector< double > > filterEvents( std::string &reference, std::
 		if (subEventBounds.second != 0 ){
 
 			std::vector< double > subEvent( events[ i ].begin() + subEventBounds.first, events[ i ].begin() + subEventBounds.second );
-
 			filteredEvents.push_back( subEvent );
 
 		}
@@ -196,6 +218,7 @@ std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &shor
 
 	/*recursion: fill in the dynamic time warping lattice */
 	for ( int i = 1; i < shortSignal.size(); i++ ){
+
 		for ( int j = 1; j < longSignal.size(); j++ ){
 
 			dtw[ i ][ j ] = std::abs( shortSignal[ i ] - longSignal[ j ] ) + std::min( dtw[ i - 1 ][ j ], std::min( dtw[ i ][ j - 1 ], dtw[ i - 1 ][ j - 1 ] ) );
@@ -217,14 +240,14 @@ std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &shor
 		int m = std::min_element( mCand.begin(), mCand.end() ) - mCand.begin();
 
 		if ( m == 0 ){
-			j--;
 			i--;
+			j--;
 		}
 		else if ( m == 1 ){
-			i--;
+			j--;
 		}
 		else if ( m == 2 ){
-			j--;
+			i--;
 		}
 		else{
 			std::cout << "Exiting with error.  Out of bounds error in subsequence dynmaic time warping." << std::endl;

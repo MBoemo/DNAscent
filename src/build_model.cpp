@@ -11,8 +11,6 @@
 
 std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::vector< std::vector< double > > &events, int &threads ){
 
-	std::cout << "Building HMM... " << std::endl;
-
 	HiddenMarkovModel hmm = HiddenMarkovModel( 3*reference.length(), 3*reference.length() + 2 );
 
 	std::pair< double, double > emissionMeanAndStd;
@@ -101,13 +99,9 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 	hmm.add_transition( states[ 2 ][ reference.length() - 7 ], hmm.end, externalI2SS );
 	hmm.add_transition( states[ 5 ][ reference.length() - 7 ], hmm.end, externalSE2SS + externalSE2D );
 
-	std::cout << "\tFinalising and sorting states..." << std::endl;
 	hmm.finalise();
-	std::cout << "\tDone." << std::endl;
 
-	std::cout << "Done." << std::endl;
-
-	hmm.BaumWelch( events, 1.0, 50.0, false, threads );
+	hmm.BaumWelch( events, 1.0, 50.0, false, threads, false );
 
 	std::stringstream ss = hmm.summarise();
 

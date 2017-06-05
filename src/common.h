@@ -48,6 +48,7 @@ inline std::string reverseComplement( std::string &DNAseq ){
 
 
 /*function prototypes */
+void displayProgress( int, int );
 std::vector< std::string > split( std::string, char );
 std::vector< std::vector< double > > filterEvents( std::string &, std::map< std::string, std::pair< double, double > > &, std::vector< std::vector< double > > & );
 std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &, std::vector< double > & );

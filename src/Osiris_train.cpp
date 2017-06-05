@@ -20,7 +20,7 @@ static const char *help=
 "  -r,--reference            full path to reference file in fasta format,\n"
 "  -om,--ont-model           full path to 6mer pore model file (provided by ONT) over bases {A,T,G,C},\n"
 "  -d,--trainingData         full path to training data in the .foh format (can be made with Python Osiris\n"
-"  -o,--output               full path to the output file which will contain the trained values.\n"
+"  -o,--output               full path to the output pore model file that Osiris will train.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
 "  -sc,--soft-clipping       restrict training to this window size around a region of interest,\n"
@@ -146,6 +146,8 @@ int train_main( int argc, char** argv ){
 
 	std::map< std::string, std::vector< double> > trainedModel;
 
+	int prog = 0;
+
 	/*log file IO */
 	std::ofstream logFile;
 	if ( trainArgs.logFile == true ){
@@ -157,6 +159,8 @@ int train_main( int argc, char** argv ){
 	}
 
 	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
+
+		displayProgress( prog, trainingData.size() );
 
 		std::string refLocal = reference;
 		std::vector< std::vector< double > > events = iter -> second;
@@ -200,7 +204,7 @@ int train_main( int argc, char** argv ){
 		std::string line;
 		while ( std::getline( ss, line ) ){
 
-			if ( i == brduDomLoc ){
+			if ( i == brduDomLoc + 1 ){
 
 				std::string atPos4 = ( brduDomain.substr( 0, 6 ) ).replace( 3, 1, "B" );
 				std::vector< std::string > splitLine = split( line, '\t' );
@@ -221,7 +225,7 @@ int train_main( int argc, char** argv ){
 				}
 
 			}
-			else if ( i == brduDomLoc + 1 ){
+			else if ( i == brduDomLoc + 2 ){
 
 				std::string atPos3 = ( brduDomain.substr( 1, 6 ) ).replace( 2, 1, "B" );
 				std::vector< std::string > splitLine = split( line, '\t' );
@@ -243,13 +247,15 @@ int train_main( int argc, char** argv ){
 
 
 			}
-			else if ( i > brduDomLoc + 1 ){
+			else if ( i > brduDomLoc + 2 ){
 		
 				break;
 
 			}
 			i++;
 		}
+
+		prog++;
 
 	}
 
@@ -260,6 +266,9 @@ int train_main( int argc, char** argv ){
 	if ( trainArgs.logFile == true ){
 		logFile.close();
 	}
+
+	/*some wrap-up messages */
+	std::cout << std::endl << "Done." << std::endl;
 
 	return 0;
 
