@@ -15,19 +15,21 @@ static const char *help=
 "To run Osiris train, do:\n"
 "  ./Osiris train [arguments]\n"
 "Example:\n"
-"  ./Osiris train -r /path/to/reference.fasta -bm /path/to/template_median68pA.model -d /path/to/data.foh -o output.txt -t 20 -sc 30\n"
+"  ./Osiris train -r /path/to/reference.fasta -p 3&4 -bm /path/to/template_median68pA.model -d /path/to/data.foh -o output.txt -t 20 -sc 30\n"
 "Required arguments are:\n"
-"  -r,--reference            full path to reference file in fasta format,\n"
-"  -om,--ont-model           full path to 6mer pore model file (provided by ONT) over bases {A,T,G,C},\n"
-"  -d,--trainingData         full path to training data in the .foh format (can be made with Python Osiris\n"
-"  -o,--output               full path to the output pore model file that Osiris will train.\n"
+"  -r,--reference            path to reference file in fasta format,\n"
+"  -p,--position             position of analogue in training data (valid arguments are 1&2, 3&4, or 5&6),\n"
+"  -om,--ont-model           path to 6mer pore model file (provided by ONT) over bases {A,T,G,C},\n"
+"  -d,--trainingData         path to training data in the .foh format (can be made with Python Osiris),\n"
+"  -o,--output               path to the output pore model file that Osiris will train.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
-"  -sc,--soft-clipping       restrict training to this window size around a region of interest,\n"
-"  -l,--log-file             training log file for the training values at each position on the reference.\n";
+"  -sc,--soft-clipping       restrict training to this window size around a region of interest (default is off),\n"
+"  -l,--log-file             training log file for the training values at each position on the reference (default is none).\n";
 
 struct Arguments {
 	std::string referenceFilename;
+	std::string analoguePosition;
 	std::string trainingDataFilename;
 	std::string ontModelFilename;
 	std::string trainingOutputFilename;
@@ -106,6 +108,13 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 			i+=2;
 
 		}
+		else if ( flag == "-p" or flag == "--position" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			trainArgs.analoguePosition = strArg;
+			i+=2;
+
+		}
 		else if ( flag == "-sc" or flag == "--soft-clipping" ){
 
 			trainArgs.softClip = true;
@@ -168,8 +177,31 @@ int train_main( int argc, char** argv ){
 		std::string adenDomain = iter -> first;
 		std::string brduDomain = reverseComplement( adenDomain );
 
-		int adenDomLoc = refLocal.find( "NNNANNN" );
-		int brduDomLoc = refLocal.find( "NNNTNNN" );
+		int positionNorm;
+		int adenDomLoc;
+		int brduDomLoc;
+
+		if ( trainArgs.analoguePosition == "1&2" ){
+			adenDomLoc = refLocal.find( "NNNNNAN" );
+			brduDomLoc = refLocal.find( "NTNNNNN" );
+			positionNorm = 0;
+
+		}
+		else if ( trainArgs.analoguePosition == "3&4" ){
+			adenDomLoc = refLocal.find( "NNNANNN" );
+			brduDomLoc = refLocal.find( "NNNTNNN" );
+			positionNorm = 2;
+		}
+		else if ( trainArgs.analoguePosition == "5&6" ){
+			adenDomLoc = refLocal.find( "NANNNNN" );
+			brduDomLoc = refLocal.find( "NNNNNTN" );
+			positionNorm = 4;
+		}
+		else{
+			std::cout << "Exiting with error.  Invalid option passed with the -p or --position flag.  Valid options are 1&2, 3&4, or 5&6." << std::endl;
+			exit(EXIT_FAILURE);
+		}
+	
 
 		refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
 		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
@@ -206,42 +238,42 @@ int train_main( int argc, char** argv ){
 
 			if ( i == brduDomLoc + 1 ){
 
-				std::string atPos4 = ( brduDomain.substr( 0, 6 ) ).replace( 3, 1, "B" );
+				std::string atFirstPos = ( brduDomain.substr( 0, 6 ) ).replace( positionNorm + 1, 1, "B" );
 				std::vector< std::string > splitLine = split( line, '\t' );
 				
-				if ( trainedModel.count( atPos4 ) > 0 ){
+				if ( trainedModel.count( atFirstPos ) > 0 ){
 
-					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atPos4 ][ 1 ] ){
+					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atFirstPos ][ 1 ] ){
 
-						trainedModel[ atPos4 ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
+						trainedModel[ atFirstPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
 					
 					}
 
 				}
 				else{
 
-					trainedModel[ atPos4 ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
+					trainedModel[ atFirstPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
 
 				}
 
 			}
 			else if ( i == brduDomLoc + 2 ){
 
-				std::string atPos3 = ( brduDomain.substr( 1, 6 ) ).replace( 2, 1, "B" );
+				std::string atSecondPos = ( brduDomain.substr( 1, 6 ) ).replace( positionNorm, 1, "B" );
 				std::vector< std::string > splitLine = split( line, '\t' );
 
-				if ( trainedModel.count( atPos3 ) > 0 ){
+				if ( trainedModel.count( atSecondPos ) > 0 ){
 
-					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atPos3 ][ 1 ] ){
+					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atSecondPos ][ 1 ] ){
 
-						trainedModel[ atPos3 ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
+						trainedModel[ atSecondPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
 					
 					}
 
 				}
 				else{
 
-					trainedModel[ atPos3 ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
+					trainedModel[ atSecondPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
 
 				}
 
