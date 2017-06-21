@@ -15,10 +15,10 @@ static const char *help=
 "To run Osiris train, do:\n"
 "  ./Osiris train [arguments]\n"
 "Example:\n"
-"  ./Osiris train -r /path/to/reference.fasta -p 3&4 -bm /path/to/template_median68pA.model -d /path/to/data.foh -o output.txt -t 20 -sc 30\n"
+"  ./Osiris train -r /path/to/reference.fasta -p 3and4 -bm /path/to/template_median68pA.model -d /path/to/data.foh -o output.txt -t 20 -sc 30\n"
 "Required arguments are:\n"
 "  -r,--reference            path to reference file in fasta format,\n"
-"  -p,--position             position of analogue in training data (valid arguments are 1&2, 3&4, or 5&6),\n"
+"  -p,--position             position of analogue in training data (for hairpins, valid arguments are 1and2, 3and4, or 5and6),\n"
 "  -om,--ont-model           path to 6mer pore model file (provided by ONT) over bases {A,T,G,C},\n"
 "  -d,--trainingData         path to training data in the .foh format (can be made with Python Osiris),\n"
 "  -o,--output               path to the output pore model file that Osiris will train.\n"
@@ -177,34 +177,34 @@ int train_main( int argc, char** argv ){
 		std::string adenDomain = iter -> first;
 		std::string brduDomain = reverseComplement( adenDomain );
 
-		int positionNorm;
-		int adenDomLoc;
-		int brduDomLoc;
+		int positionNorm, adenDomLoc, brduDomLoc;
 
-		if ( trainArgs.analoguePosition == "1&2" ){
+		if ( trainArgs.analoguePosition == "1and2" ){
 			adenDomLoc = refLocal.find( "NNNNNAN" );
 			brduDomLoc = refLocal.find( "NTNNNNN" );
 			positionNorm = 0;
-
+			refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
+			refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
 		}
-		else if ( trainArgs.analoguePosition == "3&4" ){
+		else if ( trainArgs.analoguePosition == "3and4" ){
 			adenDomLoc = refLocal.find( "NNNANNN" );
 			brduDomLoc = refLocal.find( "NNNTNNN" );
 			positionNorm = 2;
+			refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
+			refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
 		}
-		else if ( trainArgs.analoguePosition == "5&6" ){
+		else if ( trainArgs.analoguePosition == "5and6" ){
 			adenDomLoc = refLocal.find( "NANNNNN" );
 			brduDomLoc = refLocal.find( "NNNNNTN" );
 			positionNorm = 4;
+			refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
+			refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
 		}
 		else{
-			std::cout << "Exiting with error.  Invalid option passed with the -p or --position flag.  Valid options are 1&2, 3&4, or 5&6." << std::endl;
-			exit(EXIT_FAILURE);
+			brduDomLoc = std::stoi( (trainArgs.analoguePosition).c_str() ) - 3;
 		}
-	
 
-		refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
-		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
+
 
 		/*if soft clipping was specified, truncate the reference and events with dynamic time warping */
 		if ( trainArgs.softClip == true ){
@@ -219,7 +219,7 @@ int train_main( int argc, char** argv ){
 			refLocal = refLocal.substr( brduDomLoc - trainArgs.SCwindow, 6 + 2*trainArgs.SCwindow );
 			brduDomLoc = trainArgs.SCwindow;
 			events = filterEvents( refLocal, ontModel, events );
-			
+
 		}
 
 		/*do the training */
@@ -276,7 +276,6 @@ int train_main( int argc, char** argv ){
 					trainedModel[ atSecondPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
 
 				}
-
 
 			}
 			else if ( i > brduDomLoc + 2 ){
