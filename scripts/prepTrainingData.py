@@ -24,14 +24,14 @@ class arguments:
 
 #--------------------------------------------------------------------------------------------------------------------------------------
 def splashHelp():
-	s = """prepData.py: Osiris preprocessing script that will format ONT reads in the Osiris training/detection format.
-To run prepData.py, do:
+	s = """prepTrainingData.py: Osiris preprocessing script that will format ONT reads in the Osiris training/detection format.
+To run prepTrainingData.py, do:
   python prepData.py [arguments]
 Example:
-  python prepData.py --training -r /path/to/reference.fasta -p 3&4 -m /path/to/template_median68pA.5mer.model -d /path/to/reads -o output.foh -t 20
+  python prepTrainingData.py -r /path/to/reference.fasta -p 3&4 -m /path/to/template_median68pA.5mer.model -d /path/to/reads -o output.foh -t 20
 Required arguments are:
   -r,--reference            path to reference file in fasta format,
-  -p,--position             position of analogue in training data (valid arguments are 1&2, 3&4, or 5&6),
+  -p,--position             position of analogue in training data (valid arguments are 12, 34, or 56),
   -d,--data                 path to top level directory of ONT reads,
   -m,--5mer-model           path to 5mer pore model file (provided by ONT) to normalise reads,
   -o,--output               path to the output training .foh or detection .fdh file.
@@ -305,19 +305,19 @@ def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, redundant_A
 	numRecords = len(BAMrecords)
 	print str(numRecords) + ' records in BAM file.'
 
-	if position == '1&2':
+	if position == '12':
 		startLB = redundant_A_Loc-5
 		startUB = redundant_A_Loc-1
 		endLB = redundant_A_Loc+6
 		endUB = redundant_A_Loc+10
 		Aloc = 1
-	elif position == '3&4':
+	elif position == '34':
 		startLB = redundant_A_Loc-7
 		startUB = redundant_A_Loc-3
 		endLB = redundant_A_Loc+4
 		endUB = redundant_A_Loc+8
 		Aloc = 3
-	elif position == '5&6':
+	elif position == '56':
 		startLB = redundant_A_Loc-9
 		startUB = redundant_A_Loc-5
 		endLB = redundant_A_Loc+2
@@ -354,8 +354,6 @@ def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, redundant_A
 					kmer2Files[candidates[0]] += [readID]
 				else:
 					kmer2Files[candidates[0]] = [readID]
-
-	f.close()
 
 	#if a kmer has a number of associated reads that is below the minimum number of reads we need to train on, remove that kmer from the dictionary
 	filteredKmer2Files = {}
@@ -400,23 +398,22 @@ def alignAndSort(readsDirectory, pathToReference, position, threads=1):
 	os.system('bwa index ' + pathToReference)
 
 	#align the reads.fasta file created above to the reference with bwa-mem, then sort the bam file
-	#os.system('bwa mem -t '+str(threads)+' -k 1 -x ont2d '+pathToReference+' reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted.bam') 
-	os.system('bwa mem -t '+str(threads)+' -k 1 -x ont2d '+pathToReference+' reads.fasta | samtools view -Sb - | samtools sort -o alignments.sorted.bam -') 
+	os.system('bwa mem -t '+str(threads)+' -k4 -W4 -r2 -A1 -B1 -L3 -E0 '+pathToReference+' reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted') 
 	os.system('samtools index alignments.sorted.bam')
 
 	sam_file = pysam.Samfile('alignments.sorted.bam')
 	reference = import_reference(pathToReference)
 	BAMrecords = []
 
-	if position == '1&2':
+	if position == '12':
 		analogueLoc = reference.find('NTNNNNN')
 		adenineLoc = reference.find('NNNNNAN')
 		redundantALoc = adenineLoc + 6
-	elif position == '3&4':
+	elif position == '34':
 		analogueLoc = reference.find('NNNTNNN')
 		adenineLoc = reference.find('NNNANNN')
 		redundantALoc = adenineLoc + 4
-	elif position == '5&6':
+	elif position == '56':
 		analogueLoc = reference.find('NNNNNTN')
 		adenineLoc = reference.find('NANNNNN')
 		redundantALoc = adenineLoc + 2
@@ -430,7 +427,7 @@ def alignAndSort(readsDirectory, pathToReference, position, threads=1):
 			continue
 
 		#if the alignment indicates that this read doesn't have the critical regions, then ignore it and don't use it for training		
-		if (record.reference_start > analogueLoc - 15) or (record.reference_end < adenineLoc + 15):
+		if (record.reference_start > analogueLoc - 5) or (record.reference_end < adenineLoc + 10):
 			continue
 			
 		BAMrecords.append(record)
