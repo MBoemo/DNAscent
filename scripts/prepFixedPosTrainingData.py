@@ -28,11 +28,9 @@ def splashHelp():
 To run prepFixedPosTrainingData.py, do:
   python prepFixedPosTrainingData.py [arguments]
 Example:
-  python prepFixedPosTrainingData.py -r /path/to/reference.fasta -p 45 -m /path/to/template_median68pA.5mer.model -d /path/to/reads -o output.foh -t 20
+  python prepFixedPosTrainingData.py -m /path/to/template_median68pA.5mer.model -d /path/to/alignment.bam -o output.foh -t 20
 Required arguments are:
-  -r,--reference            path to reference file in fasta format,
-  -p,--position             position of analogue in the reference (indexing starts from 0),
-  -d,--data                 path to top level directory of ONT reads,
+  -d,--data                 path to BAM file,
   -m,--5mer-model           path to 5mer pore model file (provided by ONT) to normalise reads,
   -o,--output               path to the output training .foh or detection .fdh file.
 Optional arguments are:
@@ -51,14 +49,8 @@ def parseArguments(args):
 		if argument == '-t' or argument == '--threads':
 			a.threads = int(args[i+1])
 			
-		elif argument == '-r' or argument == '--reference':
-			a.reference = str(args[i+1])
-
 		elif argument == '-d' or argument == '--data':
-			a.data = str(args[i+1])
-
-		elif argument == '-p' or argument == '--position':
-			a.position = int(args[i+1])
+			a.bamfile = str(args[i+1])
 
 		elif argument == '-m' or argument == '--5mer-model':
 			a.fiveMerModel = str(args[i+1])
@@ -73,108 +65,29 @@ def parseArguments(args):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def import_reference(filename):
-#	takes the filename of a fasta reference sequence and returns the reference sequence as a string.  N.B. the reference file must have only one sequence in it
+def import_poreModel(filename):
+#	takes the filename of an ONT pore model file and returns a map from kmer (string) to [mean,std] (list of floats)
 #	ARGUMENTS
 #       ---------
-#	- filename: path to a reference fasta file
+#	- filename: path to an ONT model file
 #	  type: string
 #	OUTPUTS
 #       -------
-#	- reference: reference string
-#	  type: string
+#	- kmer2MeanStd: a map, keyed by a kmer, that returns the model mean and standard deviation signal for that kmer
+#	  type: dictionary
 
 	f = open(filename,'r')
 	g = f.readlines()
 	f.close()
 
-	reference = ''
+	kmer2MeanStd = {}
 	for line in g:
-		if line[0] != '>':
-			reference += line.rstrip()
+		if line[0] != '#' and line[0:4] != 'kmer': #ignore the header
+			splitLine = line.split('\t')
+			kmer2MeanStd[ splitLine[0] ] = [ float(splitLine[1]), float(splitLine[2]) ]
 	g = None
 
-	reference = reference.upper()
-
-	if not all(c in ['A','T','G','C','N'] for c in reference):
-		warnings.warn('Warning: Illegal character in reference.  Legal characters are A, T, G, C, and N.', Warning)
-
-	return reference
-
-
-#--------------------------------------------------------------------------------------------------------------------------------------
-def import_fasta(pathToReads, outFastaFilename):
-#	takes a directory with fast5 nanopore reads at the top level, and extracts the 2D sequences in fasta format with the path to the file as the fasta header
-#	ARGUMENTS
-#       ---------
-#	- pathToReads: full path to the directory that contains the fast5 files
-#	  type: string
-#	- outFastaFilename: filename for the output fasta file that contains all of the reads
-#	  type: string
-#	OUTPUTS
-#       -------
-#	- a fasta file written to the directory specified
-
-	buffersize = 1024
-
-	#output file to write on
-	fout = open(outFastaFilename,'w')
-
-	#path through the fast5 tree to get to the fastq sequence
-	fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
-
-	#empty reads string, and count the number of subdirectories so we can print progress
-	reads = ''
-	numSubdirectories = len(next(os.walk(pathToReads, topdown=True))[1])
-	readCount = 0
-
-	#recursively go through the directory and subdirectories and extract fasta seqs until you reach the buffer, then write, release, and garbage collect
-	for root, dirs, files in os.walk(pathToReads, topdown=True):
-
-		for fast5file in files:
-
-			readCount += 1
-
-			if fast5file.endswith('.fast5'):
-		
-				#print progress every 5 subdirectories of reads
-				if readCount % 10000 == 0:
-					sys.stdout.write("\rExporting fast5 reads to fasta... read " + str(readCount))
-					sys.stdout.flush()
-
-				try:
-					#open the fast5 file with h5py and grab the fastq
-					ffast5 = h5py.File(root+'/'+fast5file,'r')
-					fastq = ffast5[fast5path2fastq].value
-					ffast5.close()
-					fasta = fastq.split('\n')[1]
-			
-					#append the sequence in the fasta format, with the full path to the fast5 file as the sequence name
-					reads += '>'+root+'/'+fast5file+'\n'+fasta+'\n'
-
-				except KeyError:
-					warnings.warn('File '+root+'/'+fast5file+' did not have a valid fastq path.  Skipping.', Warning)
-
-				except IOError:
-					warnings.warn('File '+root+'/'+fast5file+' could not be opened and may be corrupted.  Skipping.', Warning)
-
-				#write to the file and release the buffer
-				if readCount % buffersize == 0:
-					fout.write(reads)
-					fout.flush()
-					os.fsync(fout .fileno())
-					reads = ''
-					gc.collect()
-
-		#flush the buffer and write once we're reached the end of fast5 files in the subdirectory
-		fout.write(reads)
-		fout.flush()
-		os.fsync(fout .fileno())
-		reads = ''
-		gc.collect()
-	
-	#close output fasta file	
-	fout.close()
+	return kmer2MeanStd
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -191,7 +104,7 @@ def export_trainingDataToFoh( kmer2normalisedReads, filename ):
 	f = open(filename,'w')
 	f.write( '>FixedPositionTrainingData\n' )
 
-	for read in kmer2normalisedReads[key]:
+	for read in kmer2normalisedReads:
 			
 		readsStr = map( str, read )
 
@@ -305,64 +218,13 @@ def import_FixedPosTrainingData(bamFile, poreModelFile):
 	return normalisedReads
 
 
-#--------------------------------------------------------------------------------------------------------------------------------------
-def alignAndSort(readsDirectory, pathToReference, position, threads=1):
-#	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
-#	ARGUMENTS
-#       ---------
-#	- readsDirectory: full path to the directory that contains the fast5 files for the run 
-#	  type: string
-#	- pathToReference: full path to the reference file that has the reference (or references, if they're barcoded) for all sequences present in the run
-#	  type: string
-#	- position: where the analogue is in the 7mer (1&2, 3&4, 5&6)
-#	  type: string
-#	- threads: number of threads on which to run BWA-MEM 
-#	  type: int 
-#	OUTPUTS
-#       -------
-#	- (BAMrecords, redundant_A_Loc): tuple consisting of a list of BAM records and the location of the redundant adenine
-#	  type: tuple of (list, int)
-	
-	#take the directory with the fast5 reads in it and export them to a fasta file in the current working directory
-	import_fasta(readsDirectory, os.getcwd()+'/reads.fasta')
-
-	#index the reference
-	os.system('bwa index ' + pathToReference)
-
-	#align the reads.fasta file created above to the reference with bwa-mem, then sort the bam file
-	os.system('bwa mem -t '+str(threads)+' -x ont2d '+pathToReference+' reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted') 
-	os.system('samtools index alignments.sorted.bam')
-
-	sam_file = pysam.Samfile('alignments.sorted.bam')
-	reference = import_reference(pathToReference)
-	BAMrecords = []
-
-	for record in sam_file:
-
-		ref_length = sam_file.lengths[record.reference_id]
-
-		if (record.aend is None) or (record.query_alignment_length is None) or record.is_reverse:
-			continue
-
-		#if the alignment indicates that this read doesn't have the critical regions, then ignore it and don't use it for training		
-		if (record.reference_start > position - 10) or (record.reference_end < position + 10) or (record.query_alignment_length/ref_length < 0.8):
-			continue
-			
-		BAMrecords.append(record)
-
-	return BAMrecords
-
-
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
 #parse arguments
 args = sys.argv
 a = parseArguments(args)
 
-#do alignment QC
-BAMrecords = alignAndSort(a.data, a.reference, a.position, a.threads)
-
 #normalise the training data according to the ONT 5mer model
-trainingData = import_FixedPosTrainingData(BAMrecords, a.fiveMerModel)
+trainingData = import_FixedPosTrainingData(a.bamfile, a.fiveMerModel)
 
 #write normalised reads to file in the .foh format
 export_trainingDataToFoh( trainingData, a.outFoh )

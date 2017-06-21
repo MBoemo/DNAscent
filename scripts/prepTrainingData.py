@@ -153,7 +153,8 @@ def import_fasta(pathToReads, outFastaFilename):
 					reads += '>'+root+'/'+fast5file+'\n'+fasta+'\n'
 
 				except KeyError:
-					warnings.warn('File '+root+'/'+fast5file+' did not have a valid fastq path.  Skipping.', Warning)
+					#warnings.warn('File '+root+'/'+fast5file+' did not have a valid fastq path.  Skipping.', Warning)
+					pass
 
 				except IOError:
 					warnings.warn('File '+root+'/'+fast5file+' could not be opened and may be corrupted.  Skipping.', Warning)
