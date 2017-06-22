@@ -163,7 +163,6 @@ int train_main( int argc, char** argv ){
 		logFile.open( trainArgs.logFilename );
 		if ( not logFile.is_open() ){
 			std::cout << "Exiting with error.  Output training log file could not be opened." << std::endl;
-			exit(EXIT_FAILURE);
 		}
 	}
 
@@ -174,10 +173,9 @@ int train_main( int argc, char** argv ){
 		std::string refLocal = reference;
 		std::vector< std::vector< double > > events = iter -> second;
 
-		std::string adenDomain = iter -> first;
-		std::string brduDomain = reverseComplement( adenDomain );
 
 		int positionNorm, adenDomLoc, brduDomLoc;
+		bool makeModel = true;
 
 		if ( trainArgs.analoguePosition == "1and2" ){
 			adenDomLoc = refLocal.find( "NNNNNAN" );
@@ -185,6 +183,9 @@ int train_main( int argc, char** argv ){
 			positionNorm = 0;
 			refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
 			refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
+                	std::string adenDomain = iter -> first;
+                	std::string brduDomain = reverseComplement( adenDomain );
+
 		}
 		else if ( trainArgs.analoguePosition == "3and4" ){
 			adenDomLoc = refLocal.find( "NNNANNN" );
@@ -192,6 +193,9 @@ int train_main( int argc, char** argv ){
 			positionNorm = 2;
 			refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
 			refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
+                	std::string adenDomain = iter -> first;
+                	std::string brduDomain = reverseComplement( adenDomain );
+
 		}
 		else if ( trainArgs.analoguePosition == "5and6" ){
 			adenDomLoc = refLocal.find( "NANNNNN" );
@@ -199,9 +203,13 @@ int train_main( int argc, char** argv ){
 			positionNorm = 4;
 			refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
 			refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
+	                std::string adenDomain = iter -> first;
+        	        std::string brduDomain = reverseComplement( adenDomain );
+
 		}
 		else{
 			brduDomLoc = std::stoi( (trainArgs.analoguePosition).c_str() ) - 3;
+			makeModel = false;
 		}
 
 
@@ -234,6 +242,7 @@ int train_main( int argc, char** argv ){
 		/*hacky bodge to get the training data out at the relevant position without making Penthus specialised */
 		unsigned int i = 0;
 		std::string line;
+		if (makeModel){
 		while ( std::getline( ss, line ) ){
 
 			if ( i == brduDomLoc + 1 ){
@@ -284,7 +293,7 @@ int train_main( int argc, char** argv ){
 
 			}
 			i++;
-		}
+		}}
 
 		prog++;
 

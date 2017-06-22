@@ -139,38 +139,48 @@ def serial_calculate_normalisedEvents(fast5Files, poreModelFile):
 		f = h5py.File(f5File,'r')
 		path = '/Analyses/Basecall_1D_000/BaseCalled_template/Events'
 		Events = f[path]
-		A = np.zeros((2,2))
-		b = np.zeros((2,1))
+		A = np.zeros((3,3))
+		b = np.zeros((3,1))
 		for event in Events:
 			 if float(event[7]) > 0.30: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
 				model_5mer = event[4]
 				event_mean = float(event[0])
+				event_time = float(event[2])
 				model_mean = kmer2MeanStd[model_5mer][0]
 				model_std = kmer2MeanStd[model_5mer][1]
 				
 				#update matrix A
 				A[0,0] += 1/(model_std**2)
-				A[1,0] += 1/(model_std**2)*model_mean
+				A[0,1] += 1/(model_std**2)*model_mean
+				A[0,2] += 1/(model_std**2)*event_time
 				A[1,1] += 1/(model_std**2)*model_mean**2
+				A[1,2] += 1/(model_std**2)*model_mean*event_time
+				A[2,2] += 1/(model_std**2)*event_time**2
 
 				#update vector b
 				b[0] += 1/(model_std**2)*event_mean
 				b[1] += 1/(model_std**2)*event_mean*model_mean
+				b[2] += 1/(model_std**2)*event_mean*event_time
 
 		#use symmetry of A
-		A[0,1] = A[1,0]
+		A[1,0] = A[0,1]
+		A[2,0] = A[0,2]
+		A[2,1] = A[1,2]
+		
 
 		#solve Ax = b to find shift and scale
 		x = np.linalg.solve(A,b)
 		shift = x[0][0]
 		scale = x[1][0]
+		drift = x[2][0]
 
 		#go through the same events as before and normalise them to the pore model using scale and shift
 		normalisedEvents = []
 		for event in Events:
 			if float(event[7]) > 0.30: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
 				event_mean = float(event[0])
-				normalisedEvents.append( event_mean/scale - shift)
+				event_time = float(event[2])
+				normalisedEvents.append((event_mean - shift - drift*event_time)/scale)
 
 		allNormalisedReads.append(normalisedEvents)
 
