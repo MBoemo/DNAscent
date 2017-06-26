@@ -18,7 +18,7 @@ static const char *help=
 "  ./Osiris train -r /path/to/reference.fasta -p 3and4 -bm /path/to/template_median68pA.model -d /path/to/data.foh -o output.txt -t 20 -sc 30\n"
 "Required arguments are:\n"
 "  -r,--reference            path to reference file in fasta format,\n"
-"  -p,--position             position of analogue in training data (for hairpins, valid arguments are 1and2, 3and4, or 5and6),\n"
+"  -p,--position             position of analogue in training data (valid arguments are 1and2, 3and4, or 5and6),\n"
 "  -om,--ont-model           path to 6mer pore model file (provided by ONT) over bases {A,T,G,C},\n"
 "  -d,--trainingData         path to training data in the .foh format (can be made with Python Osiris),\n"
 "  -o,--output               path to the output pore model file that Osiris will train.\n"
@@ -163,6 +163,7 @@ int train_main( int argc, char** argv ){
 		logFile.open( trainArgs.logFilename );
 		if ( not logFile.is_open() ){
 			std::cout << "Exiting with error.  Output training log file could not be opened." << std::endl;
+			exit(EXIT_FAILURE);
 		}
 	}
 
@@ -173,46 +174,37 @@ int train_main( int argc, char** argv ){
 		std::string refLocal = reference;
 		std::vector< std::vector< double > > events = iter -> second;
 
+		std::string adenDomain = iter -> first;
+		std::string brduDomain = reverseComplement( adenDomain );
 
-		int positionNorm, adenDomLoc, brduDomLoc;
-		bool makeModel = true;
+		int positionNorm;
+		int adenDomLoc;
+		int brduDomLoc;
 
 		if ( trainArgs.analoguePosition == "1and2" ){
 			adenDomLoc = refLocal.find( "NNNNNAN" );
 			brduDomLoc = refLocal.find( "NTNNNNN" );
 			positionNorm = 0;
-			refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
-			refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
-                	std::string adenDomain = iter -> first;
-                	std::string brduDomain = reverseComplement( adenDomain );
 
 		}
 		else if ( trainArgs.analoguePosition == "3and4" ){
 			adenDomLoc = refLocal.find( "NNNANNN" );
 			brduDomLoc = refLocal.find( "NNNTNNN" );
 			positionNorm = 2;
-			refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
-			refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
-                	std::string adenDomain = iter -> first;
-                	std::string brduDomain = reverseComplement( adenDomain );
-
 		}
 		else if ( trainArgs.analoguePosition == "5and6" ){
 			adenDomLoc = refLocal.find( "NANNNNN" );
 			brduDomLoc = refLocal.find( "NNNNNTN" );
 			positionNorm = 4;
-			refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
-			refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
-	                std::string adenDomain = iter -> first;
-        	        std::string brduDomain = reverseComplement( adenDomain );
-
 		}
 		else{
-			brduDomLoc = std::stoi( (trainArgs.analoguePosition).c_str() ) - 3;
-			makeModel = false;
+			std::cout << "Exiting with error.  Invalid option passed with the -p or --position flag.  Valid options are 1and2, 3and4, or 5and6." << std::endl;
+			exit(EXIT_FAILURE);
 		}
+	
 
-
+		refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
+		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
 
 		/*if soft clipping was specified, truncate the reference and events with dynamic time warping */
 		if ( trainArgs.softClip == true ){
@@ -227,11 +219,11 @@ int train_main( int argc, char** argv ){
 			refLocal = refLocal.substr( brduDomLoc - trainArgs.SCwindow, 6 + 2*trainArgs.SCwindow );
 			brduDomLoc = trainArgs.SCwindow;
 			events = filterEvents( refLocal, ontModel, events );
-
+			
 		}
 
 		/*do the training */
-		std::stringstream ss = buildAndTrainHMM( refLocal, ontModel, events, trainArgs.threads );
+		std::stringstream ss = buildAndTrainHMM( refLocal, ontModel, events, trainArgs.threads, false );
 
 		/*if we specified that we want a log file, read the ss buffer into it now */
 		std::stringstream ssLog( ss.str() );
@@ -242,7 +234,6 @@ int train_main( int argc, char** argv ){
 		/*hacky bodge to get the training data out at the relevant position without making Penthus specialised */
 		unsigned int i = 0;
 		std::string line;
-		if (makeModel){
 		while ( std::getline( ss, line ) ){
 
 			if ( i == brduDomLoc + 1 ){
@@ -286,6 +277,7 @@ int train_main( int argc, char** argv ){
 
 				}
 
+
 			}
 			else if ( i > brduDomLoc + 2 ){
 		
@@ -293,7 +285,7 @@ int train_main( int argc, char** argv ){
 
 			}
 			i++;
-		}}
+		}
 
 		prog++;
 

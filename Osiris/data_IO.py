@@ -549,7 +549,7 @@ def import_HairpinTrainingData(reference, bamFile, poreModelFile, redundant_A_Lo
 	return kmer2normalisedReads
 
 
-def alignAndSort(readsDirectory, pathToReference, basecallType='2D', dataType, threads=1):
+def alignAndSort(readsDirectory, pathToReference, basecallType, dataType, threads=1):
 #	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
 #	ARGUMENTS
 #       ---------

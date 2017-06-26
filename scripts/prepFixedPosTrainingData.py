@@ -139,10 +139,11 @@ def serial_calculate_normalisedEvents(fast5Files, poreModelFile):
 		f = h5py.File(f5File,'r')
 		path = '/Analyses/Basecall_1D_000/BaseCalled_template/Events'
 		Events = f[path]
+
 		A = np.zeros((3,3))
 		b = np.zeros((3,1))
 		for event in Events:
-			 if float(event[7]) > 0.30: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
+			 if float(event[7]) > 0.3: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
 				model_5mer = event[4]
 				event_mean = float(event[0])
 				event_time = float(event[2])
@@ -177,10 +178,12 @@ def serial_calculate_normalisedEvents(fast5Files, poreModelFile):
 		#go through the same events as before and normalise them to the pore model using scale and shift
 		normalisedEvents = []
 		for event in Events:
-			if float(event[7]) > 0.30: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
+			if float(event[7]) > 0.3: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
 				event_mean = float(event[0])
 				event_time = float(event[2])
-				normalisedEvents.append((event_mean - shift - drift*event_time)/scale)
+				normalisedEvent = (event_mean - shift - drift*event_time)/scale
+				if normalisedEvent > 0.0:
+					normalisedEvents.append(normalisedEvent)
 
 		allNormalisedReads.append(normalisedEvents)
 

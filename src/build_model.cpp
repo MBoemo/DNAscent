@@ -9,7 +9,7 @@
 #include "data_IO.h"
 
 
-std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::vector< std::vector< double > > &events, int &threads ){
+std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::vector< std::vector< double > > &events, int &threads, bool verbose = false ){
 
 	HiddenMarkovModel hmm = HiddenMarkovModel( 3*reference.length(), 3*reference.length() + 2 );
 
@@ -22,7 +22,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 	std::vector< NormalDistribution > nd;
 	nd.reserve( reference.length() - 6 );
 	SilentDistribution sd( 0.0, 0.0 );
-	UniformDistribution ud( 30.0, 130.0 );
+	UniformDistribution ud( 0.0, 300.0 );
 
 	std::string loc;
 
@@ -101,7 +101,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 	hmm.finalise();
 
-	hmm.BaumWelch( events, 1.0, 50.0, false, threads, false );
+	hmm.BaumWelch( events, 1.0, 10.0, false, threads, verbose );
 
 	std::stringstream ss = hmm.summarise();
 
@@ -123,7 +123,7 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	std::vector< NormalDistribution > nd;
 	nd.reserve( reference.length() - 6 );
 	SilentDistribution sd( 0.0, 0.0 );
-	UniformDistribution ud( 30.0, 130.0 );
+	UniformDistribution ud( 0.0, 300.0 );
 
 	/*garbage collection states to make up for inaccuracies in dynamic time warping */
 	State gcStart( &ud, "gcStart", "", "", 1.0 );

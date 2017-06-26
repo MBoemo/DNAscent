@@ -87,7 +87,7 @@ def build_RandIncHMM(refSequence, poreModel, analogue):
 
 		thymidineStates[0][i] = State( None, name='T_SS_pos_'+str(i) )                                                          #0 SS
 		thymidineStates[1][i] = State( None, name='T_D_pos_'+str(i) )                                                           #1 D
-		thymidineStates[2][i] = State( UniformDistribution(30, 130), name='T_I_pos_'+str(i) )                                   #2 I  - uniformly distributed on 30pA to 130pA
+		thymidineStates[2][i] = State( UniformDistribution(0, 250), name='T_I_pos_'+str(i) )                                   #2 I  - uniformly distributed on 30pA to 130pA
 		thymidineStates[3][i] = State( None, name='T_M1_pos_'+str(i) )                                                          #3 M1 - we'll tie this to M2 in a minute
 		thymidineStates[4][i] = State( NormalDistribution(presentEmissions[0], presentEmissions[1]), name='T_M2_pos_'+str(i) )  #4 M2 
 		thymidineStates[5][i] = State( None, name='T_SE_pos_'+str(i) )                                                          #5 SE
@@ -162,13 +162,13 @@ def build_RandIncHMM(refSequence, poreModel, analogue):
 			#assign a list of analogue state objects to the dictionary, keyed by the position of the 6mer in the reference
 			analogueStates[i] = [	[State( None, name='B_SS_pos_'+str(i+1)+'_branchFrom'+str(i) ),                                     #0 SS
 					     	State( None, name='B_D_pos_'+str(i+1)+'_branchFrom'+str(i) ),                                      #1 D
-					     	State( UniformDistribution(30, 130, frozen=True), name='B_I_pos_'+str(i+1)+'_branchFrom'+str(i) ),               #2 I
+					     	State( UniformDistribution(0, 250, frozen=True), name='B_I_pos_'+str(i+1)+'_branchFrom'+str(i) ),               #2 I
 					     	State( None, name='B_M1_pos_'+str(i+1)+'_branchFrom'+str(i) ),                                      #3 M1 - we'll tie this to M2 in a minute
 					     	State( NormalDistribution( poreModel[analogue6merPos4][0], poreModel[analogue6merPos4][1] ), name='B_M2_pos_'+str(i+1)+'_branchFrom'+str(i) ),               #4 M2
 					     	State( None, name='B_SE_pos_'+str(i+1)+'_branchFrom'+str(i) )],                                     #5 SE
 						[State( None, name='B_SS_pos_'+str(i+2)+'_branchFrom'+str(i) ),                                     #0 SS
 					     	State( None, name='B_D_pos_'+str(i+2)+'_branchFrom'+str(i) ),                                      #1 D
-					     	State( UniformDistribution(30, 130, frozen=True), name='B_I_pos_'+str(i+2)+'_branchFrom'+str(i) ),               #2 I
+					     	State( UniformDistribution(0, 250, frozen=True), name='B_I_pos_'+str(i+2)+'_branchFrom'+str(i) ),               #2 I
 					     	State( None, name='B_M1_pos_'+str(i+2)+'_branchFrom'+str(i) ),                                      #3 M1 - we'll tie this to M2 in a minute
 					     	State( NormalDistribution( poreModel[analogue6merPos3][0], poreModel[analogue6merPos3][1] ), name='B_M2_pos_'+str(i+2)+'_branchFrom'+str(i) ),               #4 M2
 					     	State( None, name='B_SE_pos_'+str(i+2)+'_branchFrom'+str(i) )]	]                             #5 SE
@@ -349,7 +349,7 @@ def build_TrainingHMM(refSequence, poreModel):
 
 		thymidineStates[0][i] = State( None, name='T_SS_pos_'+str(i) )                                                          #0 SS
 		thymidineStates[1][i] = State( None, name='T_D_pos_'+str(i) )                                                           #1 D
-		thymidineStates[2][i] = State( UniformDistribution(30, 130, frozen=True), name='T_I_pos_'+str(i) )                                   #2 I  - uniformly distributed on 30pA to 130pA
+		thymidineStates[2][i] = State( UniformDistribution(0, 250, frozen=True), name='T_I_pos_'+str(i) )                                   #2 I  - uniformly distributed on 30pA to 130pA
 		thymidineStates[3][i] = State( None, name='T_M1_pos_'+str(i) )                                                          #3 M1 - we'll tie this to M2 in a minute
 		thymidineStates[4][i] = State( NormalDistribution(presentEmissions[0], presentEmissions[1]), name='T_M2_pos_'+str(i) )  #4 M2 
 		thymidineStates[5][i] = State( None, name='T_SE_pos_'+str(i) )                                                          #5 SE
@@ -495,7 +495,7 @@ def build_softHMM(refSequence, poreModel, analogueEmissions=None, analoguePos=No
 
 		thymidineStates[0][i] = State( None, name='T_SS_pos_'+str(i) )                                                          #0 SS
 		thymidineStates[1][i] = State( None, name='T_D_pos_'+str(i) )                                                           #1 D
-		thymidineStates[2][i] = State( UniformDistribution(30, 130, frozen=True), name='T_I_pos_'+str(i) )                                   #2 I  - uniformly distributed on 30pA to 130pA
+		thymidineStates[2][i] = State( UniformDistribution(0, 250, frozen=True), name='T_I_pos_'+str(i) )                                   #2 I  - uniformly distributed on 30pA to 130pA
 		thymidineStates[3][i] = State( None, name='T_M1_pos_'+str(i) )                                                          #3 M1 - we'll tie this to M2 in a minute
 		thymidineStates[4][i] = State( NormalDistribution(presentEmissions[0], presentEmissions[1]), name='T_M2_pos_'+str(i) )  #4 M2 
 		thymidineStates[5][i] = State( None, name='T_SE_pos_'+str(i) )                                                          #5 SE
@@ -555,8 +555,8 @@ def build_softHMM(refSequence, poreModel, analogueEmissions=None, analoguePos=No
 	# Handle Start and End
 
 	#add beginning and end garbage collection states
-	gcStart = State( UniformDistribution(30, 130, frozen=True), name='startGarbageCollection' )
-	gcEnd = State( UniformDistribution(30, 130, frozen=True), name='endGarbageCollection' )
+	gcStart = State( UniformDistribution(0, 250, frozen=True), name='startGarbageCollection' )
+	gcEnd = State( UniformDistribution(0, 250, frozen=True), name='endGarbageCollection' )
 	hmm.add_state( gcStart )
 	hmm.add_state( gcEnd )
 

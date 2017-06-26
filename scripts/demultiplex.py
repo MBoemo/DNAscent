@@ -68,6 +68,7 @@ def import_fasta(pathToReads, outFastaFilename):
 
 	#path through the fast5 tree to get to the fastq sequence
 	fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
+	fast5path2score = '/Analyses/Basecall_1D_000/Summary/basecall_1d_template'
 
 	#empty reads string, and count the number of subdirectories so we can print progress
 	reads = ''
@@ -92,11 +93,13 @@ def import_fasta(pathToReads, outFastaFilename):
 					#open the fast5 file with h5py and grab the fastq
 					ffast5 = h5py.File(root+'/'+fast5file,'r')
 					fastq = ffast5[fast5path2fastq].value
+					score = float(ffast5[fast5path2score].attrs.__getitem__('mean_qscore'))
 					ffast5.close()
 					fasta = fastq.split('\n')[1]
 			
 					#append the sequence in the fasta format, with the full path to the fast5 file as the sequence name
-					reads += '>'+root+'/'+fast5file+'\n'+fasta+'\n'
+					if score > 10:
+						reads += '>'+root+'/'+fast5file+'\n'+fasta+'\n'
 
 				except KeyError:
 					#warnings.warn('File '+root+'/'+fast5file+' did not have a valid fastq path.  Skipping.', Warning)

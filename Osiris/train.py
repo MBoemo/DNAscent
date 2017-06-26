@@ -115,11 +115,13 @@ def trainForFixedAnalogue(trainingData, reference, analoguePositions, poreModelF
 
 	analogueEmissions = {}
 
+	poreModel = import_poreModel(poreModelFilename)
+
 	#build a training HMM based on the reference
 	hmm = build_TrainingHMM(reference, poreModel)
 
 	#train the HMM (Baum-Welch iterations) to the specified tolerance, using the specified number of threads	
-	hmm.fit(trainingData, stop_threshold=0.1, min_iterations=50, n_jobs=threads)
+	hmm.fit(trainingData, stop_threshold=1, max_iterations=50,verbose=True, n_jobs=threads)
 
 	for state in hmm.states:
 		if state.name != 'None-end' and state.name != 'None-start': #these are the pomegranate protected names of start and end states
@@ -135,7 +137,7 @@ def trainForFixedAnalogue(trainingData, reference, analoguePositions, poreModelF
 					#dictionary, keyed by the analogue 6mer, that returns the trained mean and trained standard deviation for the 6mer
 					analogueEmissions[kmer] = [ state.distribution.parameters[0], state.distribution.parameters[1] ] 
 
-	return analogueEmissions
+	return (hmm, analogueEmissions)
 			
 
 def parallelSoftClip(key, Reads, reference, poreModel, progress, total):
