@@ -22,7 +22,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 	std::vector< NormalDistribution > nd;
 	nd.reserve( reference.length() - 6 );
 	SilentDistribution sd( 0.0, 0.0 );
-	UniformDistribution ud( 0.0, 300.0 );
+	UniformDistribution ud( 0.0, 180.0 );
 
 	std::string loc;
 
@@ -101,7 +101,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 	hmm.finalise();
 
-	hmm.BaumWelch( events, 1.0, 10.0, false, threads, verbose );
+	hmm.BaumWelch( events, 1.0, 50.0, false, threads, verbose );
 
 	std::stringstream ss = hmm.summarise();
 
@@ -123,7 +123,7 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	std::vector< NormalDistribution > nd;
 	nd.reserve( reference.length() - 6 );
 	SilentDistribution sd( 0.0, 0.0 );
-	UniformDistribution ud( 0.0, 300.0 );
+	UniformDistribution ud( 0.0, 180.0 );
 
 	/*garbage collection states to make up for inaccuracies in dynamic time warping */
 	State gcStart( &ud, "gcStart", "", "", 1.0 );

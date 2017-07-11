@@ -131,7 +131,7 @@ def import_fasta(pathToReads, outFastaFilename):
 args = sys.argv
 a = parseArguments(args)
 
-import_fasta(a.data, os.getcwd()+'/reads.fasta')
+#import_fasta(a.data, os.getcwd()+'/reads.fasta')
 
 os.system('bwa index ' + a.reference)
 os.system('bwa mem -t '+str(a.threads)+' -x ont2d '+a.reference+' reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted') 
@@ -157,3 +157,5 @@ for record in sam_file:
 
 	if ref_cover > 0.8 and query_cover > 0.8 and record.is_reverse == False:
 		out_files[record.reference_id].write(record)
+
+

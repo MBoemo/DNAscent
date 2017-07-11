@@ -32,7 +32,8 @@ Example:
 Required arguments are:
   -d,--data                 path to BAM file,
   -m,--5mer-model           path to 5mer pore model file (provided by ONT) to normalise reads,
-  -o,--output               path to the output training .foh or detection .fdh file.
+  -o,--output               path to the output training .foh or detection .fdh file,
+  -r,--reference            path to reference corresponding to BAM file.
 Optional arguments are:
   -t,--threads              number of threads (default is 1 thread)."""
 
@@ -52,6 +53,9 @@ def parseArguments(args):
 		elif argument == '-d' or argument == '--data':
 			a.bamfile = str(args[i+1])
 
+		elif argument == '-r' or argument == '--reference':
+			a.reference = str(args[i+1])
+
 		elif argument == '-m' or argument == '--5mer-model':
 			a.fiveMerModel = str(args[i+1])
 
@@ -62,6 +66,36 @@ def parseArguments(args):
 			splashHelp()
 
 	return a
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------
+def import_reference(filename):
+#	takes the filename of a fasta reference sequence and returns the reference sequence as a string.  N.B. the reference file must have only one sequence in it
+#	ARGUMENTS
+#       ---------
+#	- filename: path to a reference fasta file
+#	  type: string
+#	OUTPUTS
+#       -------
+#	- reference: reference string
+#	  type: string
+
+	f = open(filename,'r')
+	g = f.readlines()
+	f.close()
+
+	reference = ''
+	for line in g:
+		if line[0] != '>':
+			reference += line.rstrip()
+	g = None
+
+	reference = reference.upper()
+
+	if not all(c in ['A','T','G','C','N'] for c in reference):
+		warnings.warn('Warning: Illegal character in reference.  Legal characters are A, T, G, C, and N.', Warning)
+
+	return reference
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -114,7 +148,7 @@ def export_trainingDataToFoh( kmer2normalisedReads, filename ):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def serial_calculate_normalisedEvents(fast5Files, poreModelFile):
+def serial_calculate_normalisedEvents(fast5Files, poreModelFile, refLen):
 #	For fixed position training data - small enough to be done in serial.  Uses a 5mer model to calculate the shift and scale
 #	pore-specific parameters for each individual read in a list of fast5 files
 #	ARGUMENTS
@@ -138,54 +172,58 @@ def serial_calculate_normalisedEvents(fast5Files, poreModelFile):
 		#use 5mer model to calculate shift, scale, drift, and var to normalise events for the pore
 		f = h5py.File(f5File,'r')
 		path = '/Analyses/Basecall_1D_000/BaseCalled_template/Events'
+		fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
 		Events = f[path]
+		fastq = f[fast5path2fastq].value
+		fasta = fastq.split('\n')[1]
 
-		A = np.zeros((3,3))
-		b = np.zeros((3,1))
-		for event in Events:
-			 if float(event[7]) > 0.3: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
-				model_5mer = event[4]
-				event_mean = float(event[0])
-				event_time = float(event[2])
-				model_mean = kmer2MeanStd[model_5mer][0]
-				model_std = kmer2MeanStd[model_5mer][1]
+		if len(fasta) < refLen:
+
+			A = np.zeros((3,3))
+			b = np.zeros((3,1))
+			for event in Events:
+				 if float(event[7]) > 0.3: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
+					model_5mer = event[4]
+					event_mean = float(event[0])
+					event_time = float(event[2])
+					model_mean = kmer2MeanStd[model_5mer][0]
+					model_std = kmer2MeanStd[model_5mer][1]
 				
-				#update matrix A
-				A[0,0] += 1/(model_std**2)
-				A[0,1] += 1/(model_std**2)*model_mean
-				A[0,2] += 1/(model_std**2)*event_time
-				A[1,1] += 1/(model_std**2)*model_mean**2
-				A[1,2] += 1/(model_std**2)*model_mean*event_time
-				A[2,2] += 1/(model_std**2)*event_time**2
+					#update matrix A
+					A[0,0] += 1/(model_std**2)
+					A[0,1] += 1/(model_std**2)*model_mean
+					A[0,2] += 1/(model_std**2)*event_time
+					A[1,1] += 1/(model_std**2)*model_mean**2
+					A[1,2] += 1/(model_std**2)*model_mean*event_time
+					A[2,2] += 1/(model_std**2)*event_time**2
 
-				#update vector b
-				b[0] += 1/(model_std**2)*event_mean
-				b[1] += 1/(model_std**2)*event_mean*model_mean
-				b[2] += 1/(model_std**2)*event_mean*event_time
+					#update vector b
+					b[0] += 1/(model_std**2)*event_mean
+					b[1] += 1/(model_std**2)*event_mean*model_mean
+					b[2] += 1/(model_std**2)*event_mean*event_time
 
-		#use symmetry of A
-		A[1,0] = A[0,1]
-		A[2,0] = A[0,2]
-		A[2,1] = A[1,2]
-		
+			#use symmetry of A
+			A[1,0] = A[0,1]
+			A[2,0] = A[0,2]
+			A[2,1] = A[1,2]
 
-		#solve Ax = b to find shift and scale
-		x = np.linalg.solve(A,b)
-		shift = x[0][0]
-		scale = x[1][0]
-		drift = x[2][0]
+			#solve Ax = b to find shift and scale
+			x = np.linalg.solve(A,b)
+			shift = x[0][0]
+			scale = x[1][0]
+			drift = x[2][0]
 
-		#go through the same events as before and normalise them to the pore model using scale and shift
-		normalisedEvents = []
-		for event in Events:
-			if float(event[7]) > 0.3: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
-				event_mean = float(event[0])
-				event_time = float(event[2])
-				normalisedEvent = (event_mean/scale - shift - drift*event_time)
-				if normalisedEvent > 0.0:
-					normalisedEvents.append(normalisedEvent)
+			#go through the same events as before and normalise them to the pore model using scale and shift
+			normalisedEvents = []
+			for event in Events:
+				if float(event[7]) > 0.3: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
+					event_mean = float(event[0])
+					event_time = float(event[2])
+					normalisedEvent = (event_mean - shift - drift*event_time)/scale
+					if normalisedEvent > 0.0:
+						normalisedEvents.append(normalisedEvent)
 
-		allNormalisedReads.append(normalisedEvents)
+			allNormalisedReads.append(normalisedEvents)
 
 		f.close()
 		
@@ -193,7 +231,7 @@ def serial_calculate_normalisedEvents(fast5Files, poreModelFile):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def import_FixedPosTrainingData(bamFile, poreModelFile):
+def import_FixedPosTrainingData(bamFile, poreModelFile, refLen):
 #	Used to import training data from reads that have an analogue in a fixed context.
 #	Creates a map from kmer (string) to a list of lists, where each list is comprised of events from a read
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
@@ -226,7 +264,7 @@ def import_FixedPosTrainingData(bamFile, poreModelFile):
 	f.close()
 
 	#hand this list of fast5 files to calculate_normalisedEvents which will normalise them for shift and scale
-	normalisedReads = serial_calculate_normalisedEvents(fast5files, poreModelFile)
+	normalisedReads = serial_calculate_normalisedEvents(fast5files, poreModelFile, refLen)
 
 	return normalisedReads
 
@@ -236,9 +274,12 @@ def import_FixedPosTrainingData(bamFile, poreModelFile):
 args = sys.argv
 a = parseArguments(args)
 
+ref = import_reference(a.reference)
+
 #normalise the training data according to the ONT 5mer model
-trainingData = import_FixedPosTrainingData(a.bamfile, a.fiveMerModel)
+trainingData = import_FixedPosTrainingData(a.bamfile, a.fiveMerModel, len(ref))
 
 #write normalised reads to file in the .foh format
 export_trainingDataToFoh( trainingData, a.outFoh )
+
 
