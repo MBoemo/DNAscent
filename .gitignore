@@ -1,5 +1,5 @@
 #object files and binaries
-bin/Osiris
+bin
 *.o
 Osiris/*.pyc
 
