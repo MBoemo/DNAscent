@@ -3,6 +3,9 @@
 # Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 #----------------------------------------------------------
 
+#for analogues in a fixed position - no N's in the reference
+#preps data for C++ Osiris from reads run on a 1D flow cell, basecalled using 1D settings
+
 
 import numpy as np
 import sys
@@ -15,6 +18,8 @@ import gc
 import math
 from joblib import Parallel, delayed #for parallel processing
 import multiprocessing #for parallel processing
+
+#preps data for C++ Osiris from reads run on a 1D flow cell, basecalled using 1D settings
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -168,7 +173,6 @@ def serial_calculate_normalisedEvents(fast5Files, poreModelFile):
 		A[2,0] = A[0,2]
 		A[2,1] = A[1,2]
 		
-
 		#solve Ax = b to find shift and scale
 		x = np.linalg.solve(A,b)
 		shift = x[0][0]
@@ -181,7 +185,7 @@ def serial_calculate_normalisedEvents(fast5Files, poreModelFile):
 			if float(event[7]) > 0.3: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
 				event_mean = float(event[0])
 				event_time = float(event[2])
-				normalisedEvent = (event_mean/scale - shift - drift*event_time)
+				normalisedEvent = (event_mean - shift - drift*event_time)/scale
 				if normalisedEvent > 0.0:
 					normalisedEvents.append(normalisedEvent)
 

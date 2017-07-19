@@ -3,6 +3,9 @@
 # Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 #----------------------------------------------------------
 
+#for analogues in a fixed position - no N's in the reference
+#preps data for C++ Osiris from reads run on a 1D^2 flow cell, basecalled using 1D settings
+
 
 import numpy as np
 import sys
@@ -24,11 +27,11 @@ class arguments:
 
 #--------------------------------------------------------------------------------------------------------------------------------------
 def splashHelp():
-	s = """prepFixedPosTrainingData.py: Osiris preprocessing script that will format ONT reads in the Osiris training format.
-To run prepFixedPosTrainingData.py, do:
-  python prepFixedPosTrainingData.py [arguments]
+	s = """prep1D2TrainingData.py: Osiris preprocessing script that will format ONT reads in the Osiris training format.
+To run prep1D2TrainingData.py, do:
+  python prep1D2TrainingData.py [arguments]
 Example:
-  python prepFixedPosTrainingData.py -m /path/to/template_median68pA.5mer.model -d /path/to/alignment.bam -o output.foh -t 20
+  python prep1D2TrainingData.py -m /path/to/template_median68pA.5mer.model -d /path/to/alignment.bam -o output.foh -r /path/to/reference.fasta -t 20
 Required arguments are:
   -d,--data                 path to BAM file,
   -m,--5mer-model           path to 5mer pore model file (provided by ONT) to normalise reads,

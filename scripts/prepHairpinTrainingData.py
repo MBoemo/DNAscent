@@ -3,6 +3,9 @@
 # Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 #----------------------------------------------------------
 
+#for hairpin training data
+#preps data for C++ Osiris from reads run on a 1D flow cell, basecalled using 1D settings
+
 
 import numpy as np
 import sys
@@ -24,15 +27,15 @@ class arguments:
 
 #--------------------------------------------------------------------------------------------------------------------------------------
 def splashHelp():
-	s = """prepTrainingData.py: Osiris preprocessing script that will format ONT reads in the Osiris training/detection format.
-To run prepTrainingData.py, do:
-  python prepData.py [arguments]
+	s = """prepHairpinTrainingData.py: Osiris preprocessing script that will format ONT reads in the Osiris training/detection format.
+To run prepHairpinTrainingData.py, do:
+  python prepHairpinTrainingData.py [arguments]
 Example:
-  python prepTrainingData.py -r /path/to/reference.fasta -p 3&4 -m /path/to/template_median68pA.5mer.model -d /path/to/reads -o output.foh -t 20
+  python prepHairpinTrainingData.py -r /path/to/reference.fasta -p 34 -m /path/to/template_median68pA.5mer.model -d /path/to/reads -o output.foh -t 20
 Required arguments are:
   -r,--reference            path to reference file in fasta format,
   -p,--position             position of analogue in training data (valid arguments are 12, 34, or 56),
-  -d,--data                 path to top level directory of ONT reads,
+  -d,--data                 path to BAM file,
   -m,--5mer-model           path to 5mer pore model file (provided by ONT) to normalise reads,
   -o,--output               path to the output training .foh or detection .fdh file.
 Optional arguments are:
@@ -70,6 +73,66 @@ def parseArguments(args):
 			splashHelp()
 
 	return a
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------
+def reverseComplement(sequence):
+#	takes a DNA sequence and returns its reverse complement
+#	ARGUMENTS
+#       ---------
+#	- sequence: DNA sequence
+#	  type: string
+#	OUTPUTS
+#       -------
+#	- revComp: reverse complement DNA sequence
+#	  type: string
+
+	#seq to upper case
+	sequence = sequence.upper()
+
+	#build the complement
+	revComp = ''
+	for char in sequence:
+		if char == 'A':
+			revComp += 'T'
+		elif char == 'T':
+			revComp += 'A'
+		elif char == 'C':
+			revComp += 'G'
+		elif char == 'G':
+			revComp += 'C'
+		#guard against illegal characters
+		else:
+			warnings.warn('Warning: Illegal character in sequence.  Legal characters are A, T, G, and C.', Warning)
+
+	#take the reverse of the complement and return it
+	return revComp[::-1]
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------
+def import_poreModel(filename):
+#	takes the filename of an ONT pore model file and returns a map from kmer (string) to [mean,std] (list of floats)
+#	ARGUMENTS
+#       ---------
+#	- filename: path to an ONT model file
+#	  type: string
+#	OUTPUTS
+#       -------
+#	- kmer2MeanStd: a map, keyed by a kmer, that returns the model mean and standard deviation signal for that kmer
+#	  type: dictionary
+
+	f = open(filename,'r')
+	g = f.readlines()
+	f.close()
+
+	kmer2MeanStd = {}
+	for line in g:
+		if line[0] != '#' and line[0:4] != 'kmer': #ignore the header
+			splitLine = line.split('\t')
+			kmer2MeanStd[ splitLine[0] ] = [ float(splitLine[1]), float(splitLine[2]) ]
+	g = None
+
+	return kmer2MeanStd
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -234,38 +297,47 @@ def parallel_calculate_normalisedEvents(kmer, fast5Files, poreModelFile, progres
 		f = h5py.File(f5File,'r')
 		path = '/Analyses/Basecall_1D_000/BaseCalled_template/Events'
 		Events = f[path]
-		A = np.zeros((2,2))
-		b = np.zeros((2,1))
+
+		A = np.zeros((3,3))
+		b = np.zeros((3,1))
 		for event in Events:
-			 if float(event[7]) > 0.30: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
+			 if float(event[7]) > 0.3: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
 				model_5mer = event[4]
 				event_mean = float(event[0])
+				event_time = float(event[2])
 				model_mean = kmer2MeanStd[model_5mer][0]
 				model_std = kmer2MeanStd[model_5mer][1]
 				
 				#update matrix A
 				A[0,0] += 1/(model_std**2)
-				A[1,0] += 1/(model_std**2)*model_mean
+				A[0,1] += 1/(model_std**2)*model_mean
+				A[0,2] += 1/(model_std**2)*event_time
 				A[1,1] += 1/(model_std**2)*model_mean**2
+				A[1,2] += 1/(model_std**2)*model_mean*event_time
+				A[2,2] += 1/(model_std**2)*event_time**2
 
 				#update vector b
 				b[0] += 1/(model_std**2)*event_mean
 				b[1] += 1/(model_std**2)*event_mean*model_mean
+				b[2] += 1/(model_std**2)*event_mean*event_time
 
 		#use symmetry of A
-		A[0,1] = A[1,0]
+		A[1,0] = A[0,1]
+		A[2,0] = A[0,2]
+		A[2,1] = A[1,2]
 
 		#solve Ax = b to find shift and scale
 		x = np.linalg.solve(A,b)
 		shift = x[0][0]
 		scale = x[1][0]
+		drift = x[2][0]
 
 		#go through the same events as before and normalise them to the pore model using scale and shift
 		normalisedEvents = []
 		for event in Events:
 			if float(event[7]) > 0.30: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
 				event_mean = float(event[0])
-				normalisedEvents.append( event_mean/scale - shift)
+				normalisedEvents.append( (event_mean - shift - drift*event_time)/scale )
 
 		allNormalisedReads.append(normalisedEvents)
 
@@ -278,7 +350,7 @@ def parallel_calculate_normalisedEvents(kmer, fast5Files, poreModelFile, progres
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, redundant_A_Loc, position, readsThreshold):
+def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, ROI, readsThreshold):
 #	Used to import training data from a hairpin primer of the form 5'-...NNNBNNN....NNNANNN...-3'.
 #	Creates a map from kmer (string) to a list of lists, where each list is comprised of events from a read
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
@@ -303,65 +375,48 @@ def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, redundant_A
 #	  type: dictionary
 
 	#count and print number of entries in bam file to stdout
-	numRecords = len(BAMrecords)
-	print str(numRecords) + ' records in BAM file.'
+	
+	f = pysam.Samfile(BAMrecords,'r')
 
-	if position == '12':
-		startLB = redundant_A_Loc-5
-		startUB = redundant_A_Loc-1
-		endLB = redundant_A_Loc+6
-		endUB = redundant_A_Loc+10
-		Aloc = 1
-	elif position == '34':
-		startLB = redundant_A_Loc-7
-		startUB = redundant_A_Loc-3
-		endLB = redundant_A_Loc+4
-		endUB = redundant_A_Loc+8
-		Aloc = 3
-	elif position == '56':
-		startLB = redundant_A_Loc-9
-		startUB = redundant_A_Loc-5
-		endLB = redundant_A_Loc+2
-		endUB = redundant_A_Loc+6
-		Aloc = 5
+	analogueIndeces = range(ROI[0], ROI[0] + 7)
+	adenineIndeces = range(ROI[1], ROI[1] + 7)
 
 	#build up the map that takes each indiviudal 7mer to a list of fast5 files that produced the reads
 	kmer2Files = {}
-	for record in BAMrecords:
+	for record in f:
 
 		sequence = record.query_sequence
-		readID = record.query_name
 
-		#grab the part of the sequence that's flanked by start and end.  there may be more than one candidate.
-		candidates = []
-		start = reference[startLB:startUB] #four bases on the 5' end of the NNNANNN domain
-		end = reference[endLB:endUB] #four bases on the 3' end of the NNNANNN domain
-		start_indices = [s.start() for s in re.finditer('(?=' + start + ')', sequence)] #find all (possibly overlapping) indices of start using regular expressions
-		end_indices = [s.start() for s in re.finditer('(?=' + end + ')', sequence)] #same for end
-		for si in start_indices:
-			si = si + len(start)
-			for ei in end_indices:
-				if ei > si:
-					candidate = sequence[si:ei] #grab the subsequence between the start and end index
-					if len(candidate) == 7 and candidate[Aloc] == 'A': #consider it a candidate if it's a 7mer and has an A in the middle
-						candidates.append(candidate)
+		if len(sequence) < int(1.1*len(reference)): #if this isn't a concatenated read...
 
-		#only add the read to the map if we're sure that we've found exactly one correct redundant 7mer, and its reverse complement is in the sequence
-		if len(candidates) == 1:
-			idx_brdu = sequence.find(reverseComplement(candidates[0]))
-			idx_a = sequence.find(candidates[0])
-			if idx_brdu != -1 and idx_brdu < idx_a:
-				if candidates[0] in kmer2Files:
-					kmer2Files[candidates[0]] += [readID]
+			readID = record.query_name #read filename
+
+			pairs = record.get_aligned_pairs(True,True) #tuples for each mapped position (pos-on-read,pos-on-ref,base-on-ref)
+
+			adenineDomain = ['-']*7 #fill this up as we identify bases for the 7mer
+
+			for p in pairs:
+				if p[1] in adenineIndeces: #if the reference position is in the redundant adenine domain
+					adenineDomain[p[1] - ROI[1]] = sequence[p[0]] #add the base from the read that mapped to it to the adenine 7mer
+
+
+			adD = "".join(adenineDomain).upper() #make a string out of the adenineDomain list
+			if ('-' not in adenineDomain) and (adD[3] == 'A'): #if we've identified the adenine domain completely
+
+				if adD in kmer2Files:
+					kmer2Files[adD] += [readID]
 				else:
-					kmer2Files[candidates[0]] = [readID]
+					kmer2Files[adD] = [readID]
 
 	#if a kmer has a number of associated reads that is below the minimum number of reads we need to train on, remove that kmer from the dictionary
 	filteredKmer2Files = {}
+
 	for key in kmer2Files:
 		if len(kmer2Files[key]) >= readsThreshold:
 			filteredKmer2Files[key] = kmer2Files[key]
+
 	del kmer2Files
+
 
 	#do the parallel processing, where a kmer (and associated reads) is given to each core.  use the maximum number of cores available
 	normalisedReadsTuples = Parallel(n_jobs = multiprocessing.cpu_count())(delayed(parallel_calculate_normalisedEvents)(key, filteredKmer2Files[key], poreModelFile, (i,len(filteredKmer2Files))) for i, key in enumerate(filteredKmer2Files))
@@ -374,79 +429,34 @@ def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, redundant_A
 	return kmer2normalisedReads
 
 
-#--------------------------------------------------------------------------------------------------------------------------------------
-def alignAndSort(readsDirectory, pathToReference, position, threads=1):
-#	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
-#	ARGUMENTS
-#       ---------
-#	- readsDirectory: full path to the directory that contains the fast5 files for the run 
-#	  type: string
-#	- pathToReference: full path to the reference file that has the reference (or references, if they're barcoded) for all sequences present in the run
-#	  type: string
-#	- position: where the analogue is in the 7mer (1&2, 3&4, 5&6)
-#	  type: string
-#	- threads: number of threads on which to run BWA-MEM 
-#	  type: int 
-#	OUTPUTS
-#       -------
-#	- (BAMrecords, redundant_A_Loc): tuple consisting of a list of BAM records and the location of the redundant adenine
-#	  type: tuple of (list, int)
-	
-	#take the directory with the fast5 reads in it and export them to a fasta file in the current working directory
-	import_fasta(readsDirectory, os.getcwd()+'/reads.fasta')
-
-	#index the reference
-	os.system('bwa index ' + pathToReference)
-
-	#align the reads.fasta file created above to the reference with bwa-mem, then sort the bam file
-	os.system('bwa mem -t '+str(threads)+' -k4 -W4 -r2 -A1 -B1 -L3 -E0 '+pathToReference+' reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted') 
-	os.system('samtools index alignments.sorted.bam')
-
-	sam_file = pysam.Samfile('alignments.sorted.bam')
-	reference = import_reference(pathToReference)
-	BAMrecords = []
-
-	if position == '12':
-		analogueLoc = reference.find('NTNNNNN')
-		adenineLoc = reference.find('NNNNNAN')
-		redundantALoc = adenineLoc + 6
-	elif position == '34':
-		analogueLoc = reference.find('NNNTNNN')
-		adenineLoc = reference.find('NNNANNN')
-		redundantALoc = adenineLoc + 4
-	elif position == '56':
-		analogueLoc = reference.find('NNNNNTN')
-		adenineLoc = reference.find('NANNNNN')
-		redundantALoc = adenineLoc + 2
-	else:
-		print 'Exiting with error.  Invalid argument passed to -p or --position.'
-		splashHelp()
-
-	for record in sam_file:
-
-		if (record.aend is None) or (record.query_alignment_length is None) or record.is_reverse:
-			continue
-
-		#if the alignment indicates that this read doesn't have the critical regions, then ignore it and don't use it for training		
-		if (record.reference_start > analogueLoc - 5) or (record.reference_end < adenineLoc + 10):
-			continue
-			
-		BAMrecords.append(record)
-
-	return (BAMrecords, redundantALoc)
-
-
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
 #parse arguments
 args = sys.argv
 a = parseArguments(args)
 
-#do alignment QC
-(BAMrecords, redundant_A_Loc) = alignAndSort(a.data, a.reference, a.position, a.threads)
+reference = import_reference(a.reference)
+
+if a.position == '12':
+	analogueLoc = reference.find('NTNNNNN')
+	adenineLoc = reference.find('NNNNNAN')
+
+elif a.position == '34':
+	analogueLoc = reference.find('NNNTNNN')
+	adenineLoc = reference.find('NNNANNN')
+
+elif a.position == '56':
+	analogueLoc = reference.find('NNNNNTN')
+	adenineLoc = reference.find('NANNNNN')
+
+else:
+	print 'Exiting with error.  Invalid argument passed to -p or --position.'
+	splashHelp()
 
 #normalise the training data according to the ONT 5mer model
-trainingData = import_HairpinTrainingData(import_reference(a.reference), BAMrecords, a.fiveMerModel, redundant_A_Loc, a.position, 40)
+trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, a.fiveMerModel, [analogueLoc, adenineLoc], 20)
 
 #write normalised reads to file in the .foh format
 export_trainingDataToFoh( trainingData, a.outFoh )
+
+print '\n'
 

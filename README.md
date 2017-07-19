@@ -1,5 +1,20 @@
 # Osiris
-Python/C++ software for detecting base analogues in Oxford Nanopore reads.  The two general uses are (1) determining the current across the pore that is produced by a 6mer that contains a single base analogue, and (2) determining where base analogues are incorporated in a nanopore read.  The Python flavour of Osiris uses some of the HMM libraries from pomegranate (https://github.com/jmschrei/pomegranate) while the C++ flavour of Osiris uses Penthus (https://github.com/MBoemo/Penthus).  Instructions for using Osiris in Python are as follows.
+Python/C++ software for detecting base analogues in Oxford Nanopore reads.  The two general uses are (1) determining the characteristic current produced by a 6mer that contains a single base analogue, and (2) determining where base analogues are incorporated in a nanopore read.  The Python flavour of Osiris uses some of the HMM libraries from pomegranate (https://github.com/jmschrei/pomegranate) while the C++ flavour of Osiris uses Penthus (https://github.com/MBoemo/Penthus).  Instructions for using Osiris in Python are as follows.
+
+## Getting Osiris
+Clone the Osiris repository with the recursive flag so that you get Penthus as well.
+```shell
+git clone --recursive https://github.com/MBoemo/Osiris.git
+'''
+After the repository has been cloned into your working directory, navigate to the Osiris directory.  Install Python Osiris by running:
+```python
+python setup.py install
+```
+Note that you may have to install Python Osiris as an administrator, depending on your system setup.  You can compile C++ Osiris by running:
+```shell
+make
+'''
+This will put the Osiris executable into Osiris/bin.
 
 ## Python Flavour
 Dependencies:
