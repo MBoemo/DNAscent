@@ -1,7 +1,7 @@
-#Osiris
+# Osiris
 Software for detecting base analogues in Oxford Nanopore reads.  The two general uses are: (1.) determining the characteristic current produced by a 6mer that contains a single base analogue, and (2.) determining where base analogues are incorporated in individual Oxford Nanopore reads.  The Python flavour of Osiris uses some of the HMM libraries from pomegranate (https://github.com/jmschrei/pomegranate) while the C++ flavour of Osiris uses Penthus (https://github.com/MBoemo/Penthus).
 
-##Dependencies
+## Dependencies
 We have tried to keep dependencies to a bare minimum and only use standard software when dependencies were absolutely required.  The following are required for the scripts that prepare data for Osiris:
 - Python 2.7 (https://www.python.org/downloads/),
 - pysam (https://github.com/pysam-developers/pysam/releases),
@@ -25,17 +25,17 @@ PATH=$PATH:/path/to/bin
 export PATH
 ```
 
-##Tutorial Using Example Data
+## Tutorial Using Example Data
 We have provided example data to be used in the following tutorial.  [Complete this later]
 
-##Using C++ Osiris For Your Own Project
+## Using C++ Osiris For Your Own Project
 We assume the following:
 
 - (for training only) you sequenced hairpin primers that have {NBNNNNN, NNNBNNN, NNNNNBN} domains along with their reverse complement domains, 
 - you have a directory of 1D R9.5 450bp/s Oxford Nanopore reads (which may be in subdirectories) that you want to use for training or detection,
 - these reads have been basecalled to fast5 format using Albacore >v1.2 with event detection.
 
-###Prepping Your Data
+### Prepping Your Data
 Before using Osiris, you have to prepare your data into a form that Osiris understands.  This is done with a collection of provided Python scripts which are located in the scripts subdirectory.  All of these scripts can be run with
 
 ```python
@@ -47,7 +47,7 @@ demultiplex.py (for detection) and demultiplexHairpin.py (for training) look thr
 
 prepHairpinTrainingData.py takes one of the .bam files from demultiplex.py and a reference .fasta file that contains only the reference sequence for the .bam file and outputs a .foh file of normalised events.  This .foh file is used as the input for the Osiris executable.  Note that prepHairpinTrainingData.py requires a 5mer model.  This 5mer model file is provided in the pore_models subdirectory.
 
-###Training
+### Training
 
 To train a base analogue pore model on hairpin primer training data, run:
 ```shell
@@ -77,7 +77,7 @@ The columns, from left to right, are:
 - original standard deviation (before training),
 - trained standard deviation (after training).
 
-###Detection
+### Detection
 
 [Complete this later]
 
