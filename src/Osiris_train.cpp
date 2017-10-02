@@ -151,9 +151,9 @@ int train_main( int argc, char** argv ){
 		}
 	}
 
-	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
+	bool N_WarningSplashed = false; //only splash the warning for unresolved Ns once
 
-		displayProgress( prog, trainingData.size() );
+	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
 
 		std::string refLocal = reference;
 		std::vector< std::vector< double > > events = iter -> second;
@@ -187,6 +187,17 @@ int train_main( int argc, char** argv ){
 	
 		refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
 		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
+		
+		/*check for unresolved Ns and warn if there are any */
+		if ( not N_WarningSplashed ){
+			for ( auto it = refLocal.begin(); it < refLocal.end(); it++ ){
+				if ( *it == 'N' ){
+					std::cout << "WARNING: reference contains unresolved Ns.  Did you mean to do this?" << std::endl;
+					N_WarningSplashed = true;
+					break;
+				}
+			}
+		}
 
 		/*if soft clipping was specified, truncate the reference and events with dynamic time warping */
 		if ( trainArgs.softClip == true ){
@@ -258,6 +269,7 @@ int train_main( int argc, char** argv ){
 				break;
 			}
 		}
+		displayProgress( prog, trainingData.size() );
 		prog++;
 	}
 
