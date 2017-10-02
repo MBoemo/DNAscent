@@ -1,3 +1,11 @@
+#----------------------------------------------------------
+# Copyright 2017 University of Oxford
+# Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+# This software is licensed under GPL-3.0.  You should have
+# received a copy of the license with this software.  If
+# not, please Email the author.
+#----------------------------------------------------------
+
 import pysam
 import sys
 import os
@@ -32,6 +40,9 @@ def parseArguments(args):
 
 	a = arguments()
 
+	if len(args) < 5:
+		splashHelp()
+
 	for i, argument in enumerate(args):
 		if argument == '-t' or argument == '--threads':
 			a.threads = int(args[i+1])
@@ -44,6 +55,12 @@ def parseArguments(args):
 
 		elif argument == '-h' or argument == '--help':
 			splashHelp()
+		elif argument[0] == '-':
+			splashHelp()
+
+	#check that required arguments are met
+	if not hasattr( a, 'reference') or not hasattr( a, 'data'):
+		splashHelp() 
 
 	return a
 
@@ -130,11 +147,12 @@ def import_fasta(pathToReads, outFastaFilename):
 	fout.close()
 	print 'Could not open ' + str(failedCounter) + ' reads.'
 
+
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
 args = sys.argv
 a = parseArguments(args)
 
-#import_fasta(a.data, os.getcwd()+'/reads.fasta')
+import_fasta(a.data, os.getcwd()+'/reads.fasta')
 
 os.system('bwa index ' + a.reference)
 os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted') 
@@ -149,6 +167,7 @@ for x in sam_file.references:
 	print x
 	out_files.append(pysam.Samfile(x + ".bam", "wb", template=sam_file))
 
+# go through the alignment file and dole out reads to the reference that they align to
 for record in sam_file:
 	ref_length = sam_file.lengths[record.reference_id]
 

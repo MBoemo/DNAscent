@@ -1,3 +1,12 @@
+#----------------------------------------------------------
+# Copyright 2017 University of Oxford
+# Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+# This software is licensed under GPL-3.0.  You should have
+# received a copy of the license with this software.  If
+# not, please Email the author.
+#----------------------------------------------------------
+
+
 #rejigs an ONT 5mer model or 6mer model to use the values from Osiris fixedPos, which lets us run eventalign for analogues
 
 import sys

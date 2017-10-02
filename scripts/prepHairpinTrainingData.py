@@ -1,6 +1,9 @@
 #----------------------------------------------------------
 # Copyright 2017 University of Oxford
 # Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+# This software is licensed under GPL-3.0.  You should have
+# received a copy of the license with this software.  If
+# not, please Email the author.
 #----------------------------------------------------------
 
 #for hairpin training data
@@ -71,6 +74,10 @@ def parseArguments(args):
 
 		elif argument == '-h' or argument == '--help':
 			splashHelp()
+
+	#check that required arguments are met
+	if not hasattr( a, 'fiveMerModel') or not hasattr( a, 'position') or not hasattr( a, 'data') or not hasattr( a, 'outFoh') or not hasattr( a, 'reference'):
+		splashHelp() 
 
 	return a
 

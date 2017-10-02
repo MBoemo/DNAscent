@@ -1,6 +1,9 @@
 #----------------------------------------------------------
 # Copyright 2017 University of Oxford
 # Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+# This software is licensed under GPL-3.0.  You should have
+# received a copy of the license with this software.  If
+# not, please Email the author.
 #----------------------------------------------------------
 
 #for analogues in a fixed position - no N's in the reference
@@ -67,6 +70,12 @@ def parseArguments(args):
 
 		elif argument == '-h' or argument == '--help':
 			splashHelp()
+		elif argument[0] == '-':
+			splashHelp()
+
+	#check that required arguments are met
+	if not hasattr( a, 'fiveMerModel') or not hasattr( a, 'bamfile') or not hasattr( a, 'outFoh') or not hasattr( a, 'reference'):
+		splashHelp() 
 
 	return a
 
