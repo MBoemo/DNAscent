@@ -19,32 +19,35 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 	std::vector< std::vector< State > > states( 6, std::vector< State >( reference.length() - 5, State( NULL, "", "", "", 1.0 ) ) );
 
 	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
-	std::vector< NormalDistribution > nd;
-	nd.reserve( reference.length() - 6 );
 	SilentDistribution sd( 0.0, 0.0 );
 	UniformDistribution ud( 0.0, 180.0 );
 
 	std::string loc;
 
-	/*create the distributions that we need */	
-	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
-		
-		emissionMeanAndStd = basePoreModel.at( reference.substr( i, 6 ) );
-		nd.push_back( NormalDistribution( emissionMeanAndStd.first, emissionMeanAndStd.second ) );
-
-	}
-
 	/*add states to model, handle internal module transitions */
 	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
 
+		std::string sixMer = reference.substr( i, 6 );
+
+		/*create the distributions that we need.  if the 6mer contains an N, use a uniform dist.  Otherwise use the 6mer model */
+		Distribution *md;
+		if ( sixMer.find('N') != std::string::npos ){
+			md = dynamic_cast< Distribution * >( new UniformDistribution( 0, 180 ) );
+		}
+		else if ( basePoreModel.find (sixMer ) != basePoreModel.end() ){
+			emissionMeanAndStd = basePoreModel.at( sixMer );
+			md = dynamic_cast< Distribution * >( new NormalDistribution( emissionMeanAndStd.first, emissionMeanAndStd.second ) );
+		}
+		else exit(0); //should throw an error
+		
 		loc = std::to_string( i );
 
-		states[ 0 ][ i ] = State( &sd, 		loc + "_SS",	reference.substr( i, 6 ),	"", 		1.0 );
-		states[ 1 ][ i ] = State( &sd,		loc + "_D", 	reference.substr( i, 6 ),	"", 		1.0 );		
-		states[ 2 ][ i ] = State( &ud,	 	loc + "_I", 	reference.substr( i, 6 ),	"", 		1.0 );
-		states[ 3 ][ i ] = State( &nd[ i ], 	loc + "_M1", 	reference.substr( i, 6 ),	loc + "_match", 1.0 );
-		states[ 4 ][ i ] = State( &nd[ i ], 	loc + "_M2", 	reference.substr( i, 6 ),	loc + "_match", 1.0 );
-		states[ 5 ][ i ] = State( &sd, 		loc + "_SE", 	reference.substr( i, 6 ),	"", 		1.0 );
+		states[ 0 ][ i ] = State( &sd, 	loc + "_SS",	reference.substr( i, 6 ),	"", 		1.0 );
+		states[ 1 ][ i ] = State( &sd,	loc + "_D", 	reference.substr( i, 6 ),	"", 		1.0 );		
+		states[ 2 ][ i ] = State( &ud,	loc + "_I", 	reference.substr( i, 6 ),	"", 		1.0 );
+		states[ 3 ][ i ] = State( md, 	loc + "_M1", 	reference.substr( i, 6 ),	loc + "_match", 1.0 );
+		states[ 4 ][ i ] = State( md, 	loc + "_M2", 	reference.substr( i, 6 ),	loc + "_match", 1.0 );
+		states[ 5 ][ i ] = State( &sd, 	loc + "_SE", 	reference.substr( i, 6 ),	"", 		1.0 );
 
 		/*add state to the model */
 		for ( unsigned int j = 0; j < 6; j++ ){
