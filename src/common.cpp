@@ -75,8 +75,15 @@ std::vector< double > generateSignal( std::string &reference, std::map< std::str
 
 	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
 
-		generatedSignal.push_back( ( baseModel.at( reference.substr( i, 6 ) ) ).first );
+		std::string sixMer = reference.substr( i, 6 );
 
+		/*if the signal contains an N, use the median pA and let DTW find the indel.  Otherwise, use the base pore model */
+		if ( sixMer.find('N') != std::string::npos ){
+			generatedSignal.push_back( 68.0 );
+		}
+		else{
+			generatedSignal.push_back( ( baseModel.at( sixMer ) ).first );
+		}
 	}
 
 	return generatedSignal;

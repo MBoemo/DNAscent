@@ -3,6 +3,8 @@
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 //----------------------------------------------------------
 
+#ifndef COMMON_H
+#define COMMON_H
 
 #include "math.h"
 #include <algorithm>
@@ -17,12 +19,13 @@
 
 inline std::string reverseComplement( std::string &DNAseq ){
 
-	std::reverse( DNAseq.begin(), DNAseq.end() );
+	std::string flipDNAseq = DNAseq;
+	std::reverse( flipDNAseq.begin(), flipDNAseq.end() );
 	std::string revComp;
 
-	for ( unsigned int i = 0; i < DNAseq.length(); i++ ){
+	for ( unsigned int i = 0; i < flipDNAseq.length(); i++ ){
 	
-		switch( DNAseq[ i ] ){
+		switch( flipDNAseq[ i ] ){
 			case 'A' :
 				revComp += 'T';
 				break;
@@ -54,3 +57,5 @@ std::vector< std::vector< double > > filterEvents( std::string &, std::map< std:
 std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &, std::vector< double > & );
 std::vector< double > generateSignal( std::string &, std::map< std::string, std::pair< double, double > > & );
 std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &, std::vector< double > & );
+
+#endif

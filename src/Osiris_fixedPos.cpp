@@ -8,6 +8,7 @@
 #include "common.h"
 #include "build_model.h"
 #include "data_IO.h"
+#include "error_handling.h"
 
 
 static const char *help=
@@ -119,13 +120,7 @@ Arguments parseFixedPosArguments( int argc, char** argv ){
 			i+=2;
 
 		}
-		else{
-
-			std::cout << "Exiting with error.  Invalid argument passed to Osiris train." << std::endl;
-			exit(EXIT_FAILURE);
-
-		}
-
+		else throw InvalidOption( flag );
 	}
 
 	return trainArgs;
@@ -147,10 +142,7 @@ int fixedPos_main( int argc, char** argv ){
 	int brduDomLoc = trainArgs.analoguePosition;
 
 	outFile.open( trainArgs.trainingOutputFilename );
-	if ( not outFile.is_open() ){
-		std::cout << "Exiting with error.  Output file could not be opened." << std::endl;
-		exit(EXIT_FAILURE);
-	}
+	if ( not outFile.is_open() ) throw IOerror( trainArgs.trainingOutputFilename );
 
 	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
 

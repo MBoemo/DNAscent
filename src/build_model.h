@@ -3,6 +3,8 @@
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 //----------------------------------------------------------
 
+#ifndef BUILD_MODEL_H
+#define BUILD_MODEL_H
 
 #include <fstream>
 #include <sstream>
@@ -15,3 +17,5 @@
 /*function prototypes */
 std::stringstream buildAndTrainHMM( std::string &, std::map< std::string, std::pair< double, double > > &, std::vector< std::vector< double > > &, int &, bool );
 double buildAndDetectHMM( std::string &, std::map< std::string, std::pair< double, double > > &, std::map< std::string, std::pair< double, double > > &, std::vector< double > &, bool );
+
+#endif

@@ -3,6 +3,8 @@
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 //----------------------------------------------------------
 
+#ifndef DATA_STRUCTURES_H
+#define DATA_STRUCTURES_H
 
 #include <fstream>
 #include <sstream>
@@ -17,5 +19,6 @@ struct detectionTuple{
 	std::string filename;
 	std::string basecalls;
 	std::vector< double > events;
-
 };
+
+#endif

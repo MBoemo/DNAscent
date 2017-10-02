@@ -8,6 +8,7 @@
 #include "common.h"
 #include "build_model.h"
 #include "data_IO.h"
+#include "error_handling.h"
 
 
 static const char *help=
@@ -46,7 +47,6 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 
 		std::cout << "Exiting with error.  Insufficient arguments passed to Osiris train." << std::endl << help << std::endl;
 		exit(EXIT_FAILURE);
-
 	}
 
 	if ( std::string( argv[ 1 ] ) == "-h" or std::string( argv[ 1 ] ) == "--help" ){
@@ -58,7 +58,6 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 
 		std::cout << "Exiting with error.  Insufficient arguments passed to Osiris train." << std::endl;
 		exit(EXIT_FAILURE);
-
 	}
 
 	Arguments trainArgs;
@@ -78,42 +77,36 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.referenceFilename = strArg;
 			i+=2;	
-
 		}
 		else if ( flag == "-om" or flag == "--ont-model" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.ontModelFilename = strArg;
 			i+=2;
-
 		}
 		else if ( flag == "-d" or flag == "--trainingData" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.trainingDataFilename = strArg;
 			i+=2;
-
 		}
 		else if ( flag == "-o" or flag == "--output" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.trainingOutputFilename = strArg;
 			i+=2;
-
 		}
 		else if ( flag == "-t" or flag == "--threads" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.threads = std::stoi( strArg.c_str() );
 			i+=2;
-
 		}
 		else if ( flag == "-p" or flag == "--position" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.analoguePosition = strArg;
 			i+=2;
-
 		}
 		else if ( flag == "-sc" or flag == "--soft-clipping" ){
 
@@ -121,7 +114,6 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.SCwindow = std::stoi( strArg.c_str() );
 			i+=2;
-
 		}
 		else if ( flag == "-l" or flag == "--log-file" ){
 
@@ -129,19 +121,11 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.logFilename = strArg;
 			i+=2;
-
 		}
-		else{
-
-			std::cout << "Exiting with error.  Invalid argument passed to Osiris train." << std::endl;
-			exit(EXIT_FAILURE);
-
-		}
-
+		else throw InvalidOption( flag );
 	}
 
 	return trainArgs;
-
 }
 
 
@@ -185,7 +169,6 @@ int train_main( int argc, char** argv ){
 			adenDomLoc = refLocal.find( "NNNNNAN" );
 			brduDomLoc = refLocal.find( "NTNNNNN" );
 			positionNorm = 0;
-
 		}
 		else if ( trainArgs.analoguePosition == "3and4" ){
 			adenDomLoc = refLocal.find( "NNNANNN" );
@@ -202,7 +185,6 @@ int train_main( int argc, char** argv ){
 			exit(EXIT_FAILURE);
 		}
 	
-
 		refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
 		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
 
@@ -213,13 +195,11 @@ int train_main( int argc, char** argv ){
 
 				std::cout << "Exiting with error.  Soft clipping window exceeds reference length.  Reduce window size." << std::endl;
 				exit(EXIT_FAILURE);
-
 			}
 
 			refLocal = refLocal.substr( brduDomLoc - trainArgs.SCwindow, 6 + 2*trainArgs.SCwindow );
 			brduDomLoc = trainArgs.SCwindow;
 			events = filterEvents( refLocal, ontModel, events );
-			
 		}
 
 		/*do the training */
@@ -232,11 +212,13 @@ int train_main( int argc, char** argv ){
 		}
 
 		/*hacky bodge to get the training data out at the relevant position without making Penthus specialised */
-		unsigned int i = 0;
 		std::string line;
 		while ( std::getline( ss, line ) ){
+			
+			std::vector< std::string > findIndex = split( line, '_' );
+			unsigned int i = atoi(findIndex[0].c_str());
 
-			if ( i == brduDomLoc + 1 ){
+			if ( i == brduDomLoc ){
 
 				std::string atFirstPos = ( brduDomain.substr( 0, 6 ) ).replace( positionNorm + 1, 1, "B" );
 				std::vector< std::string > splitLine = split( line, '\t' );
@@ -246,18 +228,15 @@ int train_main( int argc, char** argv ){
 					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atFirstPos ][ 1 ] ){
 
 						trainedModel[ atFirstPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
-					
 					}
-
 				}
 				else{
 
 					trainedModel[ atFirstPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
-
 				}
 
 			}
-			else if ( i == brduDomLoc + 2 ){
+			else if ( i == brduDomLoc + 1 ){
 
 				std::string atSecondPos = ( brduDomain.substr( 1, 6 ) ).replace( positionNorm, 1, "B" );
 				std::vector< std::string > splitLine = split( line, '\t' );
@@ -267,28 +246,19 @@ int train_main( int argc, char** argv ){
 					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atSecondPos ][ 1 ] ){
 
 						trainedModel[ atSecondPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
-					
 					}
-
 				}
 				else{
 
 					trainedModel[ atSecondPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
-
 				}
-
-
 			}
-			else if ( i > brduDomLoc + 2 ){
+			else if ( i > brduDomLoc + 1 ){
 		
 				break;
-
 			}
-			i++;
 		}
-
 		prog++;
-
 	}
 
 	/*make a pore model file from the map */

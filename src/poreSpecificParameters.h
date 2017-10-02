@@ -3,6 +3,8 @@
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 //----------------------------------------------------------
 
+#ifndef PORESPECIFICPARAMETERS_H
+#define PORESPECIFICPARAMETERS_H
 
 //Initial transitions within modules (internal transitions)
 double internalSS2M1 = 0.97;
@@ -22,3 +24,5 @@ double externalD2SS = 0.14;
 double externalI2SS = 0.01;
 double externalSE2D = 0.12;
 double externalSE2SS = 0.87;
+
+#endif

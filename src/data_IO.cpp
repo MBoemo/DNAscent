@@ -5,16 +5,14 @@
 
 
 #include "data_IO.h"
+#include "error_handling.h"
 
 
 std::string import_reference( std::string fastaFilePath ){
 	
 	std::ifstream file( fastaFilePath );
 
-	if ( not file.is_open() ){
-		std::cout << "Exiting with error.  Reference file could not be opened." << std::endl;
-		exit(EXIT_FAILURE);
-	}
+	if ( not file.is_open() ) throw IOerror( fastaFilePath );
 
 	std::string line;
 	std::string reference;
@@ -48,10 +46,7 @@ std::map< std::string, std::pair< double, double > > import_poreModel( std::stri
 	/*file handle, and delimiter between columns (a \t character in the case of ONT model files) */
 	std::ifstream file( poreModelFilePath );
 
-	if ( not file.is_open() ){
-		std::cout << "Exiting with error.  Pore model file could not be opened." << std::endl;
-		exit(EXIT_FAILURE);
-	}
+	if ( not file.is_open() ) throw IOerror( poreModelFilePath );
 
 	std::string line, key, mean, std;
 	std::string delim = "\t";
@@ -93,10 +88,7 @@ void export_poreModel( std::map< std::string, std::vector< double > > &trainedMa
 
 	std::ofstream outFile;
 	outFile.open( outputFilename );
-	if ( not outFile.is_open() ){
-		std::cout << "Exiting with error.  Output model file could not be opened." << std::endl;
-		exit(EXIT_FAILURE);
-	}
+	if ( not outFile.is_open() ) throw IOerror( outputFilename );
 
 	/*write headers */
 	outFile << "#Analogue pore model file trained by Osiris." << std::endl;
@@ -118,10 +110,7 @@ std::map< std::string, std::vector< std::vector< double > > > import_foh( std::s
 	std::cout << "Importing training data..." << std::endl;
 	std::ifstream file( fohFilePath );
 	
-	if ( not file.is_open() ){
-		std::cout << "Exiting with error.  Training data file could not be opened." << std::endl;
-		exit(EXIT_FAILURE);
-	}
+	if ( not file.is_open() ) throw IOerror( fohFilePath );
 
 	std::string line;
 	std::string reference;
@@ -169,10 +158,7 @@ std::vector< detectionTuple > import_fdh( std::string &fdhFilePath ){
 	std::cout << "Importing detection data..." << std::endl;
 	std::ifstream file( fdhFilePath );
 	
-	if ( not file.is_open() ){
-		std::cout << "Exiting with error.  Detection data file could not be opened." << std::endl;
-		exit(EXIT_FAILURE);
-	}
+	if ( not file.is_open() ) throw IOerror( fdhFilePath );
 
 	std::string line;
 	std::string event;

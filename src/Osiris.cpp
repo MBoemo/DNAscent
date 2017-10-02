@@ -11,6 +11,7 @@
 #include "Osiris_fixedPos.h"
 #include "Osiris_detect.h"
 #include "data_structures.h"
+#include "error_handling.h"
 
 
 /*prototype */
@@ -48,14 +49,17 @@ int show_options( int, char** ){
 int main( int argc, char** argv ){
 
 	if ( argc < 2 ){
-
 		std::cout << "Exiting with error.  No Osiris executable specified." << std::endl <<  show_options( argc, argv );
 		exit( EXIT_FAILURE );
-	
 	}
 
 	std::string runThisExecutable( argv[ 1 ] );
 	auto iter = executables.find( runThisExecutable );
+
+	if ( iter == executables.end() ){
+		std::cout << "Exiting with error.  Unknown Osiris executable specified." << std::endl <<  show_options( argc, argv );
+		exit( EXIT_FAILURE );
+	}
 
 	return iter -> second( argc - 1, argv + 1 );
 
