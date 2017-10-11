@@ -37,7 +37,7 @@ Example:
   python prepHairpinTrainingData.py -r /path/to/reference.fasta -p 34 -m /path/to/template_median68pA.5mer.model -d /path/to/reads -o output.foh -t 20
 Required arguments are:
   -r,--reference            path to reference file in fasta format,
-  -p,--position             position of analogue in training data (valid arguments are 12, 34, or 56),
+  -p,--position             position of analogue in training data (valid arguments are 23, 34, or 45),
   -d,--data                 path to BAM file,
   -m,--5mer-model           path to 5mer pore model file (provided by ONT) to normalise reads,
   -o,--output               path to the output training .foh or detection .fdh file.
@@ -170,82 +170,6 @@ def import_reference(filename):
 		warnings.warn('Warning: Illegal character in reference.  Legal characters are A, T, G, C, and N.', Warning)
 
 	return reference
-
-
-#--------------------------------------------------------------------------------------------------------------------------------------
-def import_fasta(pathToReads, outFastaFilename):
-#	takes a directory with fast5 nanopore reads at the top level, and extracts the 2D sequences in fasta format with the path to the file as the fasta header
-#	ARGUMENTS
-#       ---------
-#	- pathToReads: full path to the directory that contains the fast5 files
-#	  type: string
-#	- outFastaFilename: filename for the output fasta file that contains all of the reads
-#	  type: string
-#	OUTPUTS
-#       -------
-#	- a fasta file written to the directory specified
-
-	buffersize = 1024
-
-	#output file to write on
-	fout = open(outFastaFilename,'w')
-
-	#path through the fast5 tree to get to the fastq sequence
-	fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
-
-	#empty reads string, and count the number of subdirectories so we can print progress
-	reads = ''
-	numSubdirectories = len(next(os.walk(pathToReads, topdown=True))[1])
-	readCount = 0
-
-	#recursively go through the directory and subdirectories and extract fasta seqs until you reach the buffer, then write, release, and garbage collect
-	for root, dirs, files in os.walk(pathToReads, topdown=True):
-
-		for fast5file in files:
-
-			readCount += 1
-
-			if fast5file.endswith('.fast5'):
-		
-				#print progress every 5 subdirectories of reads
-				if readCount % 10000 == 0:
-					sys.stdout.write("\rExporting fast5 reads to fasta... read " + str(readCount))
-					sys.stdout.flush()
-
-				try:
-					#open the fast5 file with h5py and grab the fastq
-					ffast5 = h5py.File(root+'/'+fast5file,'r')
-					fastq = ffast5[fast5path2fastq].value
-					ffast5.close()
-					fasta = fastq.split('\n')[1]
-			
-					#append the sequence in the fasta format, with the full path to the fast5 file as the sequence name
-					reads += '>'+root+'/'+fast5file+'\n'+fasta+'\n'
-
-				except KeyError:
-					#warnings.warn('File '+root+'/'+fast5file+' did not have a valid fastq path.  Skipping.', Warning)
-					pass
-
-				except IOError:
-					warnings.warn('File '+root+'/'+fast5file+' could not be opened and may be corrupted.  Skipping.', Warning)
-
-				#write to the file and release the buffer
-				if readCount % buffersize == 0:
-					fout.write(reads)
-					fout.flush()
-					os.fsync(fout .fileno())
-					reads = ''
-					gc.collect()
-
-		#flush the buffer and write once we're reached the end of fast5 files in the subdirectory
-		fout.write(reads)
-		fout.flush()
-		os.fsync(fout .fileno())
-		reads = ''
-		gc.collect()
-	
-	#close output fasta file	
-	fout.close()
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -443,24 +367,24 @@ a = parseArguments(args)
 
 reference = import_reference(a.reference)
 
-if a.position == '12':
-	analogueLoc = reference.find('NTNNNNN')
-	adenineLoc = reference.find('NNNNNAN')
+if a.position == '23':
+	analogueLoc = reference.find('NNTNNNN')
+	adenineLoc = reference.find('NNNNANN')
 
 elif a.position == '34':
 	analogueLoc = reference.find('NNNTNNN')
 	adenineLoc = reference.find('NNNANNN')
 
-elif a.position == '56':
-	analogueLoc = reference.find('NNNNNTN')
-	adenineLoc = reference.find('NANNNNN')
+elif a.position == '45':
+	analogueLoc = reference.find('NNNNTNN')
+	adenineLoc = reference.find('NNANNNN')
 
 else:
 	print 'Exiting with error.  Invalid argument passed to -p or --position.'
 	splashHelp()
 
 #normalise the training data according to the ONT 5mer model
-trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, a.fiveMerModel, [analogueLoc, adenineLoc], 20)
+trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, a.fiveMerModel, [analogueLoc, adenineLoc], 40)
 
 #write normalised reads to file in the .foh format
 export_trainingDataToFoh( trainingData, a.outFoh )
