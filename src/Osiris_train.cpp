@@ -15,6 +15,7 @@
 
 
 static const char *help=
+"NOTE: This is a special build to deal with NNBNNNN, NNNBNNN, and NNNNBNN.\n"
 "train: Osiris executable that determines the mean and standard deviation of a base analogue's current.\n"
 "To run Osiris train, do:\n"
 "  ./Osiris train [arguments]\n"
@@ -22,7 +23,7 @@ static const char *help=
 "  ./Osiris train -r /path/to/reference.fasta -p 3and4 -bm /path/to/template_median68pA.model -d /path/to/data.foh -o output.txt -t 20 -sc 30\n"
 "Required arguments are:\n"
 "  -r,--reference            path to reference file in fasta format,\n"
-"  -p,--position             position of analogue in training data (valid arguments are 1and2, 3and4, or 5and6),\n"
+"  -p,--position             position of analogue in training data (valid arguments are 2and3, 3and4, or 4and5),\n"
 "  -om,--ont-model           path to 6mer pore model file (provided by ONT) over bases {A,T,G,C},\n"
 "  -d,--trainingData         path to training data in the .foh format (can be made with Python Osiris),\n"
 "  -o,--output               path to the output pore model file that Osiris will train.\n"
@@ -168,20 +169,20 @@ int train_main( int argc, char** argv ){
 		int adenDomLoc;
 		int brduDomLoc;
 
-		if ( trainArgs.analoguePosition == "1and2" ){
-			adenDomLoc = refLocal.find( "NNNNNAN" );
-			brduDomLoc = refLocal.find( "NTNNNNN" );
-			positionNorm = 0;
+		if ( trainArgs.analoguePosition == "2and3" ){
+			adenDomLoc = refLocal.find( "NNNNANN" );
+			brduDomLoc = refLocal.find( "NNTNNNN" );
+			positionNorm = 1;
 		}
 		else if ( trainArgs.analoguePosition == "3and4" ){
 			adenDomLoc = refLocal.find( "NNNANNN" );
 			brduDomLoc = refLocal.find( "NNNTNNN" );
 			positionNorm = 2;
 		}
-		else if ( trainArgs.analoguePosition == "5and6" ){
-			adenDomLoc = refLocal.find( "NANNNNN" );
-			brduDomLoc = refLocal.find( "NNNNNTN" );
-			positionNorm = 4;
+		else if ( trainArgs.analoguePosition == "4and5" ){
+			adenDomLoc = refLocal.find( "NNANNNN" );
+			brduDomLoc = refLocal.find( "NNNNTNN" );
+			positionNorm = 3;
 		}
 		else{
 			std::cout << "Exiting with error.  Invalid option passed with the -p or --position flag.  Valid options are 1and2, 3and4, or 5and6." << std::endl;

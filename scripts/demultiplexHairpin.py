@@ -28,7 +28,6 @@ Example:
 Required arguments are:
   -r,--reference            path to reference file in fasta format,
   -d,--data                 path to top level directory of ONT reads,
-  -p,--position             position of analogue in training data (valid arguments are 12, 34, or 56).
 Optional arguments are:
   -t,--threads              number of threads (default is 1 thread)."""
 
@@ -51,16 +50,14 @@ def parseArguments(args):
 		elif argument == '-d' or argument == '--data':
 			a.data = str(args[i+1])
 
-		elif argument == '-p' or argument == '--position':
-			a.position = str(args[i+1])
-
 		elif argument == '-h' or argument == '--help':
 			splashHelp()
+		
 		elif argument[0] == '-':
 			splashHelp()
 
 	#check that required arguments are met
-	if not hasattr( a, 'reference') or not hasattr( a, 'data') or not hasattr( a, 'position'):
+	if not hasattr( a, 'reference') or not hasattr( a, 'data'):
 		splashHelp() 
 
 	return a
@@ -182,11 +179,11 @@ def import_fasta(pathToReads, outFastaFilename):
 args = sys.argv
 a = parseArguments(args)
 
-#import_fasta(a.data, os.getcwd()+'/reads.fasta')
+import_fasta(a.data, os.getcwd()+'/reads.fasta')
 
-#os.system('bwa index ' + a.reference)
-#os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted') 
-#os.system('samtools index alignments.sorted.bam')
+os.system('bwa index ' + a.reference)
+os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted') 
+os.system('samtools index alignments.sorted.bam')
 
 
 sam_file = pysam.Samfile('alignments.sorted.bam')
@@ -194,21 +191,8 @@ out_files = list()
 
 reference = import_reference(a.reference)
 
-if a.position == '12':
-	analogueLoc = reference.find('NTNNNNN')
-	adenineLoc = reference.find('NNNNNAN')
-
-elif a.position == '34':
-	analogueLoc = reference.find('NNNTNNN')
-	adenineLoc = reference.find('NNNANNN')
-
-elif a.position == '56':
-	analogueLoc = reference.find('NNNNNTN')
-	adenineLoc = reference.find('NANNNNN')
-
-else:
-	print 'Exiting with error.  Invalid argument passed to -p or --position.'
-	splashHelp()
+analogueLoc = reference.find('NTN')
+adenineLoc = reference.find('NAN')
 
 # open an output file for each reference sequence
 for x in sam_file.references:
