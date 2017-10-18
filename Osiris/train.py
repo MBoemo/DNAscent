@@ -223,7 +223,7 @@ def parallelTrainForSC(key, Reads, reference, poreModel, progress, total):
 	hmm = build_softHMM(refLocal,poreModel)
 
 	#train the HMM (Baum-Welch iterations) to the specified tolerance, using the specified number of threads	
-	hmm.fit(Reads,edge_inertia=1,stop_threshold=1,n_jobs=1,verbose=False)
+	hmm.fit(Reads,edge_inertia=0,stop_threshold=1,n_jobs=1,verbose=False)
 
 	analogueEmissions = {}
 
@@ -335,7 +335,7 @@ def trainForContextAnalogue(trainingData, reference, poreModelFilename, threads,
 			hmm = build_TrainingHMM(refLocal,poreModel)
 
 			#train the HMM (Baum-Welch iterations) using the specified number of threads.  Here, we DON'T train transitions	
-			hmm.fit(trainingData[key],edge_inertia=1,stop_threshold=0.1,n_jobs=threads)
+			hmm.fit(trainingData[key],edge_inertia=0,stop_threshold=0.1,n_jobs=threads)
 
 			#go through the states of the trained HMM
 			for state in hmm.states:

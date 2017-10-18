@@ -12,10 +12,10 @@ $(MAIN_EXECUTABLE) : $(OBJS)
 	$(CC) $(LFLAGS) $(OBJS) -o bin/Osiris $(LIBFLAGS)
 
 common.o : src/common.h src/common.cpp
-	$(CC) $(CXXFLAGS) src/common.cpp
+	$(CC) $(CXXFLAGS) src/common.cpp $(LIBFLAGS)
 
 data_IO.o : src/data_IO.h src/data_IO.cpp
-	$(CC) $(CXXFLAGS) src/data_IO.cpp
+	$(CC) $(CXXFLAGS) src/data_IO.cpp $(LIBFLAGS)
 
 build_model.o : src/build_model.h src/build_model.cpp src/data_IO.h
 	$(CC) $(CXXFLAGS) src/build_model.cpp $(LIBFLAGS)

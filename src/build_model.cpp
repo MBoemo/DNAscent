@@ -23,7 +23,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
 	SilentDistribution sd( 0.0, 0.0 );
-	UniformDistribution ud( 0.0, 180.0 );
+	UniformDistribution ud( 0.0, 120.0 );
 
 	std::string loc;
 
@@ -35,7 +35,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 		/*create the distributions that we need.  if the 6mer contains an N, use a uniform dist.  Otherwise use the 6mer model */
 		Distribution *md;
 		if ( sixMer.find('N') != std::string::npos ){
-			md = dynamic_cast< Distribution * >( new UniformDistribution( 0, 180 ) );
+			md = dynamic_cast< Distribution * >( new UniformDistribution( 0, 120 ) );
 		}
 		else if ( basePoreModel.find (sixMer ) != basePoreModel.end() ){
 			emissionMeanAndStd = basePoreModel.at( sixMer );
@@ -57,7 +57,6 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 			states[ j ][ i ].meta = reference.substr( i, 6 );
 			hmm.add_state( states[ j ][ i ] );
-
 		}
 
 		/*transitions between states, internal to a single base */
@@ -93,7 +92,6 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 		hmm.add_transition( states[ 2 ][ i ], states[ 0 ][ i + 1 ], externalI2SS );
 		hmm.add_transition( states[ 5 ][ i ], states[ 0 ][ i + 1 ], externalSE2SS );
 		hmm.add_transition( states[ 5 ][ i ], states[ 1 ][ i + 1 ], externalSE2D );
-
 	}
 
 	/*handle start states */
@@ -107,12 +105,11 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 	hmm.finalise();
 
-	hmm.BaumWelch( events, 1.0, 75.0, false, threads, verbose );
+	hmm.BaumWelch( events, 1.0, 100.0, false, threads, verbose );
 
 	std::stringstream ss = hmm.summarise();
 
 	return ss;
-
 }
 
 
@@ -129,7 +126,7 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	std::vector< NormalDistribution > nd;
 	nd.reserve( reference.length() - 6 );
 	SilentDistribution sd( 0.0, 0.0 );
-	UniformDistribution ud( 0.0, 180.0 );
+	UniformDistribution ud( 0.0, 120.0 );
 
 	/*garbage collection states to make up for inaccuracies in dynamic time warping */
 	State gcStart( &ud, "gcStart", "", "", 1.0 );

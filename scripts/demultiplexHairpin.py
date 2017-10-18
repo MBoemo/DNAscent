@@ -221,7 +221,7 @@ for record in sam_file:
 	if record.aend is None or record.query_alignment_length is None:
 		continue
 
-	if (record.reference_start < analogueLoc - 10) and (record.reference_end > adenineLoc + 6) and (record.is_reverse == False):
+	if (record.reference_start < analogueLoc - 15) and (record.reference_end > adenineLoc + 21) and (record.is_reverse == False):
 		out_files[record.reference_id].write(record)
 
 

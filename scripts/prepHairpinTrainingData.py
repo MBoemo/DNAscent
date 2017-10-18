@@ -401,19 +401,20 @@ def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, ROI, readsT
 			pairs = record.get_aligned_pairs(True,True) #tuples for each mapped position (pos-on-read,pos-on-ref,base-on-ref)
 
 			adenineDomain = ['-']*7 #fill this up as we identify bases for the 7mer
+			analogueDomain = ['-']*7 
 
 			for p in pairs:
-				if p[1] in adenineIndeces: #if the reference position is in the redundant adenine domain
-					adenineDomain[p[1] - ROI[1]] = sequence[p[0]] #add the base from the read that mapped to it to the adenine 7mer
+				if p[1] in analogueIndeces:
+					analogueDomain[p[1] - ROI[0]] = sequence[p[0]]
 
+			brD = "".join(analogueDomain).upper()
+	
+			if ('-' not in analogueDomain) and (brD[3] == 'T'): #if we've identified the analogue domain completely
 
-			adD = "".join(adenineDomain).upper() #make a string out of the adenineDomain list
-			if ('-' not in adenineDomain) and (adD[3] == 'A'): #if we've identified the adenine domain completely
-
-				if adD in kmer2Files:
-					kmer2Files[adD] += [readID]
+				if brD in kmer2Files:
+					kmer2Files[brD] += [readID]
 				else:
-					kmer2Files[adD] = [readID]
+					kmer2Files[brD] = [readID]
 
 	#if a kmer has a number of associated reads that is below the minimum number of reads we need to train on, remove that kmer from the dictionary
 	filteredKmer2Files = {}
@@ -460,7 +461,7 @@ else:
 	splashHelp()
 
 #normalise the training data according to the ONT 5mer model
-trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, a.fiveMerModel, [analogueLoc, adenineLoc], 20)
+trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, a.fiveMerModel, [analogueLoc, adenineLoc], 40)
 
 #write normalised reads to file in the .foh format
 export_trainingDataToFoh( trainingData, a.outFoh )

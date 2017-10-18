@@ -50,13 +50,15 @@ std::string import_reference( std::string fastaFilePath ){
 	/*grammar check: reference should only have A,T,G,C,N */
 	for ( auto it = reference.begin(); it < reference.end(); it++ ){
 
+		/*ignire carriage returns */
+		if ( *it == '\r' ) continue;
+
 		if ( *it != 'A' and *it != 'T' and *it != 'G' and *it != 'C' and *it != 'N' ){
 			std::cout << "Exiting with error.  Illegal character in reference file: " << *it << std::endl;
 			exit( EXIT_FAILURE );
 		}
 	}
 	return reference;
-
 }
 
 
@@ -100,7 +102,6 @@ std::map< std::string, std::pair< double, double > > import_poreModel( std::stri
 	}*/
 	
 	return kmer2MeanStd;
-
 }
 
 

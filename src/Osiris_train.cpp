@@ -7,12 +7,13 @@
 //----------------------------------------------------------
 
 
+#include <exception>
 #include "Osiris_train.h"
 #include "common.h"
 #include "build_model.h"
 #include "data_IO.h"
 #include "error_handling.h"
-
+#include "../Penthus/src/error_handling.h"
 
 static const char *help=
 "train: Osiris executable that determines the mean and standard deviation of a base analogue's current.\n"
@@ -161,8 +162,9 @@ int train_main( int argc, char** argv ){
 		std::string refLocal = reference;
 		std::vector< std::vector< double > > events = iter -> second;
 
-		std::string adenDomain = iter -> first;
-		std::string brduDomain = reverseComplement( adenDomain );
+		std::string brduDomain = iter -> first;
+		std::string adenDomain = reverseComplement( brduDomain );
+
 
 		int positionNorm;
 		int adenDomLoc;
@@ -217,12 +219,21 @@ int train_main( int argc, char** argv ){
 		}
 
 		/*do the training */
-		std::stringstream ss = buildAndTrainHMM( refLocal, ontModel, events, trainArgs.threads, false );
+		std::stringstream ss;
+		try{
+			ss = buildAndTrainHMM( refLocal, ontModel, events, trainArgs.threads, false );
+		}
+		catch ( NumericalInstability &ni ){
+			std::cout << ni.what() << std::endl << "Aborted training on this 6mer, skipping: "<< brduDomain << std::endl;
+			displayProgress( prog, trainingData.size() );
+			prog++;
+			continue; 
+		}
 
 		/*if we specified that we want a log file, read the ss buffer into it now */
 		std::stringstream ssLog( ss.str() );
 		if ( trainArgs.logFile == true ){
-			logFile << ">" << adenDomain << std::endl << ssLog.rdbuf();
+			logFile << ">" << brduDomain << std::endl << ssLog.rdbuf();
 		}
 
 		/*hacky bodge to get the training data out at the relevant position without making Penthus specialised */

@@ -6,8 +6,10 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
+
 #ifndef COMMON_H
 #define COMMON_H
+
 
 #include "math.h"
 #include <algorithm>
@@ -20,15 +22,14 @@
 #include <sstream>
 
 
-inline std::string reverseComplement( std::string &DNAseq ){
+inline std::string reverseComplement( std::string DNAseq ){
 
-	std::string flipDNAseq = DNAseq;
-	std::reverse( flipDNAseq.begin(), flipDNAseq.end() );
+	std::reverse( DNAseq.begin(), DNAseq.end() );
 	std::string revComp;
 
-	for ( unsigned int i = 0; i < flipDNAseq.length(); i++ ){
+	for ( std::string::iterator i = DNAseq.begin(); i < DNAseq.end(); i++ ){
 	
-		switch( flipDNAseq[ i ] ){
+		switch( *i ){
 			case 'A' :
 				revComp += 'T';
 				break;
@@ -45,11 +46,8 @@ inline std::string reverseComplement( std::string &DNAseq ){
 				std::cout << "Exiting with error.  Invalid character passed to reverse complement function.  Must be A, T, G, or C." << std::endl;
 				exit( EXIT_FAILURE );
 		}
-
 	}
-
 	return revComp;
-
 }
 
 
