@@ -49,5 +49,12 @@ struct InvalidOption : public std::exception {
 	}	
 };
 
+
+struct InsufficientArguments : public std::exception {
+	const char * what () const throw () {
+		return "Insufficient number of arguments passed to executable.";
+	}
+};
+
 #endif
 

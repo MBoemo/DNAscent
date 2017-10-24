@@ -27,9 +27,7 @@ void displayProgress( int current, int total ){
 		}
 		std::cout << "] " << int(progress * 100.0) << " %\r";
 		std::cout.flush();
-
 	}
-
 }
 
 
@@ -42,11 +40,8 @@ std::vector< std::string > split( std::string s, char delim ){
 	while ( std::getline( ssString, entry, delim ) ){
 
 		splitString.push_back( entry );
-
 	}
-
 	return splitString;
-
 }
 
 
@@ -61,13 +56,9 @@ int argMin( std::vector< double > &vec ){
 
 			smallest = vec[i];
 			index = i;
-
 		}
-	
 	}
-
 	return index;
-
 }
 
 
@@ -88,9 +79,7 @@ std::vector< double > generateSignal( std::string &reference, std::map< std::str
 			generatedSignal.push_back( ( baseModel.at( sixMer ) ).first );
 		}
 	}
-
 	return generatedSignal;
-
 }
 
 
@@ -108,11 +97,8 @@ std::vector< std::vector< double > > filterEvents( std::string &reference, std::
 
 			std::vector< double > subEvent( events[ i ].begin() + subEventBounds.first, events[ i ].begin() + subEventBounds.second );
 			filteredEvents.push_back( subEvent );
-
 		}
-
 	}
-
 	return filteredEvents;
 
 }
@@ -135,7 +121,6 @@ std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &e
 
 		runningSum += std::abs( events[ i ] - generatedSignal[ 0 ] );
 		dtw[ i ][ 0 ] = runningSum;
-
 	}
 
 	runningSum = 0.0;
@@ -143,7 +128,6 @@ std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &e
 
 		runningSum += std::abs( events[ 0 ] - generatedSignal[ i ] );
 		dtw[ 0 ][ i ] = runningSum; 
-
 	}
 
 	/*recursion: fill in the dynamic time warping lattice */
@@ -161,9 +145,7 @@ std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &e
 				dtw[ i ][ j ] = std::abs( events[ i ] - generatedSignal[ j ] ) + std::min( dtw[ i - 1 ][ j - 1 ], std::abs( events[ i - 1 ] - generatedSignal[ j ] ) + std::min( dtw[ i - 2 ][ j - 1 ], std::min( dtw[ i - 1 ][ j ], std::abs( events[ i - 1 ] - generatedSignal[ j ] ) + dtw[ i - 2 ][ j ] ) ) );
 
 			}
-
 		}
-	
 	}
 
 	/*termination: calculate the optimal warping path */
@@ -198,11 +180,8 @@ std::map< int, std::vector< int > > dynamicTimewarping( std::vector< double > &e
 			std::cout << "Exiting with error.  Out of bounds error in dynmaic time warping." << std::endl;
 			exit(EXIT_FAILURE);
 		}
-
 	}
-
 	return readPosToEventPos;
-
 }
 
 
@@ -217,13 +196,11 @@ std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &shor
 
 		runningSum += std::abs( shortSignal[ i ] - longSignal[ 0 ] );
 		dtw[ i ][ 0 ] = runningSum;
-
 	}
 
 	for ( int i = 0; i < longSignal.size(); i++ ){
 
 		dtw[ 0 ][ i ] = std::abs( shortSignal[ 0 ] - longSignal[ i ] );
-
 	}
 
 	/*recursion: fill in the dynamic time warping lattice */
@@ -232,9 +209,7 @@ std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &shor
 		for ( int j = 1; j < longSignal.size(); j++ ){
 
 			dtw[ i ][ j ] = std::abs( shortSignal[ i ] - longSignal[ j ] ) + std::min( dtw[ i - 1 ][ j ], std::min( dtw[ i ][ j - 1 ], dtw[ i - 1 ][ j - 1 ] ) );
-
 		}
-	
 	}
 
 	/*termination: calculate the optimal warping path */
@@ -267,11 +242,8 @@ std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &shor
 		if ( j == 0 and i > 0 ){
 
 			return std::make_pair( 0, 0 );
-
 		}
-
 	}
-
+	//std::cout << ( path.back() ).second << " " << ( path.front() ).second << std::endl;
 	return std::make_pair( ( path.back() ).second, ( path.front() ).second );
-
 }

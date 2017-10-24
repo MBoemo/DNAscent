@@ -210,6 +210,10 @@ else:
 	print 'Exiting with error.  Invalid argument passed to -p or --position.'
 	splashHelp()
 
+if analogueLoc == -1 or adenineLoc == -1:
+	print 'Exiting with error - BrdU and/or adenine domains not found.  Did you enter the right position?'
+	splashHelp()
+
 # open an output file for each reference sequence
 for x in sam_file.references:
 	print x

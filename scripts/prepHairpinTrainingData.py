@@ -173,82 +173,6 @@ def import_reference(filename):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def import_fasta(pathToReads, outFastaFilename):
-#	takes a directory with fast5 nanopore reads at the top level, and extracts the 2D sequences in fasta format with the path to the file as the fasta header
-#	ARGUMENTS
-#       ---------
-#	- pathToReads: full path to the directory that contains the fast5 files
-#	  type: string
-#	- outFastaFilename: filename for the output fasta file that contains all of the reads
-#	  type: string
-#	OUTPUTS
-#       -------
-#	- a fasta file written to the directory specified
-
-	buffersize = 1024
-
-	#output file to write on
-	fout = open(outFastaFilename,'w')
-
-	#path through the fast5 tree to get to the fastq sequence
-	fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
-
-	#empty reads string, and count the number of subdirectories so we can print progress
-	reads = ''
-	numSubdirectories = len(next(os.walk(pathToReads, topdown=True))[1])
-	readCount = 0
-
-	#recursively go through the directory and subdirectories and extract fasta seqs until you reach the buffer, then write, release, and garbage collect
-	for root, dirs, files in os.walk(pathToReads, topdown=True):
-
-		for fast5file in files:
-
-			readCount += 1
-
-			if fast5file.endswith('.fast5'):
-		
-				#print progress every 5 subdirectories of reads
-				if readCount % 10000 == 0:
-					sys.stdout.write("\rExporting fast5 reads to fasta... read " + str(readCount))
-					sys.stdout.flush()
-
-				try:
-					#open the fast5 file with h5py and grab the fastq
-					ffast5 = h5py.File(root+'/'+fast5file,'r')
-					fastq = ffast5[fast5path2fastq].value
-					ffast5.close()
-					fasta = fastq.split('\n')[1]
-			
-					#append the sequence in the fasta format, with the full path to the fast5 file as the sequence name
-					reads += '>'+root+'/'+fast5file+'\n'+fasta+'\n'
-
-				except KeyError:
-					#warnings.warn('File '+root+'/'+fast5file+' did not have a valid fastq path.  Skipping.', Warning)
-					pass
-
-				except IOError:
-					warnings.warn('File '+root+'/'+fast5file+' could not be opened and may be corrupted.  Skipping.', Warning)
-
-				#write to the file and release the buffer
-				if readCount % buffersize == 0:
-					fout.write(reads)
-					fout.flush()
-					os.fsync(fout .fileno())
-					reads = ''
-					gc.collect()
-
-		#flush the buffer and write once we're reached the end of fast5 files in the subdirectory
-		fout.write(reads)
-		fout.flush()
-		os.fsync(fout .fileno())
-		reads = ''
-		gc.collect()
-	
-	#close output fasta file	
-	fout.close()
-
-
-#--------------------------------------------------------------------------------------------------------------------------------------
 def export_trainingDataToFoh( kmer2normalisedReads, filename ):
 #	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
 #	ARGUMENTS
@@ -385,8 +309,8 @@ def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, ROI, readsT
 	
 	f = pysam.Samfile(BAMrecords,'r')
 
-	analogueIndeces = range(ROI[0], ROI[0] + 7)
-	adenineIndeces = range(ROI[1], ROI[1] + 7)
+	#analogueIndeces = range(ROI[0], ROI[0] + 7)
+	analogueIndeces = range(ROI[0] - 6, ROI[0] + 13)
 
 	#build up the map that takes each indiviudal 7mer to a list of fast5 files that produced the reads
 	kmer2Files = {}
@@ -400,16 +324,27 @@ def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, ROI, readsT
 
 			pairs = record.get_aligned_pairs(True,True) #tuples for each mapped position (pos-on-read,pos-on-ref,base-on-ref)
 
-			adenineDomain = ['-']*7 #fill this up as we identify bases for the 7mer
-			analogueDomain = ['-']*7 
+			analogueDomain = ['-']*len(analogueIndeces) 
+			analogPosOnRead = [0]*len(analogueIndeces)
 
+			#fill out analogueDomain and posOnRead using get_aligned_pairs() from pysam
 			for p in pairs:
 				if p[1] in analogueIndeces:
-					analogueDomain[p[1] - ROI[0]] = sequence[p[0]]
+					analogueDomain[p[1] - (ROI[0] - 6) ] = sequence[p[0]]
+					analogPosOnRead[p[1] - (ROI[0] - 6) ] = p[0]
 
-			brD = "".join(analogueDomain).upper()
-	
-			if ('-' not in analogueDomain) and (brD[3] == 'T'): #if we've identified the analogue domain completely
+			#make sure there aren't any indels
+			indelFree = True
+			for i,v in enumerate(analogPosOnRead[:-1]):
+				if v != analogPosOnRead[i+1] - 1:
+					indelFree = False
+
+			brD = "".join(analogueDomain[6:13]).upper()
+			LHS = "".join(analogueDomain[0:6]).upper()
+			RHS = "".join(analogueDomain[13:]).upper()
+
+			#if we've identified the analogue domain completely, keep this read to train on
+			if ('-' not in analogueDomain) and (analogueDomain[9] == 'T') and (indelFree) and (LHS == reference[ROI[0]-6:ROI[0]]) and (RHS == reference[ROI[0]+7:ROI[0]+13]): 
 
 				if brD in kmer2Files:
 					kmer2Files[brD] += [readID]
@@ -461,7 +396,7 @@ else:
 	splashHelp()
 
 #normalise the training data according to the ONT 5mer model
-trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, a.fiveMerModel, [analogueLoc, adenineLoc], 40)
+trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, a.fiveMerModel, [analogueLoc, adenineLoc], 60)
 
 #write normalised reads to file in the .foh format
 export_trainingDataToFoh( trainingData, a.outFoh )

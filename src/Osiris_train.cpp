@@ -47,22 +47,14 @@ struct Arguments {
 
 Arguments parseTrainingArguments( int argc, char** argv ){
 
-	if( argc < 2 ){
-
-		std::cout << "Exiting with error.  Insufficient arguments passed to Osiris train." << std::endl << help << std::endl;
-		exit(EXIT_FAILURE);
-	}
+	if( argc < 2 ) throw InsufficientArguments();
 
 	if ( std::string( argv[ 1 ] ) == "-h" or std::string( argv[ 1 ] ) == "--help" ){
 
 		std::cout << help << std::endl;
 		exit(EXIT_SUCCESS);
 	}
-	else if( argc < 4 ){
-
-		std::cout << "Exiting with error.  Insufficient arguments passed to Osiris train." << std::endl;
-		exit(EXIT_FAILURE);
-	}
+	else if( argc < 4 ) throw InsufficientArguments();
 
 	Arguments trainArgs;
 
@@ -149,13 +141,8 @@ int train_main( int argc, char** argv ){
 	std::ofstream logFile;
 	if ( trainArgs.logFile == true ){
 		logFile.open( trainArgs.logFilename );
-		if ( not logFile.is_open() ){
-			std::cout << "Exiting with error.  Output training log file could not be opened." << std::endl;
-			exit(EXIT_FAILURE);
-		}
+		if ( not logFile.is_open() ) throw IOerror( trainArgs.logFilename );
 	}
-
-	bool N_WarningSplashed = false; //only splash the warning for unresolved Ns once
 
 	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
 
@@ -164,7 +151,6 @@ int train_main( int argc, char** argv ){
 
 		std::string brduDomain = iter -> first;
 		std::string adenDomain = reverseComplement( brduDomain );
-
 
 		int positionNorm;
 		int adenDomLoc;
@@ -193,14 +179,11 @@ int train_main( int argc, char** argv ){
 		refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
 		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
 		
-		/*check for unresolved Ns and warn if there are any */
-		if ( not N_WarningSplashed ){
-			for ( auto it = refLocal.begin(); it < refLocal.end(); it++ ){
-				if ( *it == 'N' ){
-					std::cout << "WARNING: reference contains unresolved Ns.  Did you mean to do this?" << std::endl;
-					N_WarningSplashed = true;
-					break;
-				}
+		/*check for unresolved Ns and fail if there are any */
+		for ( auto it = refLocal.begin(); it < refLocal.end(); it++ ){
+			if ( *it == 'N' ){
+				std::cout << "Exiting with error.  Reference contains unresolved N's." << std::endl;
+				exit(EXIT_FAILURE);
 			}
 		}
 
