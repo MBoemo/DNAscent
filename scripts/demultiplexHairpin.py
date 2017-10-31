@@ -225,7 +225,10 @@ for record in sam_file:
 	if record.aend is None or record.query_alignment_length is None:
 		continue
 
-	if (record.reference_start < analogueLoc - 15) and (record.reference_end > adenineLoc + 21) and (record.is_reverse == False):
+	ref_cover = float(record.aend - record.pos) / ref_length
+	query_cover = float(record.query_alignment_length) / record.query_length
+
+	if (record.reference_start < analogueLoc - 15) and (record.reference_end > adenineLoc + 21) and ref_cover > 0.8 and query_cover > 0.8 and (record.is_reverse == False):
 		out_files[record.reference_id].write(record)
 
 

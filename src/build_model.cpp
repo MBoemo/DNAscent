@@ -21,12 +21,11 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 	/*STATES - vector (of vectors) to hold the states at each position on the reference - fill with dummy values */
 	std::vector< std::vector< State > > states( 6, std::vector< State >( reference.length() - 5, State( NULL, "", "", "", 1.0 ) ) );
 
-
 	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
 	std::vector< NormalDistribution > nd;
 	nd.reserve( reference.length() - 6 );		
 	SilentDistribution sd( 0.0, 0.0 );
-	UniformDistribution ud( 0.0, 120.0 );
+	UniformDistribution ud( 50.0, 130.0 );
 
 	std::string loc;
 
@@ -103,7 +102,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 	hmm.finalise();
 
-	hmm.BaumWelch( events, 0.1, 250, 0.25, false, threads, verbose );
+	hmm.BaumWelch( events, 1, 250, 0.0, false, threads, verbose );
 
 	std::stringstream ss = hmm.summarise();
 
@@ -124,7 +123,7 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	std::vector< NormalDistribution > nd;
 	nd.reserve( reference.length() - 6 );
 	SilentDistribution sd( 0.0, 0.0 );
-	UniformDistribution ud( 0.0, 120.0 );
+	UniformDistribution ud( 50.0, 130.0 );
 
 	/*garbage collection states to make up for inaccuracies in dynamic time warping */
 	State gcStart( &ud, "gcStart", "", "", 1.0 );
@@ -174,7 +173,6 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 
 			states[ j ][ i ].meta = reference.substr( i, 6 );
 			hmm.add_state( states[ j ][ i ] );
-
 		}
 
 		/*transitions between states, internal to a single base */
@@ -199,7 +197,6 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 
 		/*from SE */
 		hmm.add_transition( states[5][i], states[2][i], internalSE2I );		
-
 	}
 
 	/*add transitions between modules (external transitions) */
@@ -210,7 +207,6 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 		hmm.add_transition( states[ 2 ][ i ], states[ 0 ][ i + 1 ], externalI2SS );
 		hmm.add_transition( states[ 5 ][ i ], states[ 0 ][ i + 1 ], externalSE2SS );
 		hmm.add_transition( states[ 5 ][ i ], states[ 1 ][ i + 1 ], externalSE2D );
-
 	}
 
 	/*handle start states */

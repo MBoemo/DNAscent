@@ -120,7 +120,6 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 		}
 		else throw InvalidOption( flag );
 	}
-
 	return trainArgs;
 }
 

@@ -268,7 +268,11 @@ def parallel_calculate_normalisedEvents(kmer, fast5Files, poreModelFile, progres
 		for event in Events:
 			if float(event[7]) > 0.30: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
 				event_mean = float(event[0])
-				normalisedEvents.append( (event_mean - shift - drift*event_time)/scale )
+				#ne = (event_mean - shift - drift*event_time)/scale
+				ne = (event_mean - shift )/scale
+				if ne > 50 and ne < 130:
+					normalisedEvents.append( ne )
+
 
 		allNormalisedReads.append(normalisedEvents)
 
@@ -396,7 +400,7 @@ else:
 	splashHelp()
 
 #normalise the training data according to the ONT 5mer model
-trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, a.fiveMerModel, [analogueLoc, adenineLoc], 60)
+trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, a.fiveMerModel, [analogueLoc, adenineLoc], 40)
 
 #write normalised reads to file in the .foh format
 export_trainingDataToFoh( trainingData, a.outFoh )
