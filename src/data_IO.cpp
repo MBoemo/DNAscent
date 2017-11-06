@@ -123,7 +123,7 @@ void export_poreModel( std::map< std::string, std::vector< double > > &trainedMa
 }
 
 
-std::map< std::string, std::vector< std::vector< double > > > import_foh( std::string fohFilePath ){
+std::map< std::string, std::vector< read > > import_foh( std::string fohFilePath ){
 	
 	std::cout << "Importing training data..." << std::endl;
 	std::ifstream file( fohFilePath );
@@ -136,32 +136,36 @@ std::map< std::string, std::vector< std::vector< double > > > import_foh( std::s
 	std::string key;
 	std::string event;
 
-	std::map< std::string, std::vector< std::vector< double > > > kmer2normalisedReads;
+	std::map< std::string, std::vector< read > > kmer2raw;
+	read currentRead;
 	
-	/*while we have a line to read in the reference file... */
 	while ( std::getline( file, line ) ){
 
 		if ( line[0] == '>' ){
 
 			key = line.erase( 0, 1 );
 		}
-		/*if this line is not a fasta header line */
+		/*if this is a basecall line */
+		else if ( line[0] == 'A' or line[0] == 'T' or line[0] == 'G' or line[0] == 'C' ){
+			currentRead.basecalls = line;
+		}
+		/*if this is a raw signal line */
 		else{
-
-			std::vector< double > Events;
+			std::vector< double > rawSignals;
 
 			std::istringstream ss( line );
 			std::string event;
 			while ( std::getline( ss, event, ' ' ) ){
 
-				Events.push_back( atof( event.c_str() ) );
+				rawSignals.push_back( atof( event.c_str() ) );
 			}
-			kmer2normalisedReads[ key ].push_back( Events );
+			currentRead.raw = rawSignals;
+
+			kmer2raw[ key ].push_back( currentRead );
 		}
 	}
 	std::cout << "Done." << std::endl;
-	return kmer2normalisedReads;
-
+	return kmer2raw;
 }
 
 

@@ -13,6 +13,7 @@
 #include "build_model.h"
 #include "data_IO.h"
 #include "error_handling.h"
+#include "event_handling.h"
 #include "../Penthus/src/error_handling.h"
 
 static const char *help=
@@ -24,8 +25,7 @@ static const char *help=
 "Required arguments are:\n"
 "  -r,--reference            path to reference file in fasta format,\n"
 "  -p,--position             position of analogue in training data (valid arguments are 1and2, 3and4, or 5and6),\n"
-"  -om,--ont-model           path to 6mer pore model file (provided by ONT) over bases {A,T,G,C},\n"
-"  -d,--trainingData         path to training data in the .foh format (can be made with Python Osiris),\n"
+"  -d,--trainingData         path to training data in the .foh format (made with prepHairpinData.py),\n"
 "  -o,--output               path to the output pore model file that Osiris will train.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
@@ -36,7 +36,6 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string analoguePosition;
 	std::string trainingDataFilename;
-	std::string ontModelFilename;
 	std::string trainingOutputFilename;
 	bool logFile;
 	std::string logFilename;
@@ -64,7 +63,7 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 	trainArgs.logFile = false;
 
 	/*parse the command line arguments */
-	for ( unsigned int i = 1; i < argc; ){
+	for ( int i = 1; i < argc; ){
 
 		std::string flag( argv[ i ] );
 
@@ -73,12 +72,6 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.referenceFilename = strArg;
 			i+=2;	
-		}
-		else if ( flag == "-om" or flag == "--ont-model" ){
-
-			std::string strArg( argv[ i + 1 ] );
-			trainArgs.ontModelFilename = strArg;
-			i+=2;
 		}
 		else if ( flag == "-d" or flag == "--trainingData" ){
 
@@ -129,156 +122,13 @@ int train_main( int argc, char** argv ){
 	Arguments trainArgs = parseTrainingArguments( argc, argv );
 
 	std::string reference = import_reference( trainArgs.referenceFilename );
-	std::map< std::string, std::pair< double, double > > ontModel =  import_poreModel( trainArgs.ontModelFilename );
-	std::map< std::string, std::vector< std::vector< double > > > trainingData = import_foh( trainArgs.trainingDataFilename );
+	//std::map< std::string, std::vector< std::vector< double > > > trainingData = import_foh( trainArgs.trainingDataFilename );
 
-	std::map< std::string, std::vector< double> > trainedModel;
+	/*MODIFIED HERE */
+	std::map< std::string, std::vector< std::vector< double > > > normalisedEvents = segmentEvents( trainArgs.trainingDataFilename );
 
-	int prog = 0;
+	/*END */
 
-	/*log file IO */
-	std::ofstream logFile;
-	if ( trainArgs.logFile == true ){
-		logFile.open( trainArgs.logFilename );
-		if ( not logFile.is_open() ) throw IOerror( trainArgs.logFilename );
-	}
-
-	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
-
-		std::string refLocal = reference;
-		std::vector< std::vector< double > > events = iter -> second;
-
-		std::string brduDomain = iter -> first;
-		std::string adenDomain = reverseComplement( brduDomain );
-
-		int positionNorm;
-		int adenDomLoc;
-		int brduDomLoc;
-
-		if ( trainArgs.analoguePosition == "1and2" ){
-			adenDomLoc = refLocal.find( "NNNNNAN" );
-			brduDomLoc = refLocal.find( "NTNNNNN" );
-			positionNorm = 0;
-		}
-		else if ( trainArgs.analoguePosition == "3and4" ){
-			adenDomLoc = refLocal.find( "NNNANNN" );
-			brduDomLoc = refLocal.find( "NNNTNNN" );
-			positionNorm = 2;
-		}
-		else if ( trainArgs.analoguePosition == "5and6" ){
-			adenDomLoc = refLocal.find( "NANNNNN" );
-			brduDomLoc = refLocal.find( "NNNNNTN" );
-			positionNorm = 4;
-		}
-		else{
-			std::cout << "Exiting with error.  Invalid option passed with the -p or --position flag.  Valid options are 1and2, 3and4, or 5and6." << std::endl;
-			exit(EXIT_FAILURE);
-		}
-	
-		refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
-		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
-		
-		/*check for unresolved Ns and fail if there are any */
-		for ( auto it = refLocal.begin(); it < refLocal.end(); it++ ){
-			if ( *it == 'N' ){
-				std::cout << "Exiting with error.  Reference contains unresolved N's." << std::endl;
-				exit(EXIT_FAILURE);
-			}
-		}
-
-		/*if soft clipping was specified, truncate the reference and events with dynamic time warping */
-		if ( trainArgs.softClip == true ){
-
-			if ( ( brduDomLoc - trainArgs.SCwindow < 0 ) or ( brduDomLoc + trainArgs.SCwindow > refLocal.length() ) ){
-
-				std::cout << "Exiting with error.  Soft clipping window exceeds reference length.  Reduce window size." << std::endl;
-				exit(EXIT_FAILURE);
-			}
-
-			refLocal = refLocal.substr( brduDomLoc - trainArgs.SCwindow, 6 + 2*trainArgs.SCwindow );
-			brduDomLoc = trainArgs.SCwindow;
-			events = filterEvents( refLocal, ontModel, events );
-		}
-
-		/*do the training */
-		std::stringstream ss;
-		try{
-			ss = buildAndTrainHMM( refLocal, ontModel, events, trainArgs.threads, false );
-		}
-		catch ( NumericalInstability &ni ){
-			std::cout << ni.what() << std::endl << "Aborted training on this 6mer, skipping: "<< brduDomain << std::endl;
-			displayProgress( prog, trainingData.size() );
-			prog++;
-			continue; 
-		}
-
-		/*if we specified that we want a log file, read the ss buffer into it now */
-		std::stringstream ssLog( ss.str() );
-		if ( trainArgs.logFile == true ){
-			logFile << ">" << brduDomain << std::endl << ssLog.rdbuf();
-		}
-
-		/*hacky bodge to get the training data out at the relevant position without making Penthus specialised */
-		std::string line;
-		while ( std::getline( ss, line ) ){
-			
-			std::vector< std::string > findIndex = split( line, '_' );
-			unsigned int i = atoi(findIndex[0].c_str());
-
-			if ( i == brduDomLoc ){
-
-				std::string atFirstPos = ( brduDomain.substr( 0, 6 ) ).replace( positionNorm + 1, 1, "B" );
-				std::vector< std::string > splitLine = split( line, '\t' );
-				
-				if ( trainedModel.count( atFirstPos ) > 0 ){
-
-					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atFirstPos ][ 1 ] ){
-
-						trainedModel[ atFirstPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
-					}
-				}
-				else{
-
-					trainedModel[ atFirstPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
-				}
-
-			}
-			else if ( i == brduDomLoc + 1 ){
-
-				std::string atSecondPos = ( brduDomain.substr( 1, 6 ) ).replace( positionNorm, 1, "B" );
-				std::vector< std::string > splitLine = split( line, '\t' );
-
-				if ( trainedModel.count( atSecondPos ) > 0 ){
-
-					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atSecondPos ][ 1 ] ){
-
-						trainedModel[ atSecondPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
-					}
-				}
-				else{
-
-					trainedModel[ atSecondPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
-				}
-			}
-			else if ( i > brduDomLoc + 1 ){
-		
-				break;
-			}
-		}
-		displayProgress( prog, trainingData.size() );
-		prog++;
-	}
-
-	/*make a pore model file from the map */
-	export_poreModel( trainedModel, trainArgs.trainingOutputFilename );
-
-	/*if we opened a log file to write on, close it now */
-	if ( trainArgs.logFile == true ){
-		logFile.close();
-	}
-
-	/*some wrap-up messages */
-	std::cout << std::endl << "Done." << std::endl;
 
 	return 0;
 

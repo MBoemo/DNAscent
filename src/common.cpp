@@ -192,19 +192,19 @@ std::pair< int, int > subsequenceDynamicTimewarping( std::vector< double > &shor
 
 	/*initialisation: set the first row and first column of the dynamic time warping lattice */
 	double runningSum = 0.0;
-	for ( int i = 0; i < shortSignal.size(); i++ ){
+	for ( unsigned int i = 0; i < shortSignal.size(); i++ ){
 
 		runningSum += std::abs( shortSignal[ i ] - longSignal[ 0 ] );
 		dtw[ i ][ 0 ] = runningSum;
 	}
 
-	for ( int i = 0; i < longSignal.size(); i++ ){
+	for ( unsigned int i = 0; i < longSignal.size(); i++ ){
 
 		dtw[ 0 ][ i ] = std::abs( shortSignal[ 0 ] - longSignal[ i ] );
 	}
 
 	/*recursion: fill in the dynamic time warping lattice */
-	for ( int i = 1; i < shortSignal.size(); i++ ){
+	for ( unsigned int i = 1; i < shortSignal.size(); i++ ){
 
 		for ( int j = 1; j < longSignal.size(); j++ ){
 

@@ -19,8 +19,6 @@ import re
 import os
 import gc
 import math
-from joblib import Parallel, delayed #for parallel processing
-import multiprocessing #for parallel processing
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -37,12 +35,10 @@ Example:
   python prepHairpinTrainingData.py -r /path/to/reference.fasta -p 34 -m /path/to/template_median68pA.5mer.model -d /path/to/reads -o output.foh -t 20
 Required arguments are:
   -r,--reference            path to reference file in fasta format,
-  -p,--position             position of analogue in training data (valid arguments are 12, 34, or 56),
+  -p,--position             position of analogue in training data (valid arguments are 1and2, 3and4, or 5and6),
+  -n,--minimum              minimum threshold of reads that we're allowed to train on,
   -d,--data                 path to BAM file,
-  -m,--5mer-model           path to 5mer pore model file (provided by ONT) to normalise reads,
-  -o,--output               path to the output training .foh or detection .fdh file.
-Optional arguments are:
-  -t,--threads              number of threads (default is 1 thread)."""
+  -o,--output               path to the output training .foh or detection .fdh file."""
 
 	print s
 	exit(0)
@@ -54,10 +50,8 @@ def parseArguments(args):
 	a = arguments()
 
 	for i, argument in enumerate(args):
-		if argument == '-t' or argument == '--threads':
-			a.threads = int(args[i+1])
 			
-		elif argument == '-r' or argument == '--reference':
+		if argument == '-r' or argument == '--reference':
 			a.reference = str(args[i+1])
 
 		elif argument == '-d' or argument == '--data':
@@ -66,17 +60,17 @@ def parseArguments(args):
 		elif argument == '-p' or argument == '--position':
 			a.position = str(args[i+1])
 
-		elif argument == '-m' or argument == '--5mer-model':
-			a.fiveMerModel = str(args[i+1])
-
 		elif argument == '-o' or argument == '--output':
 			a.outFoh = str(args[i+1])
+
+		elif argument == '-n' or argument == '--minimum':
+			a.minReads = int(args[i+1])
 
 		elif argument == '-h' or argument == '--help':
 			splashHelp()
 
 	#check that required arguments are met
-	if not hasattr( a, 'fiveMerModel') or not hasattr( a, 'position') or not hasattr( a, 'data') or not hasattr( a, 'outFoh') or not hasattr( a, 'reference'):
+	if not hasattr( a, 'position') or not hasattr( a, 'data') or not hasattr( a, 'outFoh') or not hasattr( a, 'reference') or not hasattr( a, 'minReads'):
 		splashHelp() 
 
 	return a
@@ -191,101 +185,15 @@ def export_trainingDataToFoh( kmer2normalisedReads, filename ):
 
 		for read in kmer2normalisedReads[key]:
 			
-			readsStr = map( str, read )
-
-			f.write( ' '.join(readsStr) + '\n' )
+			rawStr = map( str, read[1] )
+			f.write( read[0] + '\n' )
+			f.write( ' '.join(rawStr) + '\n' )
 
 	f.close()
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def parallel_calculate_normalisedEvents(kmer, fast5Files, poreModelFile, progress):
-#	For hairpin training data - the large number of kmers makes it best to use parallel processing.  Uses a 5mer model to
-#	calculate the shift and scale pore-specific parameters for each individual read in a list of fast5 files
-#	ARGUMENTS
-#       ---------
-#	- kmer: redundant 6mer to identify the reads we're normalising
-#	  type: string
-#	- fast5Files: list of fast5 files whose events should be normalised
-#	  type: list of strings
-#	- poreModelFile: path to a pore model file.  This should be a 5mer model in the ONT format
-#	  type: string
-#	- progress: shows the kmer we're on to give an idea of progress
-#	  type: tuple of length two
-#	OUTPUTS
-#       -------
-#	- allNormalisedReads: a list, where each member is itself a list of events that have been normalised to the pore model
-#	  type: list
-
-	#open the 5mer model and make a map from the 5mer (string) to [mean,std] (list)
-	kmer2MeanStd = import_poreModel(poreModelFile)
-
-	#now iterate through all the relevant fast5 files so we only need to open the model file once
-	allNormalisedReads = []
-	for f5File in fast5Files:
-
-		#use 5mer model to calculate shift, scale, drift, and var to normalise events for the pore
-		f = h5py.File(f5File,'r')
-		path = '/Analyses/Basecall_1D_000/BaseCalled_template/Events'
-		Events = f[path]
-
-		A = np.zeros((3,3))
-		b = np.zeros((3,1))
-		for event in Events:
-			 if float(event[7]) > 0.3: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
-				model_5mer = event[4]
-				event_mean = float(event[0])
-				event_time = float(event[2])
-				model_mean = kmer2MeanStd[model_5mer][0]
-				model_std = kmer2MeanStd[model_5mer][1]
-				
-				#update matrix A
-				A[0,0] += 1/(model_std**2)
-				A[0,1] += 1/(model_std**2)*model_mean
-				A[0,2] += 1/(model_std**2)*event_time
-				A[1,1] += 1/(model_std**2)*model_mean**2
-				A[1,2] += 1/(model_std**2)*model_mean*event_time
-				A[2,2] += 1/(model_std**2)*event_time**2
-
-				#update vector b
-				b[0] += 1/(model_std**2)*event_mean
-				b[1] += 1/(model_std**2)*event_mean*model_mean
-				b[2] += 1/(model_std**2)*event_mean*event_time
-
-		#use symmetry of A
-		A[1,0] = A[0,1]
-		A[2,0] = A[0,2]
-		A[2,1] = A[1,2]
-
-		#solve Ax = b to find shift and scale
-		x = np.linalg.solve(A,b)
-		shift = x[0][0]
-		scale = x[1][0]
-		drift = x[2][0]
-
-		#go through the same events as before and normalise them to the pore model using scale and shift
-		normalisedEvents = []
-		for event in Events:
-			if float(event[7]) > 0.30: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
-				event_mean = float(event[0])
-				#ne = (event_mean - shift - drift*event_time)/scale
-				ne = (event_mean - shift )/scale
-				if ne > 50 and ne < 130:
-					normalisedEvents.append( ne )
-
-
-		allNormalisedReads.append(normalisedEvents)
-
-		f.close()
-
-	sys.stdout.write("\rNormalising for shift and scale... " + str(progress[0]) + " of " + str(progress[1]))
-	sys.stdout.flush()
-	
-	return (kmer, allNormalisedReads)
-
-
-#--------------------------------------------------------------------------------------------------------------------------------------
-def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, ROI, readsThreshold):
+def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
 #	Used to import training data from a hairpin primer of the form 5'-...NNNBNNN....NNNANNN...-3'.
 #	Creates a map from kmer (string) to a list of lists, where each list is comprised of events from a read
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
@@ -313,12 +221,26 @@ def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, ROI, readsT
 	
 	f = pysam.Samfile(BAMrecords,'r')
 
-	#analogueIndeces = range(ROI[0], ROI[0] + 7)
 	analogueIndeces = range(ROI[0] - 6, ROI[0] + 13)
 
 	#build up the map that takes each indiviudal 7mer to a list of fast5 files that produced the reads
-	kmer2Files = {}
+	kmer2raw = {}
+	kmer2filename = {}
+
+	#progress stuff
+	numOfRecords = f.count()
+	counter = 0
+	fraction = 0.0
+
+	f = pysam.Samfile(BAMrecords,'r')
 	for record in f:
+
+		#print progress
+		counter += 1
+		if round(float(counter)/float(numOfRecords),1) > fraction:
+			sys.stdout.write('\rBinning BAM records: [' + '#'*int(fraction*10) + ' '*int(10-fraction*10) + '] ' + str(int(fraction*10)) + '%')
+			sys.stdout.flush()
+			fraction += 0.1
 
 		sequence = record.query_sequence
 
@@ -350,30 +272,55 @@ def import_HairpinTrainingData(reference, BAMrecords, poreModelFile, ROI, readsT
 			#if we've identified the analogue domain completely, keep this read to train on
 			if ('-' not in analogueDomain) and (analogueDomain[9] == 'T') and (indelFree) and (LHS == reference[ROI[0]-6:ROI[0]]) and (RHS == reference[ROI[0]+7:ROI[0]+13]): 
 
-				if brD in kmer2Files:
-					kmer2Files[brD] += [readID]
+				#append to dictionary
+				if brD in kmer2filename:
+					kmer2filename[brD] += [readID] 
 				else:
-					kmer2Files[brD] = [readID]
-
-	#if a kmer has a number of associated reads that is below the minimum number of reads we need to train on, remove that kmer from the dictionary
-	filteredKmer2Files = {}
-
-	for key in kmer2Files:
-		if len(kmer2Files[key]) >= readsThreshold:
-			filteredKmer2Files[key] = kmer2Files[key]
-
-	del kmer2Files
+					kmer2filename[brD] = [readID]
 
 
-	#do the parallel processing, where a kmer (and associated reads) is given to each core.  use the maximum number of cores available
-	normalisedReadsTuples = Parallel(n_jobs = multiprocessing.cpu_count())(delayed(parallel_calculate_normalisedEvents)(key, filteredKmer2Files[key], poreModelFile, (i,len(filteredKmer2Files))) for i, key in enumerate(filteredKmer2Files))
+	#only generate training data for kmers that have enough reads
+	numOfRecords = len(kmer2filename.keys())
+	fraction = 0.0
+	for i, key in enumerate(kmer2filename):
 
-	#reshape the list of tuples from parallel processing into a dictionary
-	kmer2normalisedReads = {}
-	for entry in normalisedReadsTuples:
-		kmer2normalisedReads[entry[0]] = entry[1]
+		#print progress
+		if round(float(i)/float(numOfRecords),1) > fraction:
+			sys.stdout.write('\rConverting to pA: [' + '#'*int(fraction*10) + ' '*int(10-fraction*10) + '] ' + str(int(fraction*10)) + '%')
+			sys.stdout.flush()
+			fraction += 0.1
 
-	return kmer2normalisedReads
+
+		if len(kmer2filename[key]) >= readsThreshold:
+
+			kmer2raw[key] = []
+
+			for filename in kmer2filename[key]:
+
+				f_hdf5 = h5py.File(filename,'r')
+
+				#get raw
+				path = '/Raw/Reads'
+				read_number = f_hdf5[path].keys()[0]
+				raw_data = f_hdf5[path + '/' + read_number + '/Signal']
+				raw_array = np.zeros(raw_data.len(),dtype='int16')
+				raw_data.read_direct(raw_array)
+
+				#get read-specific parameters to normalise from raw to pA
+				scaling = f_hdf5['/UniqueGlobalKey/channel_id']
+				digitisation = scaling.attrs.get('digitisation')
+				offset = scaling.attrs.get('offset')
+				rng = scaling.attrs.get('range')
+				sample_rate = scaling.attrs.get('sampling_rate')
+
+				#normalise to pA
+				raw_array = ( raw_array + offset ) * (rng/digitisation)
+
+				#append to dictionary
+				kmer2raw[key] += [(sequence, raw_array.tolist())]
+
+				f_hdf5.close()
+	return kmer2raw
 
 
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
@@ -383,15 +330,15 @@ a = parseArguments(args)
 
 reference = import_reference(a.reference)
 
-if a.position == '12':
+if a.position == '1and2':
 	analogueLoc = reference.find('NTNNNNN')
 	adenineLoc = reference.find('NNNNNAN')
 
-elif a.position == '34':
+elif a.position == '3and4':
 	analogueLoc = reference.find('NNNTNNN')
 	adenineLoc = reference.find('NNNANNN')
 
-elif a.position == '56':
+elif a.position == '5and6':
 	analogueLoc = reference.find('NNNNNTN')
 	adenineLoc = reference.find('NANNNNN')
 
@@ -400,7 +347,7 @@ else:
 	splashHelp()
 
 #normalise the training data according to the ONT 5mer model
-trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, a.fiveMerModel, [analogueLoc, adenineLoc], 40)
+trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, [analogueLoc, adenineLoc], a.minReads)
 
 #write normalised reads to file in the .foh format
 export_trainingDataToFoh( trainingData, a.outFoh )
