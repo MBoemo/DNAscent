@@ -218,7 +218,7 @@ event_s create_event(size_t start, size_t end, double const *sums, double const 
 }
 
 
-void detect_events( double *raw, size_t raw_size, detector_param const edparam, event_s *allEvents ) {
+void detect_events( double *raw, size_t raw_size, detector_param const edparam, event_s *allEvents, size_t *numOfEvents  ) {
 
 	double *sums = calloc(raw_size + 1, sizeof(double));
 	double *sumsqs = calloc(raw_size + 1, sizeof(double));
@@ -263,6 +263,7 @@ void detect_events( double *raw, size_t raw_size, detector_param const edparam, 
 		}
 	}
 
+	*numOfEvents = n;
 	//event_s * allEvents = calloc(n, sizeof(event_s));
 
 	// First event -- starts at zero

@@ -20,6 +20,7 @@
 #include <iterator>
 #include <limits>
 #include <sstream>
+#include "error_handling.h"
 
 
 inline std::string reverseComplement( std::string DNAseq ){

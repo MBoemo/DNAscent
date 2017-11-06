@@ -1,4 +1,4 @@
-OBJS = common.o build_model.o data_IO.o Osiris_train.o event_detection.o event_handling.o Osiris.o
+OBJS = common.o build_model.o data_IO.o Osiris_train.o event_detection.o scrappie_common.o util.o event_handling.o Osiris.o
 CC = gcc
 CXX = g++
 DEBUG = -g
@@ -13,7 +13,13 @@ MAIN_EXECUTABLE = bin/Osiris
 $(MAIN_EXECUTABLE) : $(OBJS)
 	$(CXX) $(LFLAGS) $(OBJS) -o bin/Osiris $(LIBFLAGS)
 
-event_detection.o : src/scrappie/event_detection.h
+util.o : src/scrappie/util.h
+	$(CC) $(CFLAGS) src/scrappie/util.c
+
+scrappie_common.o : src/scrappie/util.h src/scrappie/scrappie_common.h
+	$(CC) $(CFLAGS) src/scrappie/scrappie_common.c
+
+event_detection.o : src/scrappie/scrappie_common.h src/scrappie/event_detection.h
 	$(CC) $(CFLAGS) src/scrappie/event_detection.c
 
 event_handling.o : src/event_handling.h src/poreModels.h

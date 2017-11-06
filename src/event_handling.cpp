@@ -7,20 +7,91 @@
 //----------------------------------------------------------
 
 #include "scrappie/event_detection.h"
+#include "scrappie/scrappie_common.h"
 #include "poreModels.h"
 #include "common.h"
 #include "data_IO.h"
 #include <math.h>
 #include <stdlib.h>
+#include <assert.h>
 
 
 #define _USE_MATH_DEFINES
 
 
-double pdfNormal( double mu, double stdv, double obs ){
+std::vector< double > reducedRowEchelonForm( std::vector< std::vector< double > > A, std::vector< double >b ){
+/*crude but functional algorithm that solves the linear system A*x = b */
+	
+	if ( A.size() != b.size() ) throw MismatchedDimensions();
 
-	return ( 1.0/sqrt( 2.0*pow( stdv, 2.0 )*M_PI ) )*exp( -pow( obs - mu, 2.0 )/( 2.0*pow( stdv, 2.0 ) ) );
+	int lead = 0;
+
+	for ( unsigned int i = 0; i < A.size(); i++ ){
+
+		A[i].push_back( b[i] );
+	}
+
+	int nRows = A.size() - 1;
+	int nCols = A[0].size() - 1;
+
+	for ( int r = 0; r <= nRows; ++r ){
+
+		if ( lead > nCols ){
+			break;
+		}
+
+		int i = r;
+
+		while ( A[i][lead] == 0 ){
+			
+			++i;
+
+			if ( i > nRows ){
+			
+				i = r;
+				++lead;
+				if ( lead > nCols ){
+					goto stop;
+				}
+			}
+		}
+
+		std::vector< std::vector< double > > B = A;
+		A[i] = B[r];
+		A[r] = B[i];
+
+		double normaliser = A[r][lead];
+		if ( A[r][lead] != 0 ){
+			
+			for ( int c = 0; c <= nCols; ++c ){
+
+				A[r][c] /= normaliser;
+			}
+		}
+
+		for ( int i = 0; i <= nRows; ++i ){
+
+			if ( i != r ){
+				normaliser = A[i][lead];
+				for ( int c = 0; c <= nCols; ++c ){ 
+					A[i][c] -= normaliser*A[r][c];
+				}
+			}
+		}
+		lead++;
+	}
+
+	stop:
+	std::vector< double > result;
+	result.reserve( A.size() );
+
+	for ( int i = 0; i < A.size(); i++ ){
+
+		result.push_back( A[i].back() );
+	}
+	return result;
 }
+
 
 double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
 
@@ -43,11 +114,9 @@ std::vector< std::pair< double, std::string > > matchWarping( std::vector< doubl
 
 	/*INITIALISATION */
 	dtw[0][0] = 0.0;
-	
 	double mu = FiveMer_model[basecall.substr(1,5)].first;
 	double stdv = FiveMer_model[basecall.substr(1,5)].second;
-
-	dtw[1][1] = fisherRaoMetric( mu, stdv, raw[1], raw_stdv[1] );//1 - pdfNormal( mu, stdv, raw[1] );
+	dtw[1][1] = fisherRaoMetric( mu, stdv, raw[1], raw_stdv[1] );
 
 	/*RECURSION: fill in the dynamic time warping lattice */
 	for ( int row = 1; row < numOfRaw; row++ ){
@@ -56,7 +125,6 @@ std::vector< std::pair< double, std::string > > matchWarping( std::vector< doubl
 
 			mu = FiveMer_model[basecall.substr(col, 5)].first;
 			stdv = FiveMer_model[basecall.substr(col, 5)].second;
-			//1 - pdfNormal( mu, stdv, raw[row] )
 			dtw[row][col] =  fisherRaoMetric( mu, stdv, raw[row], raw_stdv[row] ) + std::min( dtw[row - 1][col], std::min(dtw[row - 1][col - 1], 1.5*dtw[row - 1][col - 2] ) );	
 		}
 	}
@@ -97,13 +165,22 @@ std::vector< std::pair< double, std::string > > matchWarping( std::vector< doubl
 
 std::vector< double > normaliseEvents( read r ){
 
-	
-
+	/*allocate some space for event detection */
 	event_s *c_events = (event_s *)calloc( (r.raw).size(), sizeof( event_s) );
-	detect_events( &(r.raw)[0], (r.raw).size(), event_detection_defaults, c_events );
 
+	/*we can trim and segment the raw signal if needed - leave these commented out for now */
+	//unsigned int rawStart, rawEnd;
+	//trim_and_segment_raw( &(r.raw)[0], (r.raw).size(), &rawStart, &rawEnd );
+
+	/*use Scrappie to segment events based on the raw signal */
+	size_t numOfDetectedEvents;
+	detect_events( &(r.raw)[0], (r.raw).size(), event_detection_defaults, c_events, &numOfDetectedEvents );
+
+	/*we only care about the mean and stdv, so pull these out so they're easier to work with */
 	std::vector< double > events_mu;
+	events_mu.reserve( numOfDetectedEvents );
 	std::vector< double > events_stdv;
+	events_stdv.reserve( numOfDetectedEvents );
 
 	for ( int i = 0; c_events[i].mean != 0; i++ ){
 
@@ -112,8 +189,21 @@ std::vector< double > normaliseEvents( read r ){
 	}
 	free(c_events);
 
-
+	/*align 5mers to events using the basecall */
 	std::vector< std::pair< double, std::string > > event5merPairs = matchWarping( events_mu, events_stdv, r.basecalls );
+
+
+	/*normalise for shift/scale/drift */
+	std::vector< std::vector< double > > A( 3, std::vector< double >( 3, 0.0 ) );
+	std::vector< double > b( 3, 0.0 );
+
+	for ( auto event = event5merPairs.begin(); event < event5merPairs.end(); event++ ){
+
+		//build linear system
+
+	}
+
+
 
 	for ( unsigned int i = 0; i < event5merPairs.size(); i++ ){
 	

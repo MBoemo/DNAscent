@@ -36,7 +36,7 @@ typedef struct {
 
 
 
-void detect_events( double *raw, size_t raw_size, detector_param const edparam, event_s *allEvents );
+void detect_events( double *raw, size_t raw_size, detector_param const edparam, event_s *allEvents, size_t *numOfEvents  );
 
 #ifdef __cplusplus
 }
