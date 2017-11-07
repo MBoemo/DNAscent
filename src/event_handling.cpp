@@ -6,21 +6,16 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
-#include "scrappie/event_detection.h"
-#include "scrappie/scrappie_common.h"
-#include "poreModels.h"
-#include "common.h"
-#include "data_IO.h"
-#include <math.h>
-#include <stdlib.h>
-#include <assert.h>
+#include <iterator>
+#include "error_handling.h"
+
 
 
 #define _USE_MATH_DEFINES
 
 
-std::vector< double > reducedRowEchelonForm( std::vector< std::vector< double > > A, std::vector< double >b ){
-/*crude but functional algorithm that solves the linear system A*x = b */
+std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A, std::vector< double > b ){
+/*crude but functional algorithm that solves the linear system A*x = b by building an augmented matrix and transforming to reduced row echelon form */
 	
 	if ( A.size() != b.size() ) throw MismatchedDimensions();
 
@@ -125,7 +120,7 @@ std::vector< std::pair< double, std::string > > matchWarping( std::vector< doubl
 
 			mu = FiveMer_model[basecall.substr(col, 5)].first;
 			stdv = FiveMer_model[basecall.substr(col, 5)].second;
-			dtw[row][col] =  fisherRaoMetric( mu, stdv, raw[row], raw_stdv[row] ) + std::min( dtw[row - 1][col], std::min(dtw[row - 1][col - 1], 1.5*dtw[row - 1][col - 2] ) );	
+			dtw[row][col] =  fisherRaoMetric( mu, stdv, raw[row], raw_stdv[row] ) + std::min( dtw[row - 1][col], std::min(dtw[row - 1][col - 1], dtw[row - 1][col - 2] ) );	
 		}
 	}
 
@@ -159,6 +154,7 @@ std::vector< std::pair< double, std::string > > matchWarping( std::vector< doubl
 
 	}
 	std::reverse( event5merPairs.begin(), event5merPairs.end() );
+
 	return event5merPairs;
 }
 
@@ -193,38 +189,95 @@ std::vector< double > normaliseEvents( read r ){
 	std::vector< std::pair< double, std::string > > event5merPairs = matchWarping( events_mu, events_stdv, r.basecalls );
 
 
-	/*normalise for shift/scale/drift */
-	std::vector< std::vector< double > > A( 3, std::vector< double >( 3, 0.0 ) );
-	std::vector< double > b( 3, 0.0 );
+	/*calculate shift and scale */
+	std::vector< std::vector< double > > A( 2, std::vector< double >( 2, 0.0 ) );
+	std::vector< double > b( 2, 0.0 );
 
 	for ( auto event = event5merPairs.begin(); event < event5merPairs.end(); event++ ){
 
-		//build linear system
+		double event_mean = event -> first;
+		std::string fiveMer = event -> second;
+		double model_mean = FiveMer_model[fiveMer].first;
+		double model_stdv = FiveMer_model[fiveMer].second;
 
+		A[0][0] += 1.0/pow( model_stdv, 2 );
+		A[0][1] += 1.0/pow( model_stdv, 2 ) * model_mean;
+		A[1][1] += 1.0/pow( model_stdv, 2 ) * pow( model_mean, 2 );
+
+		b[0] += 1.0/pow( model_stdv, 2 ) * event_mean;
+		b[1] += 1.0/pow( model_stdv, 2 ) * event_mean * model_mean;
 	}
 
+	/*use the symmetry of A */
+	A[1][0] = A[0][1];
 
+	/*solve the linear system and pull out values for shift and scale */
+	std::vector< double > solution = solveLinearSystem( A, b );
 
-	for ( unsigned int i = 0; i < event5merPairs.size(); i++ ){
+	double shift = solution[0];
+	double scale = solution[1];
+
+	/*catch bad alignments and/or bad reads */
+	if ( std::abs( shift ) > 5 or std::abs( 1 - scale ) > 0.1 ){
+		return std::vector< double >();
+	} 
+
+	/*normalise event means for shift and scale */
+	std::vector< double > normalisedEvents;
+	normalisedEvents.reserve( event5merPairs.size() );
+
+	double rawEventMean, normalisedEventMean;
+	for ( unsigned int i = 0 ; i < event5merPairs.size(); i++ ){
+
+		rawEventMean = event5merPairs[i].first;
+		normalisedEventMean = ( rawEventMean - shift )/scale;
 	
-		std::cout << event5merPairs[i].first << " " << event5merPairs[i].second << " " << FiveMer_model[event5merPairs[i].second].first << std::endl;
+		if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 ){
+
+			normalisedEvents.push_back( normalisedEventMean );
+		}
 	}
-	std::cout << "--------------------------------------------------------" << std::endl;
+	return normalisedEvents;
 }
 
 
-std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std::string filename_foh ){
+std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std::string filename_foh, int threads ){
 
 	std::map< std::string, std::vector< std::vector< double > > > scaled_trainingData;
 
-	std::map< std::string, std::vector< read > > trainingData = import_foh( filename_foh );
+	/*import the training data from the .foh file */
+	std::vector< std::pair< std::string, std::vector< read > > > trainingData = import_foh( filename_foh );
 
-	for ( auto it = trainingData.cbegin(); it != trainingData.cend(); it++ ){
+	/*for each .foh entry, normalise the reads and add them to a map keyed by the .foh name */
+	std::cout << "Normalising for shift and scale..." << std::endl;
+	int prog = 0;
+	int total = trainingData.size();
 
+	#pragma omp parallel for default(none) shared(prog, total, scaled_trainingData, trainingData) num_threads(threads)
+	for ( auto it = trainingData.begin(); it < trainingData.end(); it++ ){
+
+		std::vector< std::vector< double > > parallelHolder;
+
+		/*for each read grouped under this foh name */
 		for ( auto r = (it -> second).begin(); r < (it -> second).end(); r++ ){
 
-			scaled_trainingData[ it -> first].push_back( normaliseEvents( *r ) );
+			std::vector< double > normalisedEvents = normaliseEvents( *r );
+
+			if ( normalisedEvents.size() > 0 ){
+
+				parallelHolder.push_back( normalisedEvents );
+			}
+		}
+
+		#pragma omp atomic
+		prog++;
+
+		#pragma omp critical
+		{
+			scaled_trainingData[ it -> first] = parallelHolder;
+			displayProgress( prog, total );
 		}
 	}
+	std::cout << std::endl << "Done." << std::endl;
 	return scaled_trainingData;
 }

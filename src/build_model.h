@@ -9,11 +9,9 @@
 #ifndef BUILD_MODEL_H
 #define BUILD_MODEL_H
 
-#include <fstream>
+
 #include <sstream>
 #include <string>
-#include <iostream>
-#include <algorithm>
 #include <map>
 
 

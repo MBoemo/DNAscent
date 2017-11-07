@@ -7,7 +7,10 @@
 //----------------------------------------------------------
 
 
+#include <limits>
+#include "math.h"
 #include "common.h"
+#include "error_handling.h"
 
 
 void displayProgress( int current, int total ){

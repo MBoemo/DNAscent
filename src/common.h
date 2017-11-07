@@ -11,16 +11,13 @@
 #define COMMON_H
 
 
-#include "math.h"
 #include <algorithm>
 #include <vector>
 #include <utility>
-#include <iostream>
-#include <map>
 #include <iterator>
-#include <limits>
+#include <map>
 #include <sstream>
-#include "error_handling.h"
+#include <iostream>
 
 
 inline std::string reverseComplement( std::string DNAseq ){

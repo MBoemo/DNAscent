@@ -7,6 +7,10 @@
 //----------------------------------------------------------
 
 
+#include <iostream>
+#include <algorithm>
+#include <fstream>
+#include <sstream>
 #include "data_IO.h"
 #include "error_handling.h"
 
@@ -123,27 +127,34 @@ void export_poreModel( std::map< std::string, std::vector< double > > &trainedMa
 }
 
 
-std::map< std::string, std::vector< read > > import_foh( std::string fohFilePath ){
+std::vector< std::pair< std::string, std::vector< read > > > import_foh( std::string fohFilePath ){
 	
 	std::cout << "Importing training data..." << std::endl;
 	std::ifstream file( fohFilePath );
 	
 	if ( not file.is_open() ) throw IOerror( fohFilePath );
 
-	std::string line;
-	std::string reference;
+	std::string line, sevenMerName, event;
 	std::string delim = " ";
-	std::string key;
-	std::string event;
 
-	std::map< std::string, std::vector< read > > kmer2raw;
+	std::vector< std::pair< std::string, std::vector< read > > > formattedFoh;
 	read currentRead;
+	std::vector< read > currentReads;
+
+	bool first = true;
 	
 	while ( std::getline( file, line ) ){
 
+		/*if this is a 7mer */
 		if ( line[0] == '>' ){
 
-			key = line.erase( 0, 1 );
+			if ( not first ){
+				formattedFoh.push_back( std::make_pair( sevenMerName, currentReads ) );
+				currentReads.clear();
+			}
+
+			sevenMerName = line.erase( 0, 1 );
+			first = false;
 		}
 		/*if this is a basecall line */
 		else if ( line[0] == 'A' or line[0] == 'T' or line[0] == 'G' or line[0] == 'C' ){
@@ -161,11 +172,14 @@ std::map< std::string, std::vector< read > > import_foh( std::string fohFilePath
 			}
 			currentRead.raw = rawSignals;
 
-			kmer2raw[ key ].push_back( currentRead );
+			currentReads.push_back( currentRead );
 		}
 	}
+	/*we have one more to do */
+	formattedFoh.push_back( std::make_pair( sevenMerName, currentReads ) );
+
 	std::cout << "Done." << std::endl;
-	return kmer2raw;
+	return formattedFoh;
 }
 
 

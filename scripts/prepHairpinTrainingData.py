@@ -238,7 +238,7 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
 		#print progress
 		counter += 1
 		if round(float(counter)/float(numOfRecords),1) > fraction:
-			sys.stdout.write('\rBinning BAM records: [' + '#'*int(fraction*10) + ' '*int(10-fraction*10) + '] ' + str(int(fraction*10)) + '%')
+			sys.stdout.write('\rBinning BAM records: [' + '#'*int(fraction*10) + ' '*int(10-fraction*10) + '] ' + str(int(fraction*100)) + '%')
 			sys.stdout.flush()
 			fraction += 0.1
 
@@ -286,7 +286,7 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
 
 		#print progress
 		if round(float(i)/float(numOfRecords),1) > fraction:
-			sys.stdout.write('\rConverting to pA: [' + '#'*int(fraction*10) + ' '*int(10-fraction*10) + '] ' + str(int(fraction*10)) + '%')
+			sys.stdout.write('\rConverting to pA: [' + '#'*int(fraction*10) + ' '*int(10-fraction*10) + '] ' + str(int(fraction*100)) + '%')
 			sys.stdout.flush()
 			fraction += 0.1
 

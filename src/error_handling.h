@@ -9,6 +9,14 @@
 #ifndef ERROR_HANDLING_H
 #define ERROR_HANDLING_H
 
+#include "scrappie/event_detection.h"
+#include "poreModels.h"
+#include "common.h"
+#include "data_IO.h"
+#include <math.h>
+#include <cmath>
+#include <stdlib.h>
+#include <assert.h>
 #include <exception>
 #include <string.h>
 
