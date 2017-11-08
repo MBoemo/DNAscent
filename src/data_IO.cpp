@@ -145,7 +145,7 @@ std::vector< std::pair< std::string, std::vector< read > > > import_foh( std::st
 	
 	while ( std::getline( file, line ) ){
 
-		/*if this is a 7mer */
+		/*if this is a 7mer name */
 		if ( line[0] == '>' ){
 
 			if ( not first ){

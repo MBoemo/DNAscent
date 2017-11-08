@@ -19,7 +19,7 @@ void displayProgress( int current, int total ){
 	double progress = (double) current / (double) total;
 	int barWidth = 70;
 
-	if ( progress < 1.0 ){
+	if ( progress <= 1.0 ){
 
 		std::cout << "[";
 		int pos = barWidth * progress;

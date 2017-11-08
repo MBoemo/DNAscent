@@ -123,7 +123,7 @@ int train_main( int argc, char** argv ){
 
 	Arguments trainArgs = parseTrainingArguments( argc, argv );
 
-	/*import what we need: a reference and training data (which we'll then normalise) */
+	/*import a reference from a fasta file and training data from a foh file.  Normalise the training data. */
 	std::string reference = import_reference( trainArgs.referenceFilename );
 	std::map< std::string, std::vector< std::vector< double > > > trainingData = segmentEvents( trainArgs.trainingDataFilename, trainArgs.threads );
 
@@ -134,9 +134,10 @@ int train_main( int argc, char** argv ){
 		if ( not logFile.is_open() ) throw IOerror( trainArgs.logFilename );
 	}
 
-	std::map< std::string, std::vector< double> > trainedModel; //fill this up with results from Penthus
+	std::map< std::string, std::vector< double> > trainedModel; //this will be filled up with results from Penthus
 	int prog = 0;
 
+	/*iterate on the 7mers that we want to train on */
 	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
 
 		std::string refLocal = reference;
@@ -145,9 +146,8 @@ int train_main( int argc, char** argv ){
 		std::string brduDomain = iter -> first;
 		std::string adenDomain = reverseComplement( brduDomain );
 
-		int positionNorm;
-		int adenDomLoc;
-		int brduDomLoc;
+		/*our reference has N's in it: replace them with the appropriate 7mer that we're goin to train on */
+		int positionNorm, adenDomLoc, brduDomLoc;
 
 		if ( trainArgs.analoguePosition == "1and2" ){
 			adenDomLoc = refLocal.find( "NNNNNAN" );

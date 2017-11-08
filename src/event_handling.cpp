@@ -95,14 +95,14 @@ double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
 }
 
 
-std::vector< std::pair< double, std::string > > matchWarping( std::vector< double > &raw, 
+std::vector< std::pair< int, std::string > > matchWarping( std::vector< double > &raw, 
 							      std::vector< double > &raw_stdv,
 						  	      std::string &basecall ){
 
 	unsigned int numOfRaw = raw.size();
 	unsigned int numOf5mers = basecall.size() - 4;
 
-	std::vector< std::pair< double, std::string > > event5merPairs;
+	std::vector< std::pair< int, std::string > > event5merPairs;
 
 	/*allocate the dynamic time warping lattice */
 	std::vector< std::vector< double > > dtw( numOfRaw, std::vector< double >( numOf5mers, std::numeric_limits< double >::max() ) );
@@ -130,7 +130,7 @@ std::vector< std::pair< double, std::string > > matchWarping( std::vector< doubl
 
 	while ( row > 0 and col > 1 ){
 
-		event5merPairs.push_back( std::make_pair( raw[row], basecall.substr(col, 5) ) );
+		event5merPairs.push_back( std::make_pair( row, basecall.substr(col, 5) ) );
 
 		std::vector< double > mCand = { dtw[row - 1][col], dtw[row - 1][col - 1], dtw[row - 1][col - 2] };
 
@@ -156,6 +156,37 @@ std::vector< std::pair< double, std::string > > matchWarping( std::vector< doubl
 	std::reverse( event5merPairs.begin(), event5merPairs.end() );
 
 	return event5merPairs;
+}
+
+
+std::vector< double > roughRescale( std::vector< double > means, std::string &basecalls ){
+
+	unsigned int numOfFiveMers = basecalls.size() - 4;
+
+	/*get a rough estimate for shift */
+	double event_sum = 0.0;
+	for ( unsigned int i = 0; i < means.size(); i++ ){
+
+		event_sum += means[i];
+	}
+
+	double fiveMer_sum = 0.0;
+	double fiveMer_sum_sq = 0.0;
+	for ( unsigned int i = 0; i < numOfFiveMers; i ++ ){
+
+		double fiveMer_mean = FiveMer_model[basecalls.substr(i, 5)].first;
+		fiveMer_sum += fiveMer_mean;
+		fiveMer_sum_sq = pow( fiveMer_mean, 2.0 );
+	}
+
+	double shift = event_sum / means.size() - fiveMer_sum / numOfFiveMers;
+
+	/*rescale using shift */
+	for ( unsigned int i = 0; i < means.size(); i++ ){
+
+		means[i] = means[i] - shift;
+	}
+	return means;
 }
 
 
@@ -185,9 +216,11 @@ std::vector< double > normaliseEvents( read r ){
 	}
 	free(c_events);
 
-	/*align 5mers to events using the basecall */
-	std::vector< std::pair< double, std::string > > event5merPairs = matchWarping( events_mu, events_stdv, r.basecalls );
+	/*rough calculation of shift and scale so that we can align events */
+	std::vector< double > rough_mu = roughRescale( events_mu, r.basecalls );
 
+	/*align 5mers to events using the basecall */
+	std::vector< std::pair< int, std::string > > event5merPairs = matchWarping( rough_mu, events_stdv, r.basecalls );
 
 	/*calculate shift and scale */
 	std::vector< std::vector< double > > A( 2, std::vector< double >( 2, 0.0 ) );
@@ -195,7 +228,7 @@ std::vector< double > normaliseEvents( read r ){
 
 	for ( auto event = event5merPairs.begin(); event < event5merPairs.end(); event++ ){
 
-		double event_mean = event -> first;
+		double event_mean = events_mu[ event -> first ];
 		std::string fiveMer = event -> second;
 		double model_mean = FiveMer_model[fiveMer].first;
 		double model_stdv = FiveMer_model[fiveMer].second;
@@ -217,21 +250,15 @@ std::vector< double > normaliseEvents( read r ){
 	double shift = solution[0];
 	double scale = solution[1];
 
-	/*catch bad alignments and/or bad reads */
-	if ( std::abs( shift ) > 5 or std::abs( 1 - scale ) > 0.1 ){
-		return std::vector< double >();
-	} 
-
 	/*normalise event means for shift and scale */
 	std::vector< double > normalisedEvents;
 	normalisedEvents.reserve( event5merPairs.size() );
 
-	double rawEventMean, normalisedEventMean;
+	double normalisedEventMean;
 	for ( unsigned int i = 0 ; i < event5merPairs.size(); i++ ){
 
-		rawEventMean = event5merPairs[i].first;
-		normalisedEventMean = ( rawEventMean - shift )/scale;
-	
+		normalisedEventMean = ( events_mu[i] - shift )/scale;
+
 		if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 ){
 
 			normalisedEvents.push_back( normalisedEventMean );
@@ -263,21 +290,19 @@ std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std
 
 			std::vector< double > normalisedEvents = normaliseEvents( *r );
 
-			if ( normalisedEvents.size() > 0 ){
-
-				parallelHolder.push_back( normalisedEvents );
-			}
+			parallelHolder.push_back( normalisedEvents );
 		}
 
 		#pragma omp atomic
 		prog++;
 
 		#pragma omp critical
-		{
+		{	
 			scaled_trainingData[ it -> first] = parallelHolder;
 			displayProgress( prog, total );
 		}
 	}
+	displayProgress( total, total );
 	std::cout << std::endl << "Done." << std::endl;
 	return scaled_trainingData;
 }
