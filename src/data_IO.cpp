@@ -134,7 +134,7 @@ std::vector< std::pair< std::string, std::vector< read > > > import_foh( std::st
 	
 	if ( not file.is_open() ) throw IOerror( fohFilePath );
 
-	std::string line, sevenMerName, event;
+	std::string line, sevenMerName, event, bound;
 	std::string delim = " ";
 
 	std::vector< std::pair< std::string, std::vector< read > > > formattedFoh;
@@ -142,11 +142,13 @@ std::vector< std::pair< std::string, std::vector< read > > > import_foh( std::st
 	std::vector< read > currentReads;
 
 	bool first = true;
+	int modSwitch = 0;
 	
 	while ( std::getline( file, line ) ){
 
 		/*if this is a 7mer name */
 		if ( line[0] == '>' ){
+			assert( modSwitch == 0 );
 
 			if ( not first ){
 				formattedFoh.push_back( std::make_pair( sevenMerName, currentReads ) );
@@ -157,11 +159,20 @@ std::vector< std::pair< std::string, std::vector< read > > > import_foh( std::st
 			first = false;
 		}
 		/*if this is a basecall line */
-		else if ( line[0] == 'A' or line[0] == 'T' or line[0] == 'G' or line[0] == 'C' ){
+		else if ( modSwitch == 0 ){
 			currentRead.basecalls = line;
+			modSwitch++;
+			modSwitch = modSwitch % 3;
+		}
+		/*if this is a bounds line */
+		else if ( modSwitch == 1 ){
+			(currentRead.ROIbounds).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
+			(currentRead.ROIbounds).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
+			modSwitch++;
+			modSwitch = modSwitch % 3;
 		}
 		/*if this is a raw signal line */
-		else{
+		else if ( modSwitch == 2 ){
 			std::vector< double > rawSignals;
 
 			std::istringstream ss( line );
@@ -173,6 +184,8 @@ std::vector< std::pair< std::string, std::vector< read > > > import_foh( std::st
 			currentRead.raw = rawSignals;
 
 			currentReads.push_back( currentRead );
+			modSwitch++;
+			modSwitch = modSwitch % 3;
 		}
 	}
 	/*we have one more to do */

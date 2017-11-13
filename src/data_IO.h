@@ -17,6 +17,7 @@
 struct read{
 
 	std::string basecalls;
+	std::pair< int, int > ROIbounds;
 	std::vector< double > raw;
 };
 

@@ -9,6 +9,6 @@
 #ifndef EVENT_HANDLING_H
 #define EVENT_HANDLING_H
 
-std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std::string, int );
+std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std::string, int, bool );
 
 #endif

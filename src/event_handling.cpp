@@ -91,8 +91,6 @@ std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A,
 
 double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
 
-	//return ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )/pow( stdv2, 2.0 );
-
 	double F = sqrt( ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )*( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 + stdv2, 2.0 ) ) );
 
 	return sqrt(2)*log( (F + pow( mu1 - mu2, 2.0 ) + 2*( pow( stdv1, 2.0 ) + pow( stdv2, 2.0 ) ) ) / ( 4 * stdv1 * stdv2 ) );
@@ -113,6 +111,7 @@ std::vector< std::pair< int, std::string > > matchWarping( std::vector< double >
 
 	/*INITIALISATION */
 	dtw[0][0] = 0.0;
+	dtw[1][1] = 0.0;
 	double mu = FiveMer_model[basecall.substr(1,5)].first;
 	double stdv = FiveMer_model[basecall.substr(1,5)].second;
 	dtw[1][1] = fisherRaoMetric( mu, stdv, raw[1], raw_stdv[1] );
@@ -131,12 +130,18 @@ std::vector< std::pair< int, std::string > > matchWarping( std::vector< double >
 	/*TERMINATION: calculate the optimal warping path */
 	int col = numOf5mers - 1;
 	int row = numOfRaw - 1;
+	event5merPairs.push_back( std::make_pair( row, basecall.substr(col, 5) ) );
 
-	while ( row > 0 and col > 1 ){
+	while ( row > 0 and col > 0 ){
 
-		event5merPairs.push_back( std::make_pair( row, basecall.substr(col, 5) ) );
+		std::vector< double > mCand;
 
-		std::vector< double > mCand = { dtw[row - 1][col], dtw[row - 1][col - 1], dtw[row - 1][col - 2] };
+		if (col == 1){
+			mCand = { dtw[row - 1][col], dtw[row - 1][col - 1] };
+		}
+		else {
+			mCand = { dtw[row - 1][col], dtw[row - 1][col - 1], dtw[row - 1][col - 2] };
+		}
 
 		int m = std::min_element( mCand.begin(), mCand.end() ) - mCand.begin();
 
@@ -156,6 +161,7 @@ std::vector< std::pair< int, std::string > > matchWarping( std::vector< double >
 			exit(EXIT_FAILURE);
 		}
 
+		event5merPairs.push_back( std::make_pair( row, basecall.substr(col, 5) ) );
 	}
 	std::reverse( event5merPairs.begin(), event5merPairs.end() );
 
@@ -192,7 +198,7 @@ std::vector< double > roughRescale( std::vector< double > means, std::string &ba
 }
 
 
-std::vector< double > normaliseEvents( read r ){
+std::vector< double > normaliseEvents( read r, bool clip ){
 
 	/*allocate some space for event detection */
 	event_s *c_events = (event_s *)calloc( (r.raw).size(), sizeof( event_s) );
@@ -223,6 +229,14 @@ std::vector< double > normaliseEvents( read r ){
 
 	/*align 5mers to events using the basecall */
 	std::vector< std::pair< int, std::string > > event5merPairs = matchWarping( rough_mu, events_stdv, r.basecalls );
+
+	//FOR DEBUGGING - print the alignment
+	//for ( int i = 0; i < event5merPairs.size(); i++ ){
+	//
+	//	std::cout << rough_mu[event5merPairs[i].first] << " " << event5merPairs[i].second << " " << FiveMer_model[event5merPairs[i].second].first << std::endl;
+	//}
+	//std::cout << "------------" << std::endl;
+	//END
 
 	/*calculate shift and scale */
 	std::vector< std::vector< double > > A( 2, std::vector< double >( 2, 0.0 ) );
@@ -261,16 +275,24 @@ std::vector< double > normaliseEvents( read r ){
 
 		normalisedEventMean = ( events_mu[i] - shift )/scale;
 
-		if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 ){
+		if ( clip ){
+			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 and i >= (r.ROIbounds).first and i <= (r.ROIbounds).second ){
 
-			normalisedEvents.push_back( normalisedEventMean );
+				normalisedEvents.push_back( normalisedEventMean );
+			}
+		}
+		else{
+			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 ){
+
+				normalisedEvents.push_back( normalisedEventMean );
+			}
 		}
 	}
 	return normalisedEvents;
 }
 
 
-std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std::string filename_foh, int threads ){
+std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std::string filename_foh, int threads, bool clip ){
 
 	std::map< std::string, std::vector< std::vector< double > > > scaled_trainingData;
 
@@ -282,7 +304,7 @@ std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std
 	int prog = 0;
 	int total = trainingData.size();
 
-	#pragma omp parallel for default(none) shared(prog, total, scaled_trainingData, trainingData) num_threads(threads)
+	#pragma omp parallel for default(none) shared(prog, total, scaled_trainingData, trainingData, clip) num_threads(threads)
 	for ( auto it = trainingData.begin(); it < trainingData.end(); it++ ){
 
 		std::vector< std::vector< double > > parallelHolder;
@@ -290,7 +312,7 @@ std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std
 		/*for each read grouped under this foh name */
 		for ( auto r = (it -> second).begin(); r < (it -> second).end(); r++ ){
 
-			std::vector< double > normalisedEvents = normaliseEvents( *r );
+			std::vector< double > normalisedEvents = normaliseEvents( *r, clip );
 
 			parallelHolder.push_back( normalisedEvents );
 		}

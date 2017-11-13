@@ -185,8 +185,9 @@ def export_trainingDataToFoh( kmer2normalisedReads, filename ):
 
 		for read in kmer2normalisedReads[key]:
 			
-			rawStr = map( str, read[1] )
+			rawStr = map( str, read[2] )
 			f.write( read[0] + '\n' )
+			f.write( read[1] + '\n' )
 			f.write( ' '.join(rawStr) + '\n' )
 
 	f.close()
@@ -274,9 +275,9 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
 
 				#append to dictionary
 				if brD in kmer2filename:
-					kmer2filename[brD] += [readID] 
+					kmer2filename[brD] += [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]), sequence ) ]
 				else:
-					kmer2filename[brD] = [readID]
+					kmer2filename[brD] = [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]), sequence ) ]
 
 
 	#only generate training data for kmers that have enough reads
@@ -295,7 +296,7 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
 
 			kmer2raw[key] = []
 
-			for filename in kmer2filename[key]:
+			for filename, bounds, sequence in kmer2filename[key]:
 
 				f_hdf5 = h5py.File(filename,'r')
 
@@ -317,7 +318,7 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
 				raw_array = ( raw_array + offset ) * (rng/digitisation)
 
 				#append to dictionary
-				kmer2raw[key] += [(sequence, raw_array.tolist())]
+				kmer2raw[key] += [(sequence, bounds, raw_array.tolist())]
 
 				f_hdf5.close()
 	return kmer2raw

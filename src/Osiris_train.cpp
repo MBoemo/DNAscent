@@ -31,7 +31,7 @@ static const char *help=
 "  -o,--output               path to the output pore model file that Osiris will train.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
-"  -sc,--soft-clipping       restrict training to this window size around a region of interest (default is off),\n"
+"  -c,--clipping             restrict training to a small window around the region of interest,\n"
 "  -l,--log-file             training log file for the training values at each position on the reference (default is none).\n";
 
 struct Arguments {
@@ -42,8 +42,7 @@ struct Arguments {
 	bool logFile;
 	std::string logFilename;
 	int threads;
-	bool softClip;
-	int SCwindow;
+	bool clip;
 };
 
 Arguments parseTrainingArguments( int argc, char** argv ){
@@ -61,7 +60,7 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 
 	/*defaults - we'll override these if the option was specified by the user */
 	trainArgs.threads = 1;
-	trainArgs.softClip = false;
+	trainArgs.clip = false;
 	trainArgs.logFile = false;
 
 	/*parse the command line arguments */
@@ -99,12 +98,10 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 			trainArgs.analoguePosition = strArg;
 			i+=2;
 		}
-		else if ( flag == "-sc" or flag == "--soft-clipping" ){
+		else if ( flag == "-c" or flag == "--clipping" ){
 
-			trainArgs.softClip = true;
-			std::string strArg( argv[ i + 1 ] );
-			trainArgs.SCwindow = std::stoi( strArg.c_str() );
-			i+=2;
+			trainArgs.clip = true;
+			i++;
 		}
 		else if ( flag == "-l" or flag == "--log-file" ){
 
@@ -125,7 +122,7 @@ int train_main( int argc, char** argv ){
 
 	/*import a reference from a fasta file and training data from a foh file.  Normalise the training data. */
 	std::string reference = import_reference( trainArgs.referenceFilename );
-	std::map< std::string, std::vector< std::vector< double > > > trainingData = segmentEvents( trainArgs.trainingDataFilename, trainArgs.threads );
+	std::map< std::string, std::vector< std::vector< double > > > trainingData = segmentEvents( trainArgs.trainingDataFilename, trainArgs.threads, trainArgs.clip );
 
 	/*log file IO - if we specified that we want a log file, open it here */
 	std::ofstream logFile;
@@ -180,18 +177,13 @@ int train_main( int argc, char** argv ){
 			}
 		}
 
-		/*if soft clipping was specified, truncate the reference and events with dynamic time warping */
-		if ( trainArgs.softClip == true ){
+		/*if clipping was specified, adjust the reference accordingly */
+		if ( trainArgs.clip == true ){
 
-			if ( ( brduDomLoc - trainArgs.SCwindow < 0 ) or ( brduDomLoc + trainArgs.SCwindow > refLocal.length() ) ){
+			assert( ( brduDomLoc - 6 >= 0 ) and ( brduDomLoc + 13 <= refLocal.length() ) );
 
-				std::cout << "Exiting with error.  Soft clipping window exceeds reference length.  Reduce window size." << std::endl;
-				exit(EXIT_FAILURE);
-			}
-
-			refLocal = refLocal.substr( brduDomLoc - trainArgs.SCwindow, 6 + 2*trainArgs.SCwindow );
-			brduDomLoc = trainArgs.SCwindow;
-			events = filterEvents( refLocal, SixMer_model, events );
+			refLocal = refLocal.substr( brduDomLoc - 6, 19 );
+			brduDomLoc = 6;
 		}
 
 		/*do the training */
