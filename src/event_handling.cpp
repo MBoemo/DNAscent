@@ -7,6 +7,7 @@
 //----------------------------------------------------------
 
 #include <iterator>
+#include <math.h>
 #include "error_handling.h"
 
 
@@ -90,8 +91,11 @@ std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A,
 
 double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
 
-	return ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )/pow( stdv2, 2.0 );
+	//return ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )/pow( stdv2, 2.0 );
 
+	double F = sqrt( ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )*( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 + stdv2, 2.0 ) ) );
+
+	return sqrt(2)*log( (F + pow( mu1 - mu2, 2.0 ) + 2*( pow( stdv1, 2.0 ) + pow( stdv2, 2.0 ) ) ) / ( 4 * stdv1 * stdv2 ) );
 }
 
 
@@ -171,12 +175,10 @@ std::vector< double > roughRescale( std::vector< double > means, std::string &ba
 	}
 
 	double fiveMer_sum = 0.0;
-	double fiveMer_sum_sq = 0.0;
 	for ( unsigned int i = 0; i < numOfFiveMers; i ++ ){
 
 		double fiveMer_mean = FiveMer_model[basecalls.substr(i, 5)].first;
 		fiveMer_sum += fiveMer_mean;
-		fiveMer_sum_sq = pow( fiveMer_mean, 2.0 );
 	}
 
 	double shift = event_sum / means.size() - fiveMer_sum / numOfFiveMers;

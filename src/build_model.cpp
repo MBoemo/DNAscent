@@ -13,6 +13,7 @@
 #include "build_model.h"
 #include "poreSpecificParameters.h"
 #include "../Penthus/src/hmm.h"
+#include "../Penthus/src/states.h"
 #include "data_IO.h"
 
 

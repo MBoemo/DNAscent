@@ -4,7 +4,7 @@ CXX = g++
 DEBUG = -g
 LIBFLAGS = -L Penthus/ -l Penthus -fopenmp
 CXXFLAGS = -Wall -c -O2 -std=c++11 $(DEBUG)
-CFLAGS = -Wall -c -O2 $(DEBUG)
+CFLAGS = -Wall -c -std=c99 -O2 $(DEBUG)
 LFLAGS = -Wall -O2 $(DEBUG)
 
 
