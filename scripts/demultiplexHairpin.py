@@ -28,7 +28,7 @@ Example:
 Required arguments are:
   -r,--reference            path to reference file in fasta format,
   -d,--data                 path to top level directory of ONT reads,
-  -p,--position             position of analogue in training data (valid arguments are 12, 34, or 56).
+  -p,--position             position of analogue in training data (valid arguments are 1and2, 3and4, or 5and6).
 Optional arguments are:
   -t,--threads              number of threads (default is 1 thread)."""
 
@@ -194,15 +194,15 @@ out_files = list()
 
 reference = import_reference(a.reference)
 
-if a.position == '12':
+if a.position == '1and2':
 	analogueLoc = reference.find('NTNNNNN')
 	adenineLoc = reference.find('NNNNNAN')
 
-elif a.position == '34':
+elif a.position == '3and4':
 	analogueLoc = reference.find('NNNTNNN')
 	adenineLoc = reference.find('NNNANNN')
 
-elif a.position == '56':
+elif a.position == '5and6':
 	analogueLoc = reference.find('NNNNNTN')
 	adenineLoc = reference.find('NANNNNN')
 

@@ -7,7 +7,6 @@ CXXFLAGS = -Wall -c -O2 -std=c++11 $(DEBUG)
 CFLAGS = -Wall -c -std=c99 -O2 $(DEBUG)
 LFLAGS = -Wall -O2 $(DEBUG)
 
-
 MAIN_EXECUTABLE = bin/Osiris
 
 $(MAIN_EXECUTABLE) : $(OBJS)
