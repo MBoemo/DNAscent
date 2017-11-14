@@ -10,10 +10,7 @@
 #include <math.h>
 #include "error_handling.h"
 
-
-
 #define _USE_MATH_DEFINES
-
 
 std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A, std::vector< double > b ){
 /*crude but functional algorithm that solves the linear system A*x = b by building an augmented matrix and transforming to reduced row echelon form */
@@ -97,14 +94,14 @@ double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
 }
 
 
-std::vector< std::pair< int, std::string > > matchWarping( std::vector< double > &raw, 
-							      std::vector< double > &raw_stdv,
-						  	      std::string &basecall ){
+std::vector< std::pair< int, int > > matchWarping( std::vector< double > &raw, 
+							   std::vector< double > &raw_stdv,
+						  	   std::string &basecall ){
 
 	unsigned int numOfRaw = raw.size();
 	unsigned int numOf5mers = basecall.size() - 4;
 
-	std::vector< std::pair< int, std::string > > event5merPairs;
+	std::vector< std::pair< int, int > > eventSeqLocPairs;
 
 	/*allocate the dynamic time warping lattice */
 	std::vector< std::vector< double > > dtw( numOfRaw, std::vector< double >( numOf5mers, std::numeric_limits< double >::max() ) );
@@ -127,10 +124,10 @@ std::vector< std::pair< int, std::string > > matchWarping( std::vector< double >
 		}
 	}
 
-	/*TERMINATION: calculate the optimal warping path */
+	/*TRACEBACK: calculate the optimal warping path */
 	int col = numOf5mers - 1;
 	int row = numOfRaw - 1;
-	event5merPairs.push_back( std::make_pair( row, basecall.substr(col, 5) ) );
+	eventSeqLocPairs.push_back( std::make_pair( row, col ) );
 
 	while ( row > 0 and col > 0 ){
 
@@ -161,11 +158,11 @@ std::vector< std::pair< int, std::string > > matchWarping( std::vector< double >
 			exit(EXIT_FAILURE);
 		}
 
-		event5merPairs.push_back( std::make_pair( row, basecall.substr(col, 5) ) );
+		eventSeqLocPairs.push_back( std::make_pair( row, col ) );
 	}
-	std::reverse( event5merPairs.begin(), event5merPairs.end() );
+	std::reverse( eventSeqLocPairs.begin(), eventSeqLocPairs.end() );
 
-	return event5merPairs;
+	return eventSeqLocPairs;
 }
 
 
@@ -228,12 +225,12 @@ std::vector< double > normaliseEvents( read r, bool clip ){
 	std::vector< double > rough_mu = roughRescale( events_mu, r.basecalls );
 
 	/*align 5mers to events using the basecall */
-	std::vector< std::pair< int, std::string > > event5merPairs = matchWarping( rough_mu, events_stdv, r.basecalls );
+	std::vector< std::pair< int, int > > eventSeqLocPairs = matchWarping( rough_mu, events_stdv, r.basecalls );
 
 	//FOR DEBUGGING - print the alignment
-	//for ( int i = 0; i < event5merPairs.size(); i++ ){
+	//for ( int i = 0; i < eventSeqLocPairs.size(); i++ ){
 	//
-	//	std::cout << rough_mu[event5merPairs[i].first] << " " << event5merPairs[i].second << " " << FiveMer_model[event5merPairs[i].second].first << std::endl;
+	//	std::cout << rough_mu[eventSeqLocPairs[i].first] << " " << eventSeqLocPairs[i].second << " " << FiveMer_model[eventSeqLocPairs[i].second].first << std::endl;
 	//}
 	//std::cout << "------------" << std::endl;
 	//END
@@ -242,10 +239,10 @@ std::vector< double > normaliseEvents( read r, bool clip ){
 	std::vector< std::vector< double > > A( 2, std::vector< double >( 2, 0.0 ) );
 	std::vector< double > b( 2, 0.0 );
 
-	for ( auto event = event5merPairs.begin(); event < event5merPairs.end(); event++ ){
+	for ( auto event = eventSeqLocPairs.begin(); event < eventSeqLocPairs.end(); event++ ){
 
 		double event_mean = events_mu[ event -> first ];
-		std::string fiveMer = event -> second;
+		std::string fiveMer = (r.basecalls).substr(event -> second, 5);
 		double model_mean = FiveMer_model[fiveMer].first;
 		double model_stdv = FiveMer_model[fiveMer].second;
 
@@ -268,15 +265,15 @@ std::vector< double > normaliseEvents( read r, bool clip ){
 
 	/*normalise event means for shift and scale */
 	std::vector< double > normalisedEvents;
-	normalisedEvents.reserve( event5merPairs.size() );
+	normalisedEvents.reserve( eventSeqLocPairs.size() );
 
 	double normalisedEventMean;
-	for ( unsigned int i = 0 ; i < event5merPairs.size(); i++ ){
+	for ( unsigned int i = 0 ; i < eventSeqLocPairs.size(); i++ ){
 
 		normalisedEventMean = ( events_mu[i] - shift )/scale;
 
 		if ( clip ){
-			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 and i >= (r.ROIbounds).first and i <= (r.ROIbounds).second ){
+			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 and eventSeqLocPairs[i].second >= (r.ROIbounds).first - 10 and eventSeqLocPairs[i].second <= (r.ROIbounds).second + 10 ){
 
 				normalisedEvents.push_back( normalisedEventMean );
 			}

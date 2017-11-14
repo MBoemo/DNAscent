@@ -134,6 +134,8 @@ int train_main( int argc, char** argv ){
 	std::map< std::string, std::vector< double> > trainedModel; //this will be filled up with results from Penthus
 	int prog = 0;
 
+	std::cout << "Training..." << std::endl;
+
 	/*iterate on the 7mers that we want to train on */
 	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
 
@@ -180,10 +182,10 @@ int train_main( int argc, char** argv ){
 		/*if clipping was specified, adjust the reference accordingly */
 		if ( trainArgs.clip == true ){
 
-			assert( ( brduDomLoc - 6 >= 0 ) and ( brduDomLoc + 13 <= refLocal.length() ) );
+			assert( ( brduDomLoc - 16 >= 0 ) and ( brduDomLoc + 23 <= refLocal.length() ) );
 
-			refLocal = refLocal.substr( brduDomLoc - 6, 19 );
-			brduDomLoc = 6;
+			refLocal = refLocal.substr( brduDomLoc - 16, 39 );
+			brduDomLoc = 16;
 		}
 
 		/*do the training */
@@ -254,6 +256,7 @@ int train_main( int argc, char** argv ){
 		displayProgress( prog, trainingData.size() );
 		prog++;
 	}
+	displayProgress( trainingData.size(), trainingData.size() );
 
 	/*make a pore model file from the map */
 	export_poreModel( trainedModel, trainArgs.trainingOutputFilename );
