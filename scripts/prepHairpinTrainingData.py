@@ -194,7 +194,27 @@ def export_trainingDataToFoh( kmer2normalisedReads, filename ):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
+def displayProgress(current, total):
+
+	barWidth = 70
+	progress = float(current)/float(total)
+
+	if progress <= 1.0:
+		sys.stdout.write('[')
+		pos = int(barWidth*progress)
+		for i in range(barWidth):
+			if i < pos:
+				sys.stdout.write('=')
+			elif i == pos:
+				sys.stdout.write('>')
+			else:
+				sys.stdout.write(' ')
+		sys.stdout.write('] '+str(int(progress*100))+' %\r')
+		sys.stdout.flush()
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------
+def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFilename):
 #	Used to import training data from a hairpin primer of the form 5'-...NNNBNNN....NNNANNN...-3'.
 #	Creates a map from kmer (string) to a list of lists, where each list is comprised of events from a read
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
@@ -225,7 +245,6 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
 	analogueIndeces = range(ROI[0] - 6, ROI[0] + 13)
 
 	#build up the map that takes each indiviudal 7mer to a list of fast5 files that produced the reads
-	kmer2raw = {}
 	kmer2filename = {}
 
 	#progress stuff
@@ -233,15 +252,14 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
 	counter = 0
 	fraction = 0.0
 
+	print "Binning BAM records..."
+
 	f = pysam.Samfile(BAMrecords,'r')
 	for record in f:
 
 		#print progress
 		counter += 1
-		if round(float(counter)/float(numOfRecords),1) > fraction:
-			sys.stdout.write('\rBinning BAM records: [' + '#'*int(fraction*10) + ' '*int(10-fraction*10) + '] ' + str(int(fraction*100)) + '%')
-			sys.stdout.flush()
-			fraction += 0.1
+		displayProgress( counter, numOfRecords)
 
 		sequence = record.query_sequence
 
@@ -275,28 +293,29 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
 
 				#append to dictionary
 				if brD in kmer2filename:
-					kmer2filename[brD] += [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]), sequence ) ]
+					kmer2filename[brD] += [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]) ) ]
 				else:
-					kmer2filename[brD] = [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]), sequence ) ]
+					kmer2filename[brD] = [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]) ) ]
 
+	displayProgress( numOfRecords, numOfRecords)
+	f.close()
+	print "\nDone.\nConverting signal to pA..."
 
-	#only generate training data for kmers that have enough reads
+	#only generate training data for kmers that have enough reads and write the data to the foh file
 	numOfRecords = len(kmer2filename.keys())
 	fraction = 0.0
+	f_out = open(outFilename,'w')
 	for i, key in enumerate(kmer2filename):
 
 		#print progress
-		if round(float(i)/float(numOfRecords),1) > fraction:
-			sys.stdout.write('\rConverting to pA: [' + '#'*int(fraction*10) + ' '*int(10-fraction*10) + '] ' + str(int(fraction*100)) + '%')
-			sys.stdout.flush()
-			fraction += 0.1
+		displayProgress( i, numOfRecords)
 
 
 		if len(kmer2filename[key]) >= readsThreshold:
 
-			kmer2raw[key] = []
+			f_out.write( '>'+key+'\n' )
 
-			for filename, bounds, sequence in kmer2filename[key]:
+			for filename, bounds in kmer2filename[key]:
 
 				f_hdf5 = h5py.File(filename,'r')
 
@@ -306,6 +325,11 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
 				raw_data = f_hdf5[path + '/' + read_number + '/Signal']
 				raw_array = np.zeros(raw_data.len(),dtype='int16')
 				raw_data.read_direct(raw_array)
+
+				#get sequence
+				fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
+				fastq = f_hdf5[fast5path2fastq].value
+				sequence = fastq.split('\n')[1]
 
 				#get read-specific parameters to normalise from raw to pA
 				scaling = f_hdf5['/UniqueGlobalKey/channel_id']
@@ -317,20 +341,26 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold):
 				#normalise to pA
 				raw_array = ( raw_array + offset ) * (rng/digitisation)
 
-				#append to dictionary
-				kmer2raw[key] += [(sequence, bounds, raw_array.tolist())]
+				#write to the foh file
+				f_out.write( sequence + '\n' )
+				f_out.write( bounds + '\n' )
+				f_out.write( ' '.join(map(str,raw_array.tolist())) + '\n' )
 
 				f_hdf5.close()
-	return kmer2raw
-
+	displayProgress( numOfRecords, numOfRecords)
+	f_out.close()
+	print "\nDone."
 
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
+
 #parse arguments
 args = sys.argv
 a = parseArguments(args)
 
+#import the reference from the specified fasta file
 reference = import_reference(a.reference)
 
+#set the B and A domain locations using the reference
 if a.position == '1and2':
 	analogueLoc = reference.find('NTNNNNN')
 	adenineLoc = reference.find('NNNNNAN')
@@ -347,11 +377,6 @@ else:
 	print 'Exiting with error.  Invalid argument passed to -p or --position.'
 	splashHelp()
 
-#normalise the training data according to the ONT 5mer model
-trainingData = import_HairpinTrainingData(import_reference(a.reference), a.data, [analogueLoc, adenineLoc], a.minReads)
-
-#write normalised reads to file in the .foh format
-export_trainingDataToFoh( trainingData, a.outFoh )
-
-print '\n'
+#bin the 7mers and write the training data to the output file
+import_HairpinTrainingData(import_reference(a.reference), a.data, [analogueLoc, adenineLoc], a.minReads, a.outFoh)
 

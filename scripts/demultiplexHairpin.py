@@ -67,6 +67,26 @@ def parseArguments(args):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
+def displayProgress(current, total):
+
+	barWidth = 70
+	progress = float(current)/float(total)
+
+	if progress <= 1.0:
+		sys.stdout.write('[')
+		pos = int(barWidth*progress)
+		for i in range(barWidth):
+			if i < pos:
+				sys.stdout.write('=')
+			elif i == pos:
+				sys.stdout.write('>')
+			else:
+				sys.stdout.write(' ')
+		sys.stdout.write('] '+str(int(progress*100))+' %\r')
+		sys.stdout.flush()
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------
 def import_reference(filename):
 #	takes the filename of a fasta reference sequence and returns the reference sequence as a string.  N.B. the reference file must have only one sequence in it
 #	ARGUMENTS
