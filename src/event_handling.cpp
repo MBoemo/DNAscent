@@ -9,6 +9,7 @@
 #include <iterator>
 #include <math.h>
 #include "error_handling.h"
+#include "event_handling.h"
 
 #define _USE_MATH_DEFINES
 
@@ -78,7 +79,7 @@ std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A,
 	std::vector< double > result;
 	result.reserve( A.size() );
 
-	for ( int i = 0; i < A.size(); i++ ){
+	for ( unsigned int i = 0; i < A.size(); i++ ){
 
 		result.push_back( A[i].back() );
 	}
@@ -87,6 +88,7 @@ std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A,
 
 
 double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
+/*computes the length of the geodesic between N(mu1,stdv1) and N(mu2,stdv2) using the Fisher-Rao metric as a distance */
 
 	double F = sqrt( ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )*( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 + stdv2, 2.0 ) ) );
 
@@ -94,9 +96,8 @@ double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
 }
 
 
-std::vector< std::pair< int, int > > matchWarping( std::vector< double > &raw, 
-							   std::vector< double > &raw_stdv,
-						  	   std::string &basecall ){
+std::vector< std::pair< int, int > > matchWarping( std::vector< double > &raw, std::vector< double > &raw_stdv, std::string &basecall ){
+/*use dynamic time warping to calculate an alignment between the raw signal and the basecall */
 
 	unsigned int numOfRaw = raw.size();
 	unsigned int numOf5mers = basecall.size() - 4;
@@ -114,9 +115,9 @@ std::vector< std::pair< int, int > > matchWarping( std::vector< double > &raw,
 	dtw[1][1] = fisherRaoMetric( mu, stdv, raw[1], raw_stdv[1] );
 
 	/*RECURSION: fill in the dynamic time warping lattice */
-	for ( int row = 1; row < numOfRaw; row++ ){
+	for ( unsigned int row = 1; row < numOfRaw; row++ ){
 
-		for ( int col = 2; col < numOf5mers; col++ ){
+		for ( unsigned int col = 2; col < numOf5mers; col++ ){
 
 			mu = FiveMer_model[basecall.substr(col, 5)].first;
 			stdv = FiveMer_model[basecall.substr(col, 5)].second;
@@ -195,7 +196,9 @@ std::vector< double > roughRescale( std::vector< double > means, std::string &ba
 }
 
 
-std::vector< double > normaliseEvents( read r, bool clip ){
+eventDataForRead normaliseEvents( read r, bool clip ){
+
+	eventDataForRead thisRead;
 
 	/*allocate some space for event detection */
 	event_s *c_events = (event_s *)calloc( (r.raw).size(), sizeof( event_s) );
@@ -225,21 +228,13 @@ std::vector< double > normaliseEvents( read r, bool clip ){
 	std::vector< double > rough_mu = roughRescale( events_mu, r.basecalls );
 
 	/*align 5mers to events using the basecall */
-	std::vector< std::pair< int, int > > eventSeqLocPairs = matchWarping( rough_mu, events_stdv, r.basecalls );
-
-	//FOR DEBUGGING - print the alignment
-	//for ( int i = 0; i < eventSeqLocPairs.size(); i++ ){
-	//
-	//	std::cout << rough_mu[eventSeqLocPairs[i].first] << " " << eventSeqLocPairs[i].second << " " << FiveMer_model[eventSeqLocPairs[i].second].first << std::endl;
-	//}
-	//std::cout << "------------" << std::endl;
-	//END
+	thisRead.eventAlignment = matchWarping( rough_mu, events_stdv, r.basecalls );
 
 	/*calculate shift and scale */
 	std::vector< std::vector< double > > A( 2, std::vector< double >( 2, 0.0 ) );
 	std::vector< double > b( 2, 0.0 );
 
-	for ( auto event = eventSeqLocPairs.begin(); event < eventSeqLocPairs.end(); event++ ){
+	for ( auto event = (thisRead.eventAlignment).begin(); event < (thisRead.eventAlignment).end(); event++ ){
 
 		double event_mean = events_mu[ event -> first ];
 		std::string fiveMer = (r.basecalls).substr(event -> second, 5);
@@ -264,28 +259,27 @@ std::vector< double > normaliseEvents( read r, bool clip ){
 	double scale = solution[1];
 
 	/*normalise event means for shift and scale */
-	std::vector< double > normalisedEvents;
-	normalisedEvents.reserve( eventSeqLocPairs.size() );
+	(thisRead.normalisedEvents).reserve( (thisRead.eventAlignment).size() );
 
 	double normalisedEventMean;
-	for ( unsigned int i = 0 ; i < eventSeqLocPairs.size(); i++ ){
+	for ( unsigned int i = 0 ; i < (thisRead.eventAlignment).size(); i++ ){
 
 		normalisedEventMean = ( events_mu[i] - shift )/scale;
 
 		if ( clip ){
-			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 and eventSeqLocPairs[i].second >= (r.ROIbounds).first - 10 and eventSeqLocPairs[i].second <= (r.ROIbounds).second + 10 ){
+			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 and (thisRead.eventAlignment)[i].second >= (r.ROIbounds).first - 10 and (thisRead.eventAlignment)[i].second <= (r.ROIbounds).second + 10 ){
 
-				normalisedEvents.push_back( normalisedEventMean );
+				(thisRead.normalisedEvents).push_back( normalisedEventMean );
 			}
 		}
 		else{
 			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 ){
 
-				normalisedEvents.push_back( normalisedEventMean );
+				(thisRead.normalisedEvents).push_back( normalisedEventMean );
 			}
 		}
 	}
-	return normalisedEvents;
+	return thisRead;
 }
 
 
@@ -309,9 +303,10 @@ std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std
 		/*for each read grouped under this foh name */
 		for ( auto r = (it -> second).begin(); r < (it -> second).end(); r++ ){
 
-			std::vector< double > normalisedEvents = normaliseEvents( *r, clip );
+			eventDataForRead eventData = normaliseEvents( *r, clip );
+			std::vector< double > events = eventData.normalisedEvents;
 
-			parallelHolder.push_back( normalisedEvents );
+			parallelHolder.push_back( events );
 		}
 
 		#pragma omp atomic

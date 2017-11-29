@@ -196,7 +196,7 @@ std::vector< std::pair< std::string, std::vector< read > > > import_foh( std::st
 }
 
 
-std::vector< detectionTuple > import_fdh( std::string &fdhFilePath ){
+std::vector< read > import_fdh( std::string &fdhFilePath ){
 	
 	std::cout << "Importing detection data..." << std::endl;
 	std::ifstream file( fdhFilePath );
@@ -206,21 +206,18 @@ std::vector< detectionTuple > import_fdh( std::string &fdhFilePath ){
 	std::string line;
 	std::string event;
 
-	std::vector< detectionTuple > detectionTuples;
+	std::vector< read > currentReads;
+
+	read currentRead;
 	
 	/*while we have a line to read in the reference file... */
 	while ( std::getline( file, line ) ){
 
 		if ( line[0] == '>' ){
 
-			detectionTuple readTuple;
-
-			/*extract filename */
-			readTuple.filename = line.erase( 0, 1 );
-
 			/*extract basecalls */
 			std::getline( file, line );
-			readTuple.basecalls = line;
+			currentRead.basecalls = line;
 
 			/*extract events */
 			std::getline( file, line );
@@ -228,13 +225,13 @@ std::vector< detectionTuple > import_fdh( std::string &fdhFilePath ){
 			std::string event;
 			while ( std::getline( ss, event, ' ' ) ){
 
-				(readTuple.events).push_back( atof( event.c_str() ) );
+				(currentRead.raw).push_back( atof( event.c_str() ) );
 			}
-			detectionTuples.push_back( readTuple );
+			currentReads.push_back( currentRead );
 		}
 	}
 
 	std::cout << "Done." << std::endl;
-	return detectionTuples;
+	return currentReads;
 
 }

@@ -22,19 +22,11 @@ struct read{
 };
 
 
-struct detectionTuple{
-
-	std::string filename;
-	std::string basecalls;
-	std::vector< double > events;
-};
-
-
 /*function prototypes */
 std::string import_reference( std::string );
 std::map< std::string, std::pair< double, double > > import_poreModel( std::string );
 std::vector< std::pair< std::string, std::vector< read > > > import_foh( std::string );
-std::vector< detectionTuple > import_fdh( std::string & );
+std::vector< read > import_fdh( std::string & );
 void export_poreModel( std::map< std::string, std::vector< double > > &, std::string &);
 
 #endif

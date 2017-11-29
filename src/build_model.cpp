@@ -117,7 +117,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::map< std::string, std::pair< double, double > > &analogueModel, std::vector< double > &events, bool analogue ){
 
-	HiddenMarkovModel hmm = HiddenMarkovModel( 3*reference.length() + 2, 3*reference.length() + 2 );
+	HiddenMarkovModel hmm = HiddenMarkovModel( 3*reference.length(), 3*reference.length() + 2 );
 
 	std::pair< double, double > emissionMeanAndStd;
 
@@ -126,15 +126,9 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 
 	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
 	std::vector< NormalDistribution > nd;
-	nd.reserve( reference.length() - 6 );
+	nd.reserve( reference.length() - 6 );		
 	SilentDistribution sd( 0.0, 0.0 );
 	UniformDistribution ud( 50.0, 130.0 );
-
-	/*garbage collection states to make up for inaccuracies in dynamic time warping */
-	State gcStart( &ud, "gcStart", "", "", 1.0 );
-	State gcEnd( &ud, "gcEnd", "", "", 1.0 );
-	hmm.add_state( gcStart );
-	hmm.add_state( gcEnd );
 
 	std::string loc;
 
@@ -165,18 +159,19 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
 
 		loc = std::to_string( i );
+		std::string sixMer = reference.substr( i, 6 );
 
-		states[ 0 ][ i ] = State( &sd, 		loc + "_SS", 	reference.substr( i, 6 ),	"", 		1.0 );
-		states[ 1 ][ i ] = State( &sd,		loc + "_D", 	reference.substr( i, 6 ),	"", 		1.0 );		
-		states[ 2 ][ i ] = State( &ud,	 	loc + "_I", 	reference.substr( i, 6 ),	"", 		1.0 );
-		states[ 3 ][ i ] = State( &nd[ i ], 	loc + "_M1", 	reference.substr( i, 6 ),	loc + "_match", 1.0 );
-		states[ 4 ][ i ] = State( &nd[ i ], 	loc + "_M2", 	reference.substr( i, 6 ),	loc + "_match", 1.0 );
-		states[ 5 ][ i ] = State( &sd, 		loc + "_SE", 	reference.substr( i, 6 ),	"", 		1.0 );
+		states[ 0 ][ i ] = State( &sd, 		loc + "_SS",	sixMer,	"", 		1.0 );
+		states[ 1 ][ i ] = State( &sd,		loc + "_D", 	sixMer,	"", 		1.0 );		
+		states[ 2 ][ i ] = State( &ud,		loc + "_I", 	sixMer,	"", 		1.0 );
+		states[ 3 ][ i ] = State( &nd[i], 	loc + "_M1", 	sixMer,	loc + "_match", 1.0 );
+		states[ 4 ][ i ] = State( &nd[i], 	loc + "_M2", 	sixMer,	loc + "_match", 1.0 );
+		states[ 5 ][ i ] = State( &sd, 		loc + "_SE", 	sixMer,	"", 		1.0 );
 
 		/*add state to the model */
 		for ( unsigned int j = 0; j < 6; j++ ){
 
-			states[ j ][ i ].meta = reference.substr( i, 6 );
+			states[ j ][ i ].meta = sixMer;
 			hmm.add_state( states[ j ][ i ] );
 		}
 
@@ -202,30 +197,27 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 
 		/*from SE */
 		hmm.add_transition( states[5][i], states[2][i], internalSE2I );		
+
 	}
 
 	/*add transitions between modules (external transitions) */
 	for ( unsigned int i = 0; i < reference.length() - 7; i++ ){
 
-		hmm.add_transition( states[ 1 ][ i ], states[ 1 ][ i + 1 ], externalD2D );
-		hmm.add_transition( states[ 1 ][ i ], states[ 0 ][ i + 1 ], externalD2SS );
-		hmm.add_transition( states[ 2 ][ i ], states[ 0 ][ i + 1 ], externalI2SS );
-		hmm.add_transition( states[ 5 ][ i ], states[ 0 ][ i + 1 ], externalSE2SS );
-		hmm.add_transition( states[ 5 ][ i ], states[ 1 ][ i + 1 ], externalSE2D );
+		hmm.add_transition( states[1][i], states[1][i + 1], externalD2D );
+		hmm.add_transition( states[1][i], states[0][i + 1], externalD2SS );
+		hmm.add_transition( states[2][i], states[0][i + 1], externalI2SS );
+		hmm.add_transition( states[5][i], states[0][i + 1], externalSE2SS );
+		hmm.add_transition( states[5][i], states[1][i + 1], externalSE2D );
 	}
 
 	/*handle start states */
-	hmm.add_transition( hmm.start, gcStart, 1.0 );
-	hmm.add_transition( gcStart, gcStart, 0.8 );
-	hmm.add_transition( gcStart, states[ 0 ][ 0 ], 0.1 );
-	hmm.add_transition( gcStart, states[ 1 ][ 0 ], 0.1 );
+	hmm.add_transition( hmm.start, states[0][0], 0.5 );
+	hmm.add_transition( hmm.start, states[1][0], 0.5 );
 
 	/*handle end states */
-	hmm.add_transition( states[ 1 ][ reference.length() - 7 ], gcEnd, externalD2D + externalD2SS );
-	hmm.add_transition( states[ 2 ][ reference.length() - 7 ], gcEnd, externalI2SS );
-	hmm.add_transition( states[ 5 ][ reference.length() - 7 ], gcEnd, externalSE2SS + externalSE2D );
-	hmm.add_transition( gcEnd, gcEnd, 0.8 );
-	hmm.add_transition( gcEnd, hmm.end, 0.2 );
+	hmm.add_transition( states[1][reference.length() - 7], hmm.end, externalD2D + externalD2SS );
+	hmm.add_transition( states[2][reference.length() - 7], hmm.end, externalI2SS );
+	hmm.add_transition( states[5][reference.length() - 7], hmm.end, externalSE2SS + externalSE2D );
 
 	hmm.finalise();
 

@@ -9,6 +9,16 @@
 #ifndef EVENT_HANDLING_H
 #define EVENT_HANDLING_H
 
+#include "data_IO.h"
+
+struct eventDataForRead {
+
+	std::vector< double > normalisedEvents;
+	std::vector< std::pair< int, int > > eventAlignment;
+};
+
+
 std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std::string, int, bool );
+eventDataForRead normaliseEvents( read, bool );
 
 #endif

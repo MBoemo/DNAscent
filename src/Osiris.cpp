@@ -23,7 +23,7 @@ int show_options( int, char** );
 static std::map< std::string, std::function< int( int, char** ) > > executables = {
 	{"train", 	train_main},
 	//{"fixedPos", 	fixedPos_main},
-	//{"detect", 	detect_main},
+	{"detect", 	detect_main},
 	{"--help",	show_options},
 	{"-h",	show_options}
 };

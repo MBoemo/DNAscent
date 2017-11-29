@@ -146,7 +146,7 @@ int train_main( int argc, char** argv ){
 		std::string adenDomain = reverseComplement( brduDomain );
 
 		/*our reference has N's in it: replace them with the appropriate 7mer that we're goin to train on */
-		int positionNorm, adenDomLoc, brduDomLoc;
+		unsigned int positionNorm, adenDomLoc, brduDomLoc;
 
 		if ( trainArgs.analoguePosition == "1and2" ){
 			adenDomLoc = refLocal.find( "NNNNNAN" );

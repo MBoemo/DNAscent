@@ -7,11 +7,14 @@
 //----------------------------------------------------------
 
 
+#include <fstream>
 #include "Osiris_detect.h"
 #include "common.h"
 #include "build_model.h"
 #include "data_IO.h"
 #include "error_handling.h"
+#include "event_handling.h"
+#include "poreModels.h"
 
 
 static const char *help=
@@ -19,17 +22,15 @@ static const char *help=
 "To run Osiris detect, do:\n"
 "  ./Osiris detect [arguments]\n"
 "Example:\n"
-"  ./Osiris detect -bm /path/to/template_median68pA.model -am /path/to/analogue.model -d /path/to/data.foh -o output.txt -t 20\n"
+"  ./Osiris detect -m /path/to/analogue.model -d /path/to/data.foh -o output.txt -t 20\n"
 "Required arguments are:\n"
-"  -om,--ont-model           full path to 6mer pore model file (provided by ONT) over bases {A,T,G,C},\n"
-"  -am,--analogue-model      full path to 6mer pore model file that includes analogues,\n"
-"  -d,--data                 full path to .fdh file to run detection on,\n"
-"  -o,--output               full path to the output file which will contain the calls.\n"
+"  -m,--analogue-model       path to 6mer pore model file that includes analogues,\n"
+"  -d,--data                 path to .fdh file to run detection on,\n"
+"  -o,--output               path to the output file which will contain the calls.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread).\n";
 
 struct Arguments {
-	std::string ontModelFilename;
 	std::string analogueModelFilename;
 	std::string dataFilename;
 	std::string outputFilename;
@@ -63,18 +64,11 @@ Arguments parseDetectionArguments( int argc, char** argv ){
 	trainArgs.threads = 1;
 
 	/*parse the command line arguments */
-	for ( unsigned int i = 1; i < argc; ){
+	for ( int i = 1; i < argc; ){
 
 		std::string flag( argv[ i ] );
 
-		if ( flag == "-om" or flag == "--ont-model" ){
-
-			std::string strArg( argv[ i + 1 ] );
-			trainArgs.ontModelFilename = strArg;
-			i+=2;
-
-		}
-		else if ( flag == "-am" or flag == "--analogue-model" ){
+		if ( flag == "-m" or flag == "--analogue-model" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.analogueModelFilename = strArg;
@@ -114,9 +108,8 @@ int detect_main( int argc, char** argv ){
 
 	Arguments trainArgs = parseDetectionArguments( argc, argv );
 
-	std::map< std::string, std::pair< double, double > > ontModel =  import_poreModel( trainArgs.ontModelFilename );
 	std::map< std::string, std::pair< double, double > > analogueModel =  import_poreModel( trainArgs.analogueModelFilename );
-	std::vector< detectionTuple > detectData = import_fdh( trainArgs.dataFilename );
+	std::vector< read > detectData = import_fdh( trainArgs.dataFilename );
 
 	/*IO */
 	std::ofstream outFile;
@@ -125,56 +118,65 @@ int detect_main( int argc, char** argv ){
 
 	std::stringstream ss; //out stringstream
 
+	unsigned int windowLength = 10;
+	int prog = 0;
+	int total = detectData.size();
+	std::cout << "Detecting base analogues..." << std::endl;
 
-	#pragma omp parallel for default(none) schedule(dynamic) shared(ontModel, analogueModel, trainArgs, detectData, outFile) private(ss) num_threads(trainArgs.threads)
-	for( unsigned int i = 0; i < detectData.size(); i++ ){
+	#pragma omp parallel for default(none) schedule(dynamic) shared(total, prog, windowLength, SixMer_model, analogueModel, trainArgs, detectData, outFile) private(ss) num_threads(trainArgs.threads)
+	for( auto r = detectData.begin(); r < detectData.end(); r++ ){
 
-		/*take the read, and if it's really short, toss it out */
-		std::string basecalls = detectData[ i ].basecalls;
-		if ( basecalls.length() < 40 ){
-			continue;
-		}
-		std::string fast5File = detectData[ i ].filename;
-		std::vector< double > events = detectData[ i ].events;
+		/*normalise raw for shift and scale, and get an alignment between 5mers and the events that produced them */
+		eventDataForRead eventData = normaliseEvents( *r, false );
 
-		ss << ">" << fast5File << std::endl;
-
-		/*make an ideal signal from the basecalls */
-		std::vector< double > generatedSignal = generateSignal( basecalls, ontModel );
-
-		/*get a rough alignment from the basecalls to events with dynamic time warping */
-		std::map< int, std::vector< int > > warpPath = dynamicTimewarping( events, generatedSignal );
-
-		/*if we can't get an alignment that goes to the beginning of the read, don't try to detect anything in this read and skip to the next one */
-		if ( warpPath.count( 10 ) == 0 ){
-			continue;
-		}
+		int readHead = 0;
 
 		/*bound these - things tend to be rubbish at the start and end so start 15 bases in and end 30 bases early */
-		for ( unsigned int j = 20; j < basecalls.length() - 30; j++ ){
+		for ( unsigned int i = windowLength; i < (r -> basecalls).length() - 3*windowLength; i++ ){
 			
-			if ( basecalls.substr( j, 1 ) == "T"){
+			if ( (r -> basecalls).substr( i, 1 ) == "T"){
 
-				std::string readSnippet = basecalls.substr( j - 10, 26 );
-				std::vector< double >::const_iterator first = events.begin() + warpPath[ j - 10 ].back();
-				std::vector< double >::const_iterator last = events.begin() + warpPath[ j + 16 ].front();				
-				std::vector< double > eventSnippet( first, last );
+				std::string readSnippet = (r -> basecalls).substr( i - windowLength, 2*windowLength + 6 );
+				std::vector< double > eventSnippet;
 
-				double logProbThymidine = buildAndDetectHMM( readSnippet, ontModel, analogueModel, eventSnippet, false );
-				double logProbAnalogue = buildAndDetectHMM( readSnippet, ontModel, analogueModel, eventSnippet, true );
+				/*get the events that correspond to the read snippet */
+				for ( unsigned int j = readHead; j < (eventData.eventAlignment).size(); j++ ){
+
+					if ( (eventData.eventAlignment)[j].second == i - windowLength ){
+
+						readHead = j;
+					}
+
+					if ( (eventData.eventAlignment)[j].second >= i - windowLength and (eventData.eventAlignment)[j].second <= i + windowLength + 6 ){
+
+						eventSnippet.push_back( (eventData.normalisedEvents)[j] );
+					}
+
+					if ( (eventData.eventAlignment)[j].second > i + windowLength + 6 ) break;
+				}
+
+
+				double logProbThymidine = buildAndDetectHMM( readSnippet, SixMer_model, analogueModel, eventSnippet, false );
+				double logProbAnalogue = buildAndDetectHMM( readSnippet, SixMer_model, analogueModel, eventSnippet, true );
 
 				double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
-				ss << j << "\t" << logLikelihoodRatio << std::endl;
+				ss << i << "\t" << logLikelihoodRatio << std::endl;
 
 			}
-
 		}
-		#pragma omp critical
-		/*write the log probabilities for this file to the output file */
-		outFile << ss.rdbuf();
 
+		#pragma omp atomic 
+		prog++;
+
+		#pragma omp critical
+		{	/*write the log probabilities for this file to the output file */
+			outFile << ss.rdbuf();
+			displayProgress( prog, total );
+		}
 	}
+	displayProgress( prog, total );
+	std::cout << "\nDone." << std::endl;
 
 	outFile.close();
 
