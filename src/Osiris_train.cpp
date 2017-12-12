@@ -149,17 +149,17 @@ int train_main( int argc, char** argv ){
 		unsigned int positionNorm, adenDomLoc, brduDomLoc;
 
 		if ( trainArgs.analoguePosition == "1and2" ){
-			adenDomLoc = refLocal.find( "NNNNNAN" );
+			//adenDomLoc = refLocal.find( "NNNNNAN" );//HERE
 			brduDomLoc = refLocal.find( "NTNNNNN" );
 			positionNorm = 0;
 		}
 		else if ( trainArgs.analoguePosition == "3and4" ){
-			adenDomLoc = refLocal.find( "NNNANNN" );
+			//adenDomLoc = refLocal.find( "NNNANNN" );//HERE
 			brduDomLoc = refLocal.find( "NNNTNNN" );
 			positionNorm = 2;
 		}
 		else if ( trainArgs.analoguePosition == "5and6" ){
-			adenDomLoc = refLocal.find( "NANNNNN" );
+			//adenDomLoc = refLocal.find( "NANNNNN" );//HERE
 			brduDomLoc = refLocal.find( "NNNNNTN" );
 			positionNorm = 4;
 		}
@@ -168,7 +168,7 @@ int train_main( int argc, char** argv ){
 			exit(EXIT_FAILURE);
 		}
 	
-		refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );
+		//refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );//HERE
 		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
 		
 		/*check for unresolved Ns and fail if there are any */

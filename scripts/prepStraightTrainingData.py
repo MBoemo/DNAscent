@@ -242,7 +242,7 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 	
 	f = pysam.Samfile(BAMrecords,'r')
 
-	analogueIndeces = range(ROI[0] - 6, ROI[0] + 13)
+	analogueIndeces = range(ROI - 6, ROI + 13)
 
 	#build up the map that takes each indiviudal 7mer to a list of fast5 files that produced the reads
 	kmer2filename = {}
@@ -251,6 +251,8 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 	numOfRecords = f.count()
 	counter = 0
 	fraction = 0.0
+	failedROIQC = 0
+	failedConcatenation = 0
 
 	print "Binning BAM records..."
 
@@ -275,8 +277,8 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 			#fill out analogueDomain and posOnRead using get_aligned_pairs() from pysam
 			for p in pairs:
 				if p[1] in analogueIndeces:
-					analogueDomain[p[1] - (ROI[0] - 6) ] = sequence[p[0]]
-					analogPosOnRead[p[1] - (ROI[0] - 6) ] = p[0]
+					analogueDomain[p[1] - (ROI - 6) ] = sequence[p[0]]
+					analogPosOnRead[p[1] - (ROI - 6) ] = p[0]
 
 			#make sure there aren't any indels
 			indelFree = True
@@ -289,7 +291,7 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 			RHS = "".join(analogueDomain[13:]).upper()
 
 			#if we've identified the analogue domain completely, keep this read to train on
-			if ('-' not in analogueDomain) and (analogueDomain[9] == 'T') and (indelFree) and (LHS == reference[ROI[0]-6:ROI[0]]) and (RHS == reference[ROI[0]+7:ROI[0]+13]): 
+			if ('-' not in analogueDomain) and (analogueDomain[9] == 'T') and (indelFree) and (LHS == reference[ROI-6:ROI]) and (RHS == reference[ROI+7:ROI+13]): 
 
 				#append to dictionary
 				if brD in kmer2filename:
@@ -297,13 +299,24 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 				else:
 					kmer2filename[brD] = [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]) ) ]
 
+			else:
+				failedROIQC += 1
+		else:
+			failedConcatenation += 1
+
 	displayProgress( numOfRecords, numOfRecords)
 	f.close()
-	print "\nDone.\nConverting signal to pA..."
+	print "\n\tTotal number of reads in BAM file: " + str(numOfRecords)
+	print "\n\tFailed length condition: " + str(failedConcatenation)
+	print "\n\tFailed analogue ROI QC: " + str(failedROIQC)
+
+	print "\nDone."
+	print "\nConverting signal to pA..."
 
 	#only generate training data for kmers that have enough reads and write the data to the foh file
 	numOfRecords = len(kmer2filename.keys())
 	fraction = 0.0
+	thrownOut = 0
 	f_out = open(outFilename,'w')
 	for i, key in enumerate(kmer2filename):
 
@@ -347,8 +360,11 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 				f_out.write( ' '.join(map(str,raw_array.tolist())) + '\n' )
 
 				f_hdf5.close()
+		else:
+			thrownOut += len(kmer2filename[key])
 	displayProgress( numOfRecords, numOfRecords)
 	f_out.close()
+	print "\n\tFailed for having less than N training reads: " + str(thrownOut)
 	print "\nDone."
 
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
@@ -363,20 +379,17 @@ reference = import_reference(a.reference)
 #set the B and A domain locations using the reference
 if a.position == '1and2':
 	analogueLoc = reference.find('NTNNNNN')
-	adenineLoc = reference.find('NNNNNAN')
 
 elif a.position == '3and4':
 	analogueLoc = reference.find('NNNTNNN')
-	adenineLoc = reference.find('NNNANNN')
 
 elif a.position == '5and6':
 	analogueLoc = reference.find('NNNNNTN')
-	adenineLoc = reference.find('NANNNNN')
 
 else:
 	print 'Exiting with error.  Invalid argument passed to -p or --position.'
 	splashHelp()
 
 #bin the 7mers and write the training data to the output file
-import_HairpinTrainingData(import_reference(a.reference), a.data, [analogueLoc, adenineLoc], a.minReads, a.outFoh)
+import_HairpinTrainingData(import_reference(a.reference), a.data, analogueLoc, a.minReads, a.outFoh)
 
