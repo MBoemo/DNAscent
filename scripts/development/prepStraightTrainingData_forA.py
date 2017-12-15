@@ -291,7 +291,7 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 			RHS = "".join(analogueDomain[9:]).upper()
 
 			#if we've identified the analogue domain completely, keep this read to train on
-			if ('-' not in analogueDomain) and (brD[3] == 'T') and (indelFree) and (LHS == reference[ROI-2:ROI]) and (RHS == reference[ROI+7:ROI+9]): 
+			if ('-' not in analogueDomain) and (brD[3] == 'A') and (indelFree) and (LHS == reference[ROI-2:ROI]) and (RHS == reference[ROI+7:ROI+9]): 
 
 				#append to dictionary
 				if brD in kmer2filename:
@@ -378,13 +378,13 @@ reference = import_reference(a.reference)
 
 #set the B and A domain locations using the reference
 if a.position == '1and2':
-	analogueLoc = reference.find('NTNNNNN')
+	analogueLoc = reference.find('NANNNNN')
 
 elif a.position == '3and4':
-	analogueLoc = reference.find('NNNTNNN')
+	analogueLoc = reference.find('NNNANNN')
 
 elif a.position == '5and6':
-	analogueLoc = reference.find('NNNNNTN')
+	analogueLoc = reference.find('NNNNNAN')
 
 else:
 	print 'Exiting with error.  Invalid argument passed to -p or --position.'

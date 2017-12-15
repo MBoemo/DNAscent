@@ -50,8 +50,8 @@ commonKeys = [key for key in model1 if key in model2]
 
 diffs = []
 for key in commonKeys:
-	#if model1[key][1] < 3.5 and model2[key][1] < 3.5:
-	diffs.append( model1[key][0] - model2[key][0] )
+	if model1[key][1] < 3.5 and model2[key][1] < 3.5:
+		diffs.append( model1[key][0] - model2[key][0] )
 
 plt.hist(diffs,len(diffs)/10)
 plt.xlabel('Difference Between Model Means (pA)')
