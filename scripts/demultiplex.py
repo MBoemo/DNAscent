@@ -177,7 +177,7 @@ for record in sam_file:
 	ref_cover = float(record.aend - record.pos) / ref_length
 	query_cover = float(record.query_alignment_length) / record.query_length
 
-	if ref_cover > 0.8 and query_cover > 0.8 and record.is_reverse == False:
+	if query_cover > 0.8 and record.is_reverse == False:
 		out_files[record.reference_id].write(record)
 
 

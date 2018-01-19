@@ -27,8 +27,7 @@ Example:
   python demultiplexHairpin.py -r /path/to/reference.fasta -d /path/to/reads -p 34 -t 20
 Required arguments are:
   -r,--reference            path to reference file in fasta format,
-  -d,--data                 path to top level directory of ONT reads,
-  -p,--position             position of analogue in training data (valid arguments are 1and2, 3and4, or 5and6).
+  -d,--data                 path to top level directory of ONT reads.
 Optional arguments are:
   -t,--threads              number of threads (default is 1 thread)."""
 
@@ -51,16 +50,13 @@ def parseArguments(args):
 		elif argument == '-d' or argument == '--data':
 			a.data = str(args[i+1])
 
-		elif argument == '-p' or argument == '--position':
-			a.position = str(args[i+1])
-
 		elif argument == '-h' or argument == '--help':
 			splashHelp()
 		elif argument[0] == '-':
 			splashHelp()
 
 	#check that required arguments are met
-	if not hasattr( a, 'reference') or not hasattr( a, 'data') or not hasattr( a, 'position'):
+	if not hasattr( a, 'reference') or not hasattr( a, 'data'):
 		splashHelp() 
 
 	return a
@@ -114,6 +110,43 @@ def import_reference(filename):
 		warnings.warn('Warning: Illegal character in reference.  Legal characters are A, T, G, C, and N.', Warning)
 
 	return reference
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------
+def split_reference(filename):
+
+	f = open(filename,'r')
+	g = f.readlines()
+	f.close()	
+
+	referenceDict = {}
+	first = True
+
+	for line in g:
+		if line[0] == '>':
+			if not first:
+				referenceDict[key] = seq
+			key = line[1:].rstrip()
+			seq = ''
+			first = False
+		elif line == '':
+			continue
+		else:
+			seq += line.rstrip()
+
+	referenceDict[key] = seq		
+
+	return referenceDict
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------
+def print_split_reference(refDict):
+
+	for key in refDict:
+		f = open(key + '.fasta','w')
+		f.write('>' + key + '\n')
+		f.write(refDict[key])
+		f.close()
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -198,38 +231,36 @@ def import_fasta(pathToReads, outFastaFilename):
 	fout.close()
 	print 'Could not open ' + str(failedCounter) + ' reads.'
 
+
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
 args = sys.argv
 a = parseArguments(args)
 
-import_fasta(a.data, os.getcwd()+'/reads.fasta')
+#import_fasta(a.data, os.getcwd()+'/reads.fasta')
 
-os.system('bwa index ' + a.reference)
-os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted') 
-os.system('samtools index alignments.sorted.bam')
+#os.system('bwa index ' + a.reference)
+#os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted') 
+#os.system('samtools index alignments.sorted.bam')
 
 
 sam_file = pysam.Samfile('alignments.sorted.bam')
 out_files = list()
 
-reference = import_reference(a.reference)
+referenceDict = split_reference(a.reference)
+print_split_reference(referenceDict)
+posDict = {}
 
-if a.position == '1and2':
-	analogueLoc = reference.find('NTNNNNN')
+for key in referenceDict:
 
-elif a.position == '3and4':
-	analogueLoc = reference.find('NNNTNNN')
-
-elif a.position == '5and6':
-	analogueLoc = reference.find('NNNNNTN')
-
-else:
-	print 'Exiting with error.  Invalid argument passed to -p or --position.'
-	splashHelp()
-
-if analogueLoc == -1:
-	print 'Exiting with error - BrdU and/or adenine domains not found.  Did you enter the right position?'
-	splashHelp()
+	if referenceDict[key].find('NTNNNNN') != -1:
+		posDict[key] = referenceDict[key].find('NTNNNNN')
+	elif referenceDict[key].find('NNNTNNN') != -1:
+		posDict[key] = referenceDict[key].find('NNNTNNN')
+	elif referenceDict[key].find('NNNNNTN') != -1:
+		posDict[key] = referenceDict[key].find('NNNNNTN')
+	else:
+		print 'Exiting with error - BrdU and/or adenine domains not found.  Is the right domain in the reference?'
+		splashHelp()
 
 # open an output file for each reference sequence
 for x in sam_file.references:
@@ -239,8 +270,10 @@ for x in sam_file.references:
 for record in sam_file:
 	ref_length = sam_file.lengths[record.reference_id]
 
-	if record.aend is None or record.query_alignment_length is None:
+	if record.aend is None or record.query_alignment_length is None or record.reference_name is None:
 		continue
+
+	analogueLoc = posDict[record.reference_name]
 
 	query_cover = float(record.query_alignment_length) / record.query_length
 

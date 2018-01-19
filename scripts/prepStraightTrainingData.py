@@ -19,6 +19,12 @@ import re
 import os
 import gc
 import math
+from joblib import Parallel, delayed
+from multiprocessing import Lock
+
+import matplotlib
+matplotlib.use('Agg')
+from matplotlib import pyplot as plt
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -38,7 +44,9 @@ Required arguments are:
   -p,--position             position of analogue in training data (valid arguments are 1and2, 3and4, or 5and6),
   -n,--minimum              minimum threshold of reads that we're allowed to train on,
   -d,--data                 path to BAM file,
-  -o,--output               path to the output training .foh or detection .fdh file."""
+  -o,--output               path to the output training .foh or detection .fdh file.
+Optional arguments are:
+  -t, --threads             number of threads (default is 1)."""
 
 	print s
 	exit(0)
@@ -48,6 +56,7 @@ Required arguments are:
 def parseArguments(args):
 
 	a = arguments()
+	a.threads = 1 #default
 
 	for i, argument in enumerate(args):
 			
@@ -56,6 +65,9 @@ def parseArguments(args):
 
 		elif argument == '-d' or argument == '--data':
 			a.data = str(args[i+1])
+
+		elif argument == '-t' or argument == '--threads':
+			a.threads = int(args[i+1])
 
 		elif argument == '-p' or argument == '--position':
 			a.position = str(args[i+1])
@@ -214,7 +226,48 @@ def displayProgress(current, total):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFilename):
+def signalTopA( sevenMer, filenamesAndBounds ):
+
+	outString = '>' + sevenMer + '\n'
+
+	for filename, bounds in filenamesAndBounds:
+
+		f_hdf5 = h5py.File(filename,'r')
+
+		#get raw
+		path = '/Raw/Reads'
+		read_number = f_hdf5[path].keys()[0]
+		raw_data = f_hdf5[path + '/' + read_number + '/Signal']
+		raw_array = np.zeros(raw_data.len(),dtype='int16')
+		raw_data.read_direct(raw_array)
+
+		#get sequence
+		fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
+		fastq = f_hdf5[fast5path2fastq].value
+		sequence = fastq.split('\n')[1]
+
+		#get read-specific parameters to normalise from raw to pA
+		scaling = f_hdf5['/UniqueGlobalKey/channel_id']
+		digitisation = scaling.attrs.get('digitisation')
+		offset = scaling.attrs.get('offset')
+		rng = scaling.attrs.get('range')
+		sample_rate = scaling.attrs.get('sampling_rate')
+
+		#normalise to pA
+		raw_array = ( raw_array + offset ) * (rng/digitisation)
+
+		#write to the foh file
+		outString += sequence + '\n'
+		outString += bounds + '\n'
+		outString += ' '.join(map(str,raw_array.tolist())) + '\n'
+
+		f_hdf5.close()
+
+	return outString
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------
+def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFilename, threads):
 #	Used to import training data from a hairpin primer of the form 5'-...NNNBNNN....NNNANNN...-3'.
 #	Creates a map from kmer (string) to a list of lists, where each list is comprised of events from a read
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
@@ -295,7 +348,8 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 
 				#append to dictionary
 				if brD in kmer2filename:
-					kmer2filename[brD] += [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]) ) ]
+					if len(kmer2filename[brD]): #< 100:
+						kmer2filename[brD] += [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]) ) ]
 				else:
 					kmer2filename[brD] = [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]) ) ]
 
@@ -309,62 +363,44 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 	print "\n\tTotal number of reads in BAM file: " + str(numOfRecords)
 	print "\tFailed length condition: " + str(failedConcatenation)
 	print "\tFailed analogue ROI QC: " + str(failedROIQC)
-
 	print "Done."
 	print "Converting signal to pA..."
 
 	#only generate training data for kmers that have enough reads and write the data to the foh file
-	numOfRecords = len(kmer2filename.keys())
-	fraction = 0.0
-	thrownOut = 0
-	f_out = open(outFilename,'w')
-	for i, key in enumerate(kmer2filename):
+	filtered = {}
+	for key in kmer2filename:
+		if len(kmer2filename[key]) > readsThreshold:
+			filtered[key] = kmer2filename[key]
+	del kmer2filename
 
-		#print progress
-		displayProgress( i, numOfRecords)
+	#avoid swamping memory by breaking the keys in filtered dict into blocks <= number of threads we're processing on
+	keyBlocks = []
+	block = []
+	for i, key in enumerate(filtered):
+		
+		block.append( key )
 
+		if i % (threads/2) == 0:
+			keyBlocks.append(block)
+			block = []
+	keyBlocks.append(block)			
 
-		if len(kmer2filename[key]) >= readsThreshold:
+	#iterate through the blocks of keys, do the parallel processing and write outStrings after each block so that we don't flood RAM
+	for i, group in enumerate(keyBlocks):
+	
+		#do the normalisation in parallel
+		outStrings = Parallel( n_jobs = threads )( delayed( signalTopA )( key, filtered[key] ) for key in group )
 
-			f_out.write( '>'+key+'\n' )
+		#take the results of the parallel processing and write them to the file
+		f_out = open(outFilename,'w')
+		for entry in outStrings:
+			f_out.write( entry )
+		del outStrings
+		displayProgress( i, len(keyBlocks))
 
-			for filename, bounds in kmer2filename[key]:
-
-				f_hdf5 = h5py.File(filename,'r')
-
-				#get raw
-				path = '/Raw/Reads'
-				read_number = f_hdf5[path].keys()[0]
-				raw_data = f_hdf5[path + '/' + read_number + '/Signal']
-				raw_array = np.zeros(raw_data.len(),dtype='int16')
-				raw_data.read_direct(raw_array)
-
-				#get sequence
-				fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
-				fastq = f_hdf5[fast5path2fastq].value
-				sequence = fastq.split('\n')[1]
-
-				#get read-specific parameters to normalise from raw to pA
-				scaling = f_hdf5['/UniqueGlobalKey/channel_id']
-				digitisation = scaling.attrs.get('digitisation')
-				offset = scaling.attrs.get('offset')
-				rng = scaling.attrs.get('range')
-				sample_rate = scaling.attrs.get('sampling_rate')
-
-				#normalise to pA
-				raw_array = ( raw_array + offset ) * (rng/digitisation)
-
-				#write to the foh file
-				f_out.write( sequence + '\n' )
-				f_out.write( bounds + '\n' )
-				f_out.write( ' '.join(map(str,raw_array.tolist())) + '\n' )
-
-				f_hdf5.close()
-		else:
-			thrownOut += len(kmer2filename[key])
-	displayProgress( numOfRecords, numOfRecords)
+	displayProgress( len(keyBlocks), len(keyBlocks))
 	f_out.close()
-	print "\n\tFailed for having less than N training reads: " + str(thrownOut)
+
 	print "Done."
 
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
@@ -391,5 +427,5 @@ else:
 	splashHelp()
 
 #bin the 7mers and write the training data to the output file
-import_HairpinTrainingData(import_reference(a.reference), a.data, analogueLoc, a.minReads, a.outFoh)
+import_HairpinTrainingData(import_reference(a.reference), a.data, analogueLoc, a.minReads, a.outFoh, a.threads)
 
