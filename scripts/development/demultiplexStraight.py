@@ -236,11 +236,11 @@ def import_fasta(pathToReads, outFastaFilename):
 args = sys.argv
 a = parseArguments(args)
 
-#import_fasta(a.data, os.getcwd()+'/reads.fasta')
+import_fasta(a.data, os.getcwd()+'/reads.fasta')
 
-#os.system('bwa index ' + a.reference)
-#os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted') 
-#os.system('samtools index alignments.sorted.bam')
+os.system('bwa index ' + a.reference)
+os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d reads.fasta | samtools view -Sb - | samtools sort - alignments.sorted') 
+os.system('samtools index alignments.sorted.bam')
 
 
 sam_file = pysam.Samfile('alignments.sorted.bam')

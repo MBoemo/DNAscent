@@ -20,12 +20,7 @@ import os
 import gc
 import math
 from joblib import Parallel, delayed
-from multiprocessing import Lock
-
-import matplotlib
-matplotlib.use('Agg')
-from matplotlib import pyplot as plt
-
+import multiprocessing
 
 #--------------------------------------------------------------------------------------------------------------------------------------
 class arguments:
@@ -46,7 +41,7 @@ Required arguments are:
   -d,--data                 path to BAM file,
   -o,--output               path to the output training .foh or detection .fdh file.
 Optional arguments are:
-  -t, --threads             number of threads (default is 1)."""
+  -t,--threads              number of threads (default is 1 thread)."""
 
 	print s
 	exit(0)
@@ -56,7 +51,7 @@ Optional arguments are:
 def parseArguments(args):
 
 	a = arguments()
-	a.threads = 1 #default
+	a.threads = 1
 
 	for i, argument in enumerate(args):
 			
@@ -66,9 +61,6 @@ def parseArguments(args):
 		elif argument == '-d' or argument == '--data':
 			a.data = str(args[i+1])
 
-		elif argument == '-t' or argument == '--threads':
-			a.threads = int(args[i+1])
-
 		elif argument == '-p' or argument == '--position':
 			a.position = str(args[i+1])
 
@@ -77,6 +69,9 @@ def parseArguments(args):
 
 		elif argument == '-n' or argument == '--minimum':
 			a.minReads = int(args[i+1])
+
+		elif argument == '-t' or argument == '--threads':
+			a.threads = int(args[i+1])
 
 		elif argument == '-h' or argument == '--help':
 			splashHelp()
@@ -224,46 +219,37 @@ def displayProgress(current, total):
 		sys.stdout.write('] '+str(int(progress*100))+' %\r')
 		sys.stdout.flush()
 
-
 #--------------------------------------------------------------------------------------------------------------------------------------
-def signalTopA( sevenMer, filenamesAndBounds ):
+def normaliseRead(filename, bounds):
 
-	outString = '>' + sevenMer + '\n'
 
-	for filename, bounds in filenamesAndBounds:
+	f_hdf5 = h5py.File(filename,'r')
+	
+	#get raw
+	path = '/Raw/Reads'
+	read_number = f_hdf5[path].keys()[0]
+	raw_data = f_hdf5[path + '/' + read_number + '/Signal']
+	raw_array = np.zeros(raw_data.len(),dtype='int16')
+	raw_data.read_direct(raw_array)
 
-		f_hdf5 = h5py.File(filename,'r')
+	#get sequence
+	fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
+	fastq = f_hdf5[fast5path2fastq].value
+	sequence = fastq.split('\n')[1]
 
-		#get raw
-		path = '/Raw/Reads'
-		read_number = f_hdf5[path].keys()[0]
-		raw_data = f_hdf5[path + '/' + read_number + '/Signal']
-		raw_array = np.zeros(raw_data.len(),dtype='int16')
-		raw_data.read_direct(raw_array)
+	#get read-specific parameters to normalise from raw to pA
+	scaling = f_hdf5['/UniqueGlobalKey/channel_id']
+	digitisation = scaling.attrs.get('digitisation')
+	offset = scaling.attrs.get('offset')
+	rng = scaling.attrs.get('range')
+	sample_rate = scaling.attrs.get('sampling_rate')
 
-		#get sequence
-		fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
-		fastq = f_hdf5[fast5path2fastq].value
-		sequence = fastq.split('\n')[1]
+	#normalise to pA
+	raw_array = ( raw_array + offset ) * (rng/digitisation)
 
-		#get read-specific parameters to normalise from raw to pA
-		scaling = f_hdf5['/UniqueGlobalKey/channel_id']
-		digitisation = scaling.attrs.get('digitisation')
-		offset = scaling.attrs.get('offset')
-		rng = scaling.attrs.get('range')
-		sample_rate = scaling.attrs.get('sampling_rate')
+	f_hdf5.close()
 
-		#normalise to pA
-		raw_array = ( raw_array + offset ) * (rng/digitisation)
-
-		#write to the foh file
-		outString += sequence + '\n'
-		outString += bounds + '\n'
-		outString += ' '.join(map(str,raw_array.tolist())) + '\n'
-
-		f_hdf5.close()
-
-	return outString
+	return sequence + '\n' + bounds + '\n' + ' '.join(map(str,raw_array.tolist())) + '\n'
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -348,8 +334,7 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 
 				#append to dictionary
 				if brD in kmer2filename:
-					if len(kmer2filename[brD]): #< 100:
-						kmer2filename[brD] += [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]) ) ]
+					kmer2filename[brD] += [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]) ) ]
 				else:
 					kmer2filename[brD] = [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]) ) ]
 
@@ -363,44 +348,61 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 	print "\n\tTotal number of reads in BAM file: " + str(numOfRecords)
 	print "\tFailed length condition: " + str(failedConcatenation)
 	print "\tFailed analogue ROI QC: " + str(failedROIQC)
+
 	print "Done."
 	print "Converting signal to pA..."
 
 	#only generate training data for kmers that have enough reads and write the data to the foh file
 	filtered = {}
 	for key in kmer2filename:
-		if len(kmer2filename[key]) > readsThreshold:
+		if len(kmer2filename[key]) >= readsThreshold:
 			filtered[key] = kmer2filename[key]
+
 	del kmer2filename
 
-	#avoid swamping memory by breaking the keys in filtered dict into blocks <= number of threads we're processing on
-	keyBlocks = []
-	block = []
+	f_out = open(outFilename,'w')
+
 	for i, key in enumerate(filtered):
-		
-		block.append( key )
 
-		if i % (threads/2) == 0:
-			keyBlocks.append(block)
-			block = []
-	keyBlocks.append(block)			
+		#print progress
+		displayProgress( i, numOfRecords)
 
-	#iterate through the blocks of keys, do the parallel processing and write outStrings after each block so that we don't flood RAM
-	for i, group in enumerate(keyBlocks):
+		f_out.write( '>'+key+'\n' )
+
+		fnameBuffer = []
+		boundsBuffer = []
+		counter = 0
+		#for each read
+		for filename, bounds in filtered[key]:
+
+			#fill up the buffer
+			fnameBuffer.append(filename)
+			boundsBuffer.append(bounds)
+
+			#do the parallel processing to normalise the reads
+			if counter == 1024:
+								
+				out = Parallel(n_jobs=threads)(delayed(normaliseRead)(f, b) for f, b in zip(fnameBuffer,boundsBuffer))
 	
-		#do the normalisation in parallel
-		outStrings = Parallel( n_jobs = threads )( delayed( signalTopA )( key, filtered[key] ) for key in group )
+				#print the contents to the foh file
+				for r in out:
+					f_out.write(r)
 
-		#take the results of the parallel processing and write them to the file
-		f_out = open(outFilename,'w')
-		for entry in outStrings:
-			f_out.write( entry )
-		del outStrings
-		displayProgress( i, len(keyBlocks))
+				#empty buffer
+				fnameBuffer = []
+				boundsBuffer = []
 
-	displayProgress( len(keyBlocks), len(keyBlocks))
+			counter += 1
+
+		#write whatever's left (or all if it if we never completely filled up the buffer)
+		out = Parallel(n_jobs=threads)(delayed(normaliseRead)(f, b) for f, b in zip(fnameBuffer,boundsBuffer))
+	
+		#print whatever's left to the foh file
+		for r in out:
+			f_out.write(r)
+
+	displayProgress( numOfRecords, numOfRecords)
 	f_out.close()
-
 	print "Done."
 
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------

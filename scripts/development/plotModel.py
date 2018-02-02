@@ -58,7 +58,7 @@ for key in model:
 	diffs.append( divergence(mu1,sig1,mu2,sig2) )
 
 plt.hist(diffs,len(diffs)/10)
-plt.xlabel('Extra Information Gained From Using B Instead of T (bits)')
+plt.xlabel('Divergence')
 plt.ylabel('Count')
 plt.title('Comparison Between BrdU and Thymidine Models, N=' + str(len(diffs)))
 axes = plt.gca()
