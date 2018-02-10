@@ -28,24 +28,24 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
 	std::vector< NormalDistribution > nd;
-	nd.reserve( reference.length() - 6 );		
+	nd.reserve( reference.length() - 5 );		
 	SilentDistribution sd( 0.0, 0.0 );
 	UniformDistribution ud( 50.0, 130.0 );
 
 	std::string loc;
 
 	/*create the distributions that we need */			
-	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
+	for ( unsigned int i = 0; i < reference.length() - 5; i++ ){
 
-		emissionMeanAndStd = basePoreModel.at( reference.substr( i, 6 ) );		
+		emissionMeanAndStd = basePoreModel.at( reference.substr( i, 5 ) );		
 		nd.push_back( NormalDistribution( emissionMeanAndStd.first, emissionMeanAndStd.second ) );		
 	}
 
 	/*add states to model, handle internal module transitions */
-	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
+	for ( unsigned int i = 0; i < reference.length() - 5; i++ ){
 
 		loc = std::to_string( i );
-		std::string sixMer = reference.substr( i, 6 );
+		std::string sixMer = reference.substr( i, 5 );
 
 		states[ 0 ][ i ] = State( &sd, 		loc + "_SS",	sixMer,	"", 		1.0 );
 		states[ 1 ][ i ] = State( &sd,		loc + "_D", 	sixMer,	"", 		1.0 );		
@@ -87,7 +87,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 	}
 
 	/*add transitions between modules (external transitions) */
-	for ( unsigned int i = 0; i < reference.length() - 7; i++ ){
+	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
 
 		hmm.add_transition( states[1][i], states[1][i + 1], externalD2D );
 		hmm.add_transition( states[1][i], states[0][i + 1], externalD2SS );
@@ -101,9 +101,9 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 	hmm.add_transition( hmm.start, states[1][0], 0.5 );
 
 	/*handle end states */
-	hmm.add_transition( states[1][reference.length() - 7], hmm.end, externalD2D + externalD2SS );
-	hmm.add_transition( states[2][reference.length() - 7], hmm.end, externalI2SS );
-	hmm.add_transition( states[5][reference.length() - 7], hmm.end, externalSE2SS + externalSE2D );
+	hmm.add_transition( states[1][reference.length() - 6], hmm.end, externalD2D + externalD2SS );
+	hmm.add_transition( states[2][reference.length() - 6], hmm.end, externalI2SS );
+	hmm.add_transition( states[5][reference.length() - 6], hmm.end, externalSE2SS + externalSE2D );
 
 	hmm.finalise();
 
@@ -126,29 +126,25 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 
 	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
 	std::vector< NormalDistribution > nd;
-	nd.reserve( reference.length() - 6 );		
+	nd.reserve( reference.length() - 5 );		
 	SilentDistribution sd( 0.0, 0.0 );
 	UniformDistribution ud( 50.0, 130.0 );
 
 	std::string loc;
+	std::vector< unsigned int > analoguePositions = {7, 8, 9}; //for positions 2,3,4 of a 5mer
 
 	/*create the distributions that we need */	
-	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
-		
-		/*fill in analogue data in the appropriate position, if we have it.  otherwise, use the ONT pore model */
-		if ( analogue == true and i == 7 and analogueModel.count( ( reference.substr( i, 6 ) ).replace( 3, 1, "B" ) ) > 0 ) {
+	for ( unsigned int i = 0; i < reference.length() - 5; i++ ){
 
-			emissionMeanAndStd = analogueModel.at( ( reference.substr( i, 6 ) ).replace( 3, 1, "B" ) );
+		/*use the trained model if we're at the right position and have data for this 5mer */
+		if ( analogue and std::find(analoguePositions.begin(), analoguePositions.end(), i) != analoguePositions.end() and analogueModel.count(( reference.substr(i, 5)).replace(10 - i, 1, "B")) > 0){
 
+			emissionMeanAndStd = analogueModel.at((reference.substr(i, 5)).replace(10 - i, 1, "B"));
 		}
-		else if ( analogue == true and i == 8 and analogueModel.count( ( reference.substr( i, 6 ) ).replace( 2, 1, "B" ) ) > 0 ){
-
-			emissionMeanAndStd = analogueModel.at( ( reference.substr( i, 6 ) ).replace( 2, 1, "B" ) );			
-
-		}
+		/*otherwise use the ONT model */
 		else{
 
-			emissionMeanAndStd = basePoreModel.at( reference.substr( i, 6 ) );
+			emissionMeanAndStd = basePoreModel.at( reference.substr( i, 5 ) );
 		}
 
 		nd.push_back( NormalDistribution( emissionMeanAndStd.first, emissionMeanAndStd.second ) );
@@ -156,22 +152,22 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	}
 
 	/*add states to model, handle internal module transitions */
-	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
+	for ( unsigned int i = 0; i < reference.length() - 5; i++ ){
 
 		loc = std::to_string( i );
-		std::string sixMer = reference.substr( i, 6 );
+		std::string fiveMer = reference.substr( i, 5 );
 
-		states[ 0 ][ i ] = State( &sd, 		loc + "_SS",	sixMer,	"", 		1.0 );
-		states[ 1 ][ i ] = State( &sd,		loc + "_D", 	sixMer,	"", 		1.0 );		
-		states[ 2 ][ i ] = State( &ud,		loc + "_I", 	sixMer,	"", 		1.0 );
-		states[ 3 ][ i ] = State( &nd[i], 	loc + "_M1", 	sixMer,	loc + "_match", 1.0 );
-		states[ 4 ][ i ] = State( &nd[i], 	loc + "_M2", 	sixMer,	loc + "_match", 1.0 );
-		states[ 5 ][ i ] = State( &sd, 		loc + "_SE", 	sixMer,	"", 		1.0 );
+		states[ 0 ][ i ] = State( &sd, 		loc + "_SS",	fiveMer,	"", 		1.0 );
+		states[ 1 ][ i ] = State( &sd,		loc + "_D", 	fiveMer,	"", 		1.0 );		
+		states[ 2 ][ i ] = State( &ud,		loc + "_I", 	fiveMer,	"", 		1.0 );
+		states[ 3 ][ i ] = State( &nd[i], 	loc + "_M1", 	fiveMer,	loc + "_match", 1.0 );
+		states[ 4 ][ i ] = State( &nd[i], 	loc + "_M2", 	fiveMer,	loc + "_match", 1.0 );
+		states[ 5 ][ i ] = State( &sd, 		loc + "_SE", 	fiveMer,	"", 		1.0 );
 
 		/*add state to the model */
 		for ( unsigned int j = 0; j < 6; j++ ){
 
-			states[ j ][ i ].meta = sixMer;
+			states[ j ][ i ].meta = fiveMer;
 			hmm.add_state( states[ j ][ i ] );
 		}
 
@@ -201,7 +197,7 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	}
 
 	/*add transitions between modules (external transitions) */
-	for ( unsigned int i = 0; i < reference.length() - 7; i++ ){
+	for ( unsigned int i = 0; i < reference.length() - 6; i++ ){
 
 		hmm.add_transition( states[1][i], states[1][i + 1], externalD2D );
 		hmm.add_transition( states[1][i], states[0][i + 1], externalD2SS );
@@ -215,9 +211,9 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	hmm.add_transition( hmm.start, states[1][0], 0.5 );
 
 	/*handle end states */
-	hmm.add_transition( states[1][reference.length() - 7], hmm.end, externalD2D + externalD2SS );
-	hmm.add_transition( states[2][reference.length() - 7], hmm.end, externalI2SS );
-	hmm.add_transition( states[5][reference.length() - 7], hmm.end, externalSE2SS + externalSE2D );
+	hmm.add_transition( states[1][reference.length() - 6], hmm.end, externalD2D + externalD2SS );
+	hmm.add_transition( states[2][reference.length() - 6], hmm.end, externalI2SS );
+	hmm.add_transition( states[5][reference.length() - 6], hmm.end, externalSE2SS + externalSE2D );
 
 	hmm.finalise();
 

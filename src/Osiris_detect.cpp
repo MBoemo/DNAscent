@@ -123,7 +123,7 @@ int detect_main( int argc, char** argv ){
 	int total = detectData.size();
 	std::cout << "Detecting base analogues..." << std::endl;
 
-	#pragma omp parallel for default(none) schedule(dynamic) shared(total, prog, windowLength, SixMer_model, analogueModel, trainArgs, detectData, outFile) private(ss) num_threads(trainArgs.threads)
+	#pragma omp parallel for default(none) schedule(dynamic) shared(total, prog, windowLength, FiveMer_model, analogueModel, trainArgs, detectData, outFile) private(ss) num_threads(trainArgs.threads)
 	for( auto r = detectData.begin(); r < detectData.end(); r++ ){
 
 		/*normalise raw for shift and scale, and get an alignment between 5mers and the events that produced them */
@@ -136,7 +136,7 @@ int detect_main( int argc, char** argv ){
 			
 			if ( (r -> basecalls).substr( i, 1 ) == "T"){
 
-				std::string readSnippet = (r -> basecalls).substr( i - windowLength, 2*windowLength + 6 );
+				std::string readSnippet = (r -> basecalls).substr( i - windowLength, 2*windowLength + 5 );
 				std::vector< double > eventSnippet;
 
 				/*get the events that correspond to the read snippet */
@@ -147,17 +147,17 @@ int detect_main( int argc, char** argv ){
 						readHead = j;
 					}
 
-					if ( (eventData.eventAlignment)[j].second >= i - windowLength and (eventData.eventAlignment)[j].second <= i + windowLength + 6 ){
+					if ( (eventData.eventAlignment)[j].second >= i - windowLength and (eventData.eventAlignment)[j].second <= i + windowLength + 5 ){
 
 						eventSnippet.push_back( (eventData.normalisedEvents)[j] );
 					}
 
-					if ( (eventData.eventAlignment)[j].second > i + windowLength + 6 ) break;
+					if ( (eventData.eventAlignment)[j].second > i + windowLength + 5 ) break;
 				}
 
 
-				double logProbThymidine = buildAndDetectHMM( readSnippet, SixMer_model, analogueModel, eventSnippet, false );
-				double logProbAnalogue = buildAndDetectHMM( readSnippet, SixMer_model, analogueModel, eventSnippet, true );
+				double logProbThymidine = buildAndDetectHMM( readSnippet, FiveMer_model, analogueModel, eventSnippet, false );
+				double logProbAnalogue = buildAndDetectHMM( readSnippet, FiveMer_model, analogueModel, eventSnippet, true );
 
 				double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 

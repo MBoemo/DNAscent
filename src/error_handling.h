@@ -64,6 +64,14 @@ struct InsufficientArguments : public std::exception {
 	}
 };
 
+
+struct NsInReference : public std::exception {
+	const char * what () const throw () {
+		return "There are unsubstituted Ns in the reference.";
+	}
+};
+
+
 struct MismatchedDimensions : public std::exception {
 	const char * what () const throw () {
 		return "Gaussian elimination on A*x=b.  Rows in A must equal length of b.";

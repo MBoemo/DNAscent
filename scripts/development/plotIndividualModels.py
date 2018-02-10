@@ -15,7 +15,13 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import numpy as np
-from itertools import product
+
+
+#------------------------------------------------------------------------------------------------------------------------------------------
+def divergence(mu1,sig1,mu2,sig2):
+
+	return math.log(sig2/sig1) + ( math.pow(sig1,2) + math.pow(mu1-mu2,2))/(2*math.pow(sig2,2)) - 0.5
+
 
 #------------------------------------------------------------------------------------------------------------------------------------------
 def import_poreModel(filename):
@@ -45,28 +51,21 @@ def import_poreModel(filename):
 
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
 model = import_poreModel( sys.argv[1] )
-oneMers = [''.join(i) for i in product(['A','T','G','C'],repeat=1)]
-twoMers = [''.join(i) for i in product(['A','T','G','C'],repeat=2)]
-threeMers = [''.join(i) for i in product(['A','T','G','C'],repeat=3)]
-fourMers = [''.join(i) for i in product(['A','T','G','C'],repeat=4)]
+diffs=[[],[],[],[],[]]
 
-allPos = []
-for fm in fourMers:
-	allPos.append( 'B'+fm )
-	allPos.append( fm+'B' )
+for key in model:
+	mu1, sig1, mu2, sig2 = model[key]
+	diffs[key.find("B")].append( divergence(mu1,sig1,mu2,sig2) )
 
-for a in threeMers:
-	for b in oneMers:
-		allPos.append( a+'B'+b )
-		allPos.append( b+'B'+a )
+for i,d in enumerate(diffs):
 
-for a in twoMers:
-	for b in twoMers:
-		allPos.append( a+'B'+b )
-
-for item in allPos:
-	if item not in model:
-		print item
-	
-
-
+	if len(d)/10 == 0:
+		continue
+	g = plt.figure(i)
+	plt.hist(d,len(d)/10)
+	plt.xlabel('Divergence')
+	plt.ylabel('Count')
+	plt.title('Comparison Between BrdU and Thymidine Models, N=' + str(len(d)))
+	axes = plt.gca()
+	axes.set_xlim([0,10])
+	g.savefig('modelDivergence_pos'+str(i+1)+'.pdf')

@@ -23,10 +23,10 @@ static const char *help=
 "To run Osiris train, do:\n"
 "  ./Osiris train [arguments]\n"
 "Example:\n"
-"  ./Osiris train -r /path/to/reference.fasta -p 3and4 -bm /path/to/template_median68pA.model -d /path/to/data.foh -o output.txt -t 20 -sc 30\n"
+"  ./Osiris train -r /path/to/reference.fasta -p 234 -d /path/to/data.foh -o output.txt -t 20 -c -l /path/to/myLogFile.log\n"
 "Required arguments are:\n"
 "  -r,--reference            path to reference file in fasta format,\n"
-"  -p,--position             position of analogue in training data (valid arguments are 1and2, 3and4, or 5and6),\n"
+"  -p,--position             position of analogue in training data (valid arguments are 12, 234, or 45),\n"
 "  -d,--trainingData         path to training data in the .foh format (made with prepHairpinData.py),\n"
 "  -o,--output               path to the output pore model file that Osiris will train.\n"
 "Optional arguments are:\n"
@@ -143,58 +143,64 @@ int train_main( int argc, char** argv ){
 		std::vector< std::vector< double > > events = iter -> second;
 
 		std::string brduDomain = iter -> first;
-		std::string adenDomain = reverseComplement( brduDomain );
 
 		/*our reference has N's in it: replace them with the appropriate 7mer that we're goin to train on */
-		unsigned int positionNorm, adenDomLoc, brduDomLoc;
+		unsigned int brduDomLoc;
+		std::string brduDom_B_replace_T = brduDomain;
 
-		if ( trainArgs.analoguePosition == "1and2" ){
-			//adenDomLoc = refLocal.find( "NNNNNAN" );//HERE
+		std::vector< unsigned int > posToLookAt;
+		if ( trainArgs.analoguePosition == "12" ){
+
 			brduDomLoc = refLocal.find( "NTNNNNN" );
-			positionNorm = 0;
+			posToLookAt = {0, 1};
+			brduDom_B_replace_T.replace(1,1,"B");
 		}
-		else if ( trainArgs.analoguePosition == "3and4" ){
-			//adenDomLoc = refLocal.find( "NNNANNN" );//HERE
+		else if ( trainArgs.analoguePosition == "234" ){
+
 			brduDomLoc = refLocal.find( "NNNTNNN" );
-			positionNorm = 2;
+			posToLookAt = {0, 1, 2};
+			brduDom_B_replace_T.replace(3,1,"B");
 		}
-		else if ( trainArgs.analoguePosition == "5and6" ){
-			//adenDomLoc = refLocal.find( "NANNNNN" );//HERE
+		else if ( trainArgs.analoguePosition == "45" ){
+
 			brduDomLoc = refLocal.find( "NNNNNTN" );
-			positionNorm = 4;
+			posToLookAt = {1, 2};
+			brduDom_B_replace_T.replace(5,1,"B");
 		}
 		else{
 			std::cout << "Exiting with error.  Invalid option passed with the -p or --position flag.  Valid options are 1and2, 3and4, or 5and6." << std::endl;
 			exit(EXIT_FAILURE);
 		}
 	
-		//refLocal.replace( adenDomLoc, adenDomain.length(), adenDomain );//HERE
 		refLocal.replace( brduDomLoc, brduDomain.length(), brduDomain );
 		
 		/*check for unresolved Ns and fail if there are any */
-		for ( auto it = refLocal.begin(); it < refLocal.end(); it++ ){
-			if ( *it == 'N' ){
-				std::cout << "Exiting with error.  Reference contains unresolved N's." << std::endl;
-				exit(EXIT_FAILURE);
-			}
-		}
+		if ( refLocal.find("N") != std::string::npos ) throw NsInReference();
 
 		/*if clipping was specified, adjust the reference accordingly */
 		if ( trainArgs.clip == true ){
 
+			/*make sure the domain is far enough from the 5' end that we have enough room to clip */
 			assert( ( brduDomLoc - 16 >= 0 ) and ( brduDomLoc + 23 <= refLocal.length() ) );
 
+			/*cut down the reference and reset brduDomLoc appropriately */
 			refLocal = refLocal.substr( brduDomLoc - 16, 39 );
 			brduDomLoc = 16;
+		}
+
+		/*fix posToLookAt with brduDomLoc that we set */
+		for ( unsigned int i = 0; i < posToLookAt.size(); i++ ){
+
+			posToLookAt[i] = posToLookAt[i] + brduDomLoc;
 		}
 
 		/*do the training */
 		std::stringstream ss;
 		try{
-			ss = buildAndTrainHMM( refLocal, SixMer_model, events, trainArgs.threads, false );
+			ss = buildAndTrainHMM( refLocal, FiveMer_model, events, trainArgs.threads, false );
 		}
 		catch ( NumericalInstability &ni ){
-			std::cout << ni.what() << std::endl << "Aborted training on this 6mer, skipping: "<< brduDomain << std::endl;
+			std::cout << ni.what() << std::endl << "Aborted training on this 7mer, skipping: "<< brduDom_B_replace_T << std::endl;
 			displayProgress( prog, trainingData.size() );
 			prog++;
 			continue; 
@@ -203,55 +209,34 @@ int train_main( int argc, char** argv ){
 		/*if we specified that we want a log file, read the ss buffer into it now */
 		std::stringstream ssLog( ss.str() );
 		if ( trainArgs.logFile == true ){
-			logFile << ">" << brduDomain << std::endl << ssLog.rdbuf();
+			logFile << ">" << brduDom_B_replace_T << std::endl << ssLog.rdbuf();
 		}
 
-		/*hacky bodge to get the training data out at the relevant position without making Penthus specialised */
+		/*bodge to get the training data out at the relevant position without making Penthus specialised */
 		std::string line;
 		while ( std::getline( ss, line ) ){
 			
+			/*get the position */
 			std::vector< std::string > findIndex = split( line, '_' );
 			unsigned int i = atoi(findIndex[0].c_str());
 
-			if ( i == brduDomLoc ){
+			if ( std::find(posToLookAt.begin(), posToLookAt.end(), i) != posToLookAt.end() ){
 
-				std::string atFirstPos = ( brduDomain.substr( 0, 6 ) ).replace( positionNorm + 1, 1, "B" );
 				std::vector< std::string > splitLine = split( line, '\t' );
-				
-				if ( trainedModel.count( atFirstPos ) > 0 ){
+				std::string fiveMer = brduDom_B_replace_T.substr(i-brduDomLoc, 5);
+				if ( trainedModel.count( fiveMer ) > 0 ){
 
-					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atFirstPos ][ 1 ] ){
+					if ( atof(splitLine[ 5 ].c_str()) < trainedModel[fiveMer][1] ){
 
-						trainedModel[ atFirstPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
+						trainedModel[fiveMer] = {atof(splitLine[3].c_str()), atof(splitLine[5].c_str()), atof(splitLine[2].c_str()), atof(splitLine[4].c_str())};
 					}
 				}
 				else{
 
-					trainedModel[ atFirstPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
-				}
-
-			}
-			else if ( i == brduDomLoc + 1 ){
-
-				std::string atSecondPos = ( brduDomain.substr( 1, 6 ) ).replace( positionNorm, 1, "B" );
-				std::vector< std::string > splitLine = split( line, '\t' );
-
-				if ( trainedModel.count( atSecondPos ) > 0 ){
-
-					if ( atof( splitLine[ 5 ].c_str() ) < trainedModel[ atSecondPos ][ 1 ] ){
-
-						trainedModel[ atSecondPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
-					}
-				}
-				else{
-
-					trainedModel[ atSecondPos ] = { atof( splitLine[ 3 ].c_str() ), atof( splitLine[ 5 ].c_str() ), atof( splitLine[ 2 ].c_str() ), atof( splitLine[ 4 ].c_str() ) };
+					trainedModel[fiveMer] = {atof(splitLine[3].c_str()), atof(splitLine[5].c_str()), atof(splitLine[2].c_str()), atof(splitLine[4].c_str())};
 				}
 			}
-			else if ( i > brduDomLoc + 1 ){
-		
-				break;
-			}
+			else if ( i > posToLookAt.back() ) break;
 		}
 		displayProgress( prog, trainingData.size() );
 		prog++;
@@ -269,7 +254,5 @@ int train_main( int argc, char** argv ){
 	/*some wrap-up messages */
 	std::cout << std::endl << "Done." << std::endl;
 
-
 	return 0;
-
 }
