@@ -73,7 +73,7 @@ def get_readID(fast5file,root):
 			read_number = f_hdf5[path].keys()[0]
 			readInfo = f_hdf5[path + '/' + read_number]
 			readID = readInfo.attrs.get('read_id')
-			return (readID, root+fast5file)
+			return (readID, root+'/'+fast5file)
 
 		except KeyError:
 			warnings.warn('File '+root+'/'+fast5file+' did not have a valid readID path.  Skipping.', Warning)
@@ -101,7 +101,7 @@ for root, dirs, files in os.walk(a.data, topdown=True):
 		fout.write(readID+'\t'+path+'\n')
 	
 	progress += len(out)
-	sys.stdout.write("\rFinished unpacking " + str(progress) + ' fast5 files...')
+	sys.stdout.write("\rFinished indexing " + str(progress) + ' fast5 files...')
 	sys.stdout.flush()
 
 fout.close()

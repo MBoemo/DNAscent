@@ -220,7 +220,7 @@ def displayProgress(current, total):
 		sys.stdout.flush()
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def normaliseRead(filename, bounds):
+def normaliseRead(sequence, filename, bounds):
 
 
 	f_hdf5 = h5py.File(filename,'r')
@@ -231,11 +231,6 @@ def normaliseRead(filename, bounds):
 	raw_data = f_hdf5[path + '/' + read_number + '/Signal']
 	raw_array = np.zeros(raw_data.len(),dtype='int16')
 	raw_data.read_direct(raw_array)
-
-	#get sequence
-	fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
-	fastq = f_hdf5[fast5path2fastq].value
-	sequence = fastq.split('\n')[1]
 
 	#get read-specific parameters to normalise from raw to pA
 	scaling = f_hdf5['/UniqueGlobalKey/channel_id']
@@ -253,7 +248,7 @@ def normaliseRead(filename, bounds):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFilename, threads):
+def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFilename, threads, locInDomain):
 #	Used to import training data from a hairpin primer of the form 5'-...NNNBNNN....NNNANNN...-3'.
 #	Creates a map from kmer (string) to a list of lists, where each list is comprised of events from a read
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
@@ -330,13 +325,13 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 			RHS = "".join(analogueDomain[9:]).upper()
 
 			#if we've identified the analogue domain completely, keep this read to train on
-			if ('-' not in analogueDomain) and (brD[3] == 'T') and (indelFree) and (LHS == reference[ROI-2:ROI]) and (RHS == reference[ROI+7:ROI+9]): 
+			if ('-' not in analogueDomain) and (brD[locInDomain] == 'T') and (indelFree) and (LHS == reference[ROI-2:ROI]) and (RHS == reference[ROI+7:ROI+9]): 
 
 				#append to dictionary
 				if brD in kmer2filename:
-					kmer2filename[brD] += [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]) ) ]
+					kmer2filename[brD] += [ ( sequence, readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1] )) ]
 				else:
-					kmer2filename[brD] = [ ( readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1]) ) ]
+					kmer2filename[brD] = [ ( sequence, readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1])) ]
 
 			else:
 				failedROIQC += 1
@@ -365,24 +360,26 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 	for i, key in enumerate(filtered):
 
 		#print progress
-		displayProgress( i, numOfRecords)
+		displayProgress( i, len(filtered.keys()))
 
 		f_out.write( '>'+key+'\n' )
 
 		fnameBuffer = []
 		boundsBuffer = []
+		seqBuffer = []
 		counter = 0
 		#for each read
-		for filename, bounds in filtered[key]:
+		for sequence, filename, bounds in filtered[key]:
 
 			#fill up the buffer
 			fnameBuffer.append(filename)
 			boundsBuffer.append(bounds)
+			seqBuffer.append(sequence)
 
 			#do the parallel processing to normalise the reads
 			if counter == 1024:
 								
-				out = Parallel(n_jobs=threads)(delayed(normaliseRead)(f, b) for f, b in zip(fnameBuffer,boundsBuffer))
+				out = Parallel(n_jobs=threads)(delayed(normaliseRead)(s, f, b) for s, f, b in zip(seqBuffer, fnameBuffer,boundsBuffer))
 	
 				#print the contents to the foh file
 				for r in out:
@@ -395,7 +392,7 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 			counter += 1
 
 		#write whatever's left (or all if it if we never completely filled up the buffer)
-		out = Parallel(n_jobs=threads)(delayed(normaliseRead)(f, b) for f, b in zip(fnameBuffer,boundsBuffer))
+		out = Parallel(n_jobs=threads)(delayed(normaliseRead)(s, f, b) for s, f, b in zip(seqBuffer, fnameBuffer, boundsBuffer))
 	
 		#print whatever's left to the foh file
 		for r in out:
@@ -417,17 +414,20 @@ reference = import_reference(a.reference)
 #set the B and A domain locations using the reference
 if a.position == '1and2':
 	analogueLoc = reference.find('NTNNNNN')
+	locInDomain = 1
 
 elif a.position == '3and4':
 	analogueLoc = reference.find('NNNTNNN')
+	locInDomain = 3
 
 elif a.position == '5and6':
 	analogueLoc = reference.find('NNNNNTN')
+	locInDomain = 5
 
 else:
 	print 'Exiting with error.  Invalid argument passed to -p or --position.'
 	splashHelp()
 
 #bin the 7mers and write the training data to the output file
-import_HairpinTrainingData(import_reference(a.reference), a.data, analogueLoc, a.minReads, a.outFoh, a.threads)
+import_HairpinTrainingData(import_reference(a.reference), a.data, analogueLoc, a.minReads, a.outFoh, a.threads, locInDomain)
 
