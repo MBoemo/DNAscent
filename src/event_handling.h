@@ -17,8 +17,6 @@ struct eventDataForRead {
 	std::vector< std::pair< int, int > > eventAlignment;
 };
 
-
-std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std::string, int, bool );
-eventDataForRead normaliseEvents( read, bool );
+std::vector< double > normaliseEvents( read, bool );
 
 #endif

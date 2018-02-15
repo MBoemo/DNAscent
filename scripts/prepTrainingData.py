@@ -329,7 +329,8 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 
 				#append to dictionary
 				if brD in kmer2filename:
-					kmer2filename[brD] += [ ( sequence, readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1] )) ]
+					if len(kmer2filename[brD]) < 100:#cap the top number we can have
+						kmer2filename[brD] += [ ( sequence, readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1] )) ]
 				else:
 					kmer2filename[brD] = [ ( sequence, readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1])) ]
 
@@ -356,6 +357,9 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 	del kmer2filename
 
 	f_out = open(outFilename,'w')
+
+	#write the header
+	f_out.write( str(len(filtered.keys())) + ' ' + str(readsThreshold) + '\n')
 
 	for i, key in enumerate(filtered):
 
@@ -397,6 +401,9 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 		#print whatever's left to the foh file
 		for r in out:
 			f_out.write(r)
+
+		#write the closer
+		f_out.write('<\n')
 
 	displayProgress( numOfRecords, numOfRecords)
 	f_out.close()

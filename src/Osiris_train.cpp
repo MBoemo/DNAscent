@@ -120,9 +120,18 @@ int train_main( int argc, char** argv ){
 
 	Arguments trainArgs = parseTrainingArguments( argc, argv );
 
-	/*import a reference from a fasta file and training data from a foh file.  Normalise the training data. */
+	/*import a reference from the fasta file specified */
 	std::string reference = import_reference( trainArgs.referenceFilename );
-	std::map< std::string, std::vector< std::vector< double > > > trainingData = segmentEvents( trainArgs.trainingDataFilename, trainArgs.threads, trainArgs.clip );
+
+	/*get a filestream to the foh file - we'll load training data dynamically */
+	std::ifstream fohFile( trainArgs.trainingDataFilename );
+	if ( not fohFile.is_open() ) throw IOerror( trainArgs.trainingDataFilename );
+
+	/*read the foh header */
+	std::string line;
+	std::getline( fohFile, line );
+	std::string strTrainingTotal = line.substr(0,line.find(' '));
+	int trainingTotal = atoi(strTrainingTotal.c_str());
 
 	/*log file IO - if we specified that we want a log file, open it here */
 	std::ofstream logFile;
@@ -137,14 +146,32 @@ int train_main( int argc, char** argv ){
 	std::cout << "Training..." << std::endl;
 
 	/*iterate on the 7mers that we want to train on */
-	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
+	std::pair< std::string, std::vector< read > > trainingGroup;
+	std::string trainingGroupStr;
+	while ( std::getline( fohFile, trainingGroupStr, '<' ) ){
 
-		std::string refLocal = reference;
-		std::vector< std::vector< double > > events = iter -> second;
+		/*stop if we're at the end of the file */
+		if ( fohFile.eof() ) break; 
 
-		std::string brduDomain = iter -> first;
+		/*grab a 7mer's worth of training data from the foh */
+		trainingGroup = getTrainingFrom_foh( trainingGroupStr );
+		std::string brduDomain = trainingGroup.first;
+
+		/*for each read, segment the events, normalise for shift and scale, and clip if specified */
+		std::vector< std::vector< double > > events;
+		bool clip = trainArgs.clip;
+		int threads = trainArgs.threads;
+		#pragma omp parallel for default(none) shared(trainingGroup, events, clip) num_threads(threads)
+		for ( auto r = (trainingGroup.second).begin(); r < (trainingGroup.second).end(); r++ ){
+			
+			std::vector< double > localEvents = normaliseEvents( *r, clip );			
+			
+			#pragma omp critical
+			events.push_back( localEvents );
+		}
 
 		/*our reference has N's in it: replace them with the appropriate 7mer that we're goin to train on */
+		std::string refLocal = reference;
 		unsigned int brduDomLoc;
 		std::string brduDom_B_replace_T = brduDomain;
 
@@ -201,7 +228,7 @@ int train_main( int argc, char** argv ){
 		}
 		catch ( NumericalInstability &ni ){
 			std::cout << ni.what() << std::endl << "Aborted training on this 7mer, skipping: "<< brduDom_B_replace_T << std::endl;
-			displayProgress( prog, trainingData.size() );
+			displayProgress( prog, trainingTotal );
 			prog++;
 			continue; 
 		}
@@ -238,10 +265,10 @@ int train_main( int argc, char** argv ){
 			}
 			else if ( i > posToLookAt.back() ) break;
 		}
-		displayProgress( prog, trainingData.size() );
+		displayProgress( prog, trainingTotal );
 		prog++;
 	}
-	displayProgress( trainingData.size(), trainingData.size() );
+	displayProgress( trainingTotal, trainingTotal );
 
 	/*make a pore model file from the map */
 	export_poreModel( trainedModel, trainArgs.trainingOutputFilename );

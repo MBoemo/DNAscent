@@ -127,72 +127,48 @@ void export_poreModel( std::map< std::string, std::vector< double > > &trainedMa
 }
 
 
-std::vector< std::pair< std::string, std::vector< read > > > import_foh( std::string fohFilePath ){
+std::pair< std::string, std::vector< read > > getTrainingFrom_foh( std::string &trainingGroup ){
 	
-	std::cout << "Importing training data..." << std::endl;
-	std::ifstream file( fohFilePath );
-	
-	if ( not file.is_open() ) throw IOerror( fohFilePath );
-
 	std::string line, sevenMerName, event, bound;
-	std::string delim = " ";
+	std::stringstream trainingGroupStream;
 
-	std::vector< std::pair< std::string, std::vector< read > > > formattedFoh;
 	read currentRead;
-	std::vector< read > currentReads;
+	std::vector< read > trainingGroupReads;
 
-	bool first = true;
-	int modSwitch = 0;
+	/*read this training group from the foh file into a stream */
+	trainingGroupStream.str( trainingGroup );
+
+	/*get the 7mer name */
+	std::getline( trainingGroupStream, line );
+	if ( line == "" ) std::getline( trainingGroupStream, line );
+	assert( line.substr(0,1) == ">" );
+	sevenMerName = line.erase( 0, 1 );
 	
-	while ( std::getline( file, line ) ){
+	/*go through each read */
+	while ( std::getline( trainingGroupStream, line ) ){
 
-		/*if this is a 7mer name */
-		if ( line[0] == '>' ){
-			assert( modSwitch == 0 );
+		/*the basecall line */
+		currentRead.basecalls = line;
 
-			if ( not first ){
-				formattedFoh.push_back( std::make_pair( sevenMerName, currentReads ) );
-				currentReads.clear();
-			}
+		/*the bounds line */
+		std::getline( trainingGroupStream, line );
+		(currentRead.ROIbounds).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
+		(currentRead.ROIbounds).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
 
-			sevenMerName = line.erase( 0, 1 );
-			first = false;
+		/*the raw signal line */
+		std::getline( trainingGroupStream, line );
+		std::vector< double > rawSignals;
+		std::istringstream ss( line );
+		std::string event;
+		while ( std::getline( ss, event, ' ' ) ){
+
+			rawSignals.push_back( atof( event.c_str() ) );
 		}
-		/*if this is a basecall line */
-		else if ( modSwitch == 0 ){
-			currentRead.basecalls = line;
-			modSwitch++;
-			modSwitch = modSwitch % 3;
-		}
-		/*if this is a bounds line */
-		else if ( modSwitch == 1 ){
-			(currentRead.ROIbounds).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
-			(currentRead.ROIbounds).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
-			modSwitch++;
-			modSwitch = modSwitch % 3;
-		}
-		/*if this is a raw signal line */
-		else if ( modSwitch == 2 ){
-			std::vector< double > rawSignals;
+		currentRead.raw = rawSignals;
 
-			std::istringstream ss( line );
-			std::string event;
-			while ( std::getline( ss, event, ' ' ) ){
-
-				rawSignals.push_back( atof( event.c_str() ) );
-			}
-			currentRead.raw = rawSignals;
-
-			currentReads.push_back( currentRead );
-			modSwitch++;
-			modSwitch = modSwitch % 3;
-		}
+		trainingGroupReads.push_back( currentRead );
 	}
-	/*we have one more to do */
-	formattedFoh.push_back( std::make_pair( sevenMerName, currentReads ) );
-
-	std::cout << "Done." << std::endl;
-	return formattedFoh;
+	return std::make_pair( sevenMerName, trainingGroupReads );
 }
 
 

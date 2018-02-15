@@ -196,7 +196,7 @@ std::vector< double > roughRescale( std::vector< double > means, std::string &ba
 }
 
 
-eventDataForRead normaliseEvents( read r, bool clip ){
+std::vector< double > normaliseEvents( read r, bool clip ){
 
 	eventDataForRead thisRead;
 
@@ -279,46 +279,5 @@ eventDataForRead normaliseEvents( read r, bool clip ){
 			}
 		}
 	}
-	return thisRead;
-}
-
-
-std::map< std::string, std::vector< std::vector< double > > > segmentEvents( std::string filename_foh, int threads, bool clip ){
-
-	std::map< std::string, std::vector< std::vector< double > > > scaled_trainingData;
-
-	/*import the training data from the .foh file */
-	std::vector< std::pair< std::string, std::vector< read > > > trainingData = import_foh( filename_foh );
-
-	/*for each .foh entry, normalise the reads and add them to a map keyed by the .foh name */
-	std::cout << "Normalising for shift and scale..." << std::endl;
-	int prog = 0;
-	int total = trainingData.size();
-
-	#pragma omp parallel for default(none) shared(prog, total, scaled_trainingData, trainingData, clip) num_threads(threads)
-	for ( auto it = trainingData.begin(); it < trainingData.end(); it++ ){
-
-		std::vector< std::vector< double > > parallelHolder;
-
-		/*for each read grouped under this foh name */
-		for ( auto r = (it -> second).begin(); r < (it -> second).end(); r++ ){
-
-			eventDataForRead eventData = normaliseEvents( *r, clip );
-			std::vector< double > events = eventData.normalisedEvents;
-
-			parallelHolder.push_back( events );
-		}
-
-		#pragma omp atomic
-		prog++;
-
-		#pragma omp critical
-		{	
-			scaled_trainingData[ it -> first] = parallelHolder;
-			displayProgress( prog, total );
-		}
-	}
-	displayProgress( total, total );
-	std::cout << std::endl << "Done." << std::endl;
-	return scaled_trainingData;
+	return thisRead.normalisedEvents;
 }
