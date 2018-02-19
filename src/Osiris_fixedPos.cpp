@@ -11,6 +11,7 @@
 #include "common.h"
 #include "build_model.h"
 #include "data_IO.h"
+#include "poreModels.h"
 #include "error_handling.h"
 
 
@@ -23,22 +24,22 @@ static const char *help=
 "Required arguments are:\n"
 "  -r,--reference            path to reference file in fasta format,\n"
 "  -p,--position             position of analogue in training data,\n"
-"  -om,--ont-model           path to 6mer pore model file (provided by ONT) over bases {A,T,G,C},\n"
 "  -d,--trainingData         path to training data in the .foh format (can be made with Python Osiris),\n"
 "  -o,--output               path to the training values at each position on the reference.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
-"  -sc,--soft-clipping       restrict training to this window size around a region of interest (default is off).\n";
+"  -c,--clipping             restrict training to a small window around the region of interest.\n"
+"  -l,--log-file             training log file for the training values at each position on the reference (default is none).\n";
 
 struct Arguments {
 	std::string referenceFilename;
-	int analoguePosition;
+	unsigned int analoguePosition;
 	std::string trainingDataFilename;
-	std::string ontModelFilename;
 	std::string trainingOutputFilename;
+	bool logFile;
+	std::string logFilename;
 	int threads;
-	bool softClip;
-	int SCwindow;
+	bool clip;
 };
 
 Arguments parseFixedPosArguments( int argc, char** argv ){
@@ -69,7 +70,7 @@ Arguments parseFixedPosArguments( int argc, char** argv ){
 	trainArgs.softClip = false;
 
 	/*parse the command line arguments */
-	for ( unsigned int i = 1; i < argc; ){
+	for ( int i = 1; i < argc; ){
 
 		std::string flag( argv[ i ] );
 
@@ -78,56 +79,46 @@ Arguments parseFixedPosArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.referenceFilename = strArg;
 			i+=2;	
-
-		}
-		else if ( flag == "-om" or flag == "--ont-model" ){
-
-			std::string strArg( argv[ i + 1 ] );
-			trainArgs.ontModelFilename = strArg;
-			i+=2;
-
 		}
 		else if ( flag == "-d" or flag == "--trainingData" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.trainingDataFilename = strArg;
 			i+=2;
-
 		}
 		else if ( flag == "-o" or flag == "--output" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.trainingOutputFilename = strArg;
 			i+=2;
-
 		}
 		else if ( flag == "-t" or flag == "--threads" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.threads = std::stoi( strArg.c_str() );
 			i+=2;
-
 		}
 		else if ( flag == "-p" or flag == "--position" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.analoguePosition = std::stoi( strArg.c_str() );
 			i+=2;
-
 		}
-		else if ( flag == "-sc" or flag == "--soft-clipping" ){
+		else if ( flag == "-c" or flag == "--clipping" ){
 
-			trainArgs.softClip = true;
+			trainArgs.clip = true;
+			i++;
+		}
+		else if ( flag == "-l" or flag == "--log-file" ){
+
+			trainArgs.logFile = true;
 			std::string strArg( argv[ i + 1 ] );
-			trainArgs.SCwindow = std::stoi( strArg.c_str() );
+			trainArgs.logFilename = strArg;
 			i+=2;
-
 		}
 		else throw InvalidOption( flag );
 	}
-
 	return trainArgs;
-
 }
 
 
@@ -135,50 +126,113 @@ int fixedPos_main( int argc, char** argv ){
 
 	Arguments trainArgs = parseFixedPosArguments( argc, argv );
 
+	/*import a reference from the input fasta file */
 	std::string reference = import_reference( trainArgs.referenceFilename );
-	std::map< std::string, std::pair< double, double > > ontModel =  import_poreModel( trainArgs.ontModelFilename );
-	std::map< std::string, std::vector< std::vector< double > > > trainingData = import_foh( trainArgs.trainingDataFilename );
 
-	/*output file*/
-	std::ofstream outFile;
+	/*get a filestream to the foh file - because this is fixed position, we don't care about the foh header */
+	std::ifstream fohFile( trainArgs.trainingDataFilename );
+	if ( not fohFile.is_open() ) throw IOerror( trainArgs.trainingDataFilename );
 
-	int brduDomLoc = trainArgs.analoguePosition;
+	/*log file IO - if we specified that we want a log file, open it here */
+	std::ofstream logFile;
+	if ( trainArgs.logFile == true ){
+		logFile.open( trainArgs.logFilename );
+		if ( not logFile.is_open() ) throw IOerror( trainArgs.logFilename );
+	}
 
-	outFile.open( trainArgs.trainingOutputFilename );
-	if ( not outFile.is_open() ) throw IOerror( trainArgs.trainingOutputFilename );
+	/*we're looking for BrdU at a fixed position, at the position specified on the command line */
+	unsigned int brduDomLoc = trainArgs.analoguePosition;
 
-	for( auto iter = trainingData.cbegin(); iter != trainingData.cend(); ++iter ){
+	/*this will be filled up with results from Penthus */
+	std::map< std::string, std::vector< double> > trainedModel;
 
-		std::vector< std::vector< double > > events = iter -> second;
+	/*iterate on the 7mers that we want to train on */
+	std::pair< std::string, std::vector< read > > trainingGroup;
+	std::string trainingGroupStr;
+	while ( std::getline( fohFile, trainingGroupStr, '<' ) ){
 
-		/*if soft clipping was specified, truncate the reference and events with dynamic time warping */
-		if ( trainArgs.softClip == true ){
+		/*stop if we're at the end of the file */
+		if ( fohFile.eof() ) break; 
 
-			if ( ( brduDomLoc - trainArgs.SCwindow < 0 ) or ( brduDomLoc + trainArgs.SCwindow > reference.length() ) ){
+		/*grab the training data from the foh */
+		trainingGroup = getTrainingFrom_foh( trainingGroupStr );
 
-				std::cout << "Exiting with error.  Soft clipping window exceeds reference length.  Reduce window size." << std::endl;
-				exit(EXIT_FAILURE);
-
-			}
-
-			reference = reference.substr( brduDomLoc - trainArgs.SCwindow, 6 + 2*trainArgs.SCwindow );
-			brduDomLoc = trainArgs.SCwindow;
-			events = filterEvents( reference, ontModel, events );
+		/*for each read, segment the events, normalise for shift and scale, and clip if specified */
+		std::vector< std::vector< double > > events;
+		bool clip = trainArgs.clip;
+		int threads = trainArgs.threads;
+		#pragma omp parallel for default(none) shared(trainingGroup, events, clip) num_threads(threads)
+		for ( auto r = (trainingGroup.second).begin(); r < (trainingGroup.second).end(); r++ ){
 			
+			std::vector< double > localEvents = normaliseEvents( *r, clip );			
+			
+			#pragma omp critical
+			events.push_back( localEvents );
 		}
 
-		/*do the training */
-		std::stringstream ss = buildAndTrainHMM( reference, ontModel, events, trainArgs.threads, true );
+		/*if clipping was specified, adjust the reference accordingly */
+		if ( trainArgs.clip == true ){
+
+			/*make sure the domain is far enough from the 5' end that we have enough room to clip */
+			assert( ( brduDomLoc - 16 >= 0 ) and ( brduDomLoc + 23 <= reference.length() ) );
+
+			/*cut down the reference and reset brduDomLoc appropriately */
+			reference = reference.substr( brduDomLoc - 16, 39 );
+			brduDomLoc = 16;
+		}
+
+		/*do the training - we just have one reference so use the HMM verbose output */
+		std::stringstream ss;
+		try{
+			ss = buildAndTrainHMM( reference, FiveMer_model, events, trainArgs.threads, true );
+		}
+		catch ( NumericalInstability &ni ){
+			std::cout << ni.what() << std::endl << "Aborted training due to numerical instability - try adding more reads." << std::endl;
+			continue; 
+		}
 
 		/*if we specified that we want a log file, read the ss buffer into it now */
 		std::stringstream ssLog( ss.str() );
-		outFile << ssLog.rdbuf();
+		if ( trainArgs.logFile == true ){
+			logFile << ">" << brduDom_B_replace_T << std::endl << ssLog.rdbuf();
+		}
 
+		/*use brduDomLoc to determine the positions we should look at to write the model */
+		std::vector< unsigned int > posToLookAt = {brduDomLoc, brduDomLoc + 1, brduDomLoc + 2, brduDomLoc + 3, brduDomLoc + 4};
+
+		/*bodge to get the training data out at the relevant position without making Penthus specialised */
+		std::string line;
+		while ( std::getline( ss, line ) ){
+			
+			/*get the position */
+			std::vector< std::string > findIndex = split( line, '_' );
+			unsigned int i = atoi(findIndex[0].c_str());
+
+			if ( std::find(posToLookAt.begin(), posToLookAt.end(), i) != posToLookAt.end() ){
+
+				std::vector< std::string > splitLine = split( line, '\t' );
+				std::string fiveMer = brduDom_B_replace_T.substr(i-brduDomLoc, 5);
+				trainedModel[fiveMer] = {atof(splitLine[3].c_str()), atof(splitLine[5].c_str()), atof(splitLine[2].c_str()), atof(splitLine[4].c_str())};
+			}
+			else if ( i > posToLookAt.back() ) break;
+		}
+	}
+
+
+	/*make a pore model file from the map */
+	export_poreModel( trainedModel, trainArgs.trainingOutputFilename );
+
+	/*if we opened a log file to write on, close it now */
+	if ( trainArgs.logFile == true ){
+		logFile.close();
+	}
+
+	/*some wrap-up messages */
+	std::cout << std::endl << "Done." << std::endl;
 	}
 
 	/*if we opened a log file to write on, close it now */
 	outFile.close();
 
 	return 0;
-
 }

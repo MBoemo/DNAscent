@@ -27,7 +27,7 @@ static const char *help=
 "Required arguments are:\n"
 "  -r,--reference            path to reference file in fasta format,\n"
 "  -p,--position             position of analogue in training data (valid arguments are 12, 234, or 45),\n"
-"  -d,--trainingData         path to training data in the .foh format (made with prepHairpinData.py),\n"
+"  -d,--trainingData         path to training data in the .foh format (made with prepTrainingData.py),\n"
 "  -o,--output               path to the output pore model file that Osiris will train.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"

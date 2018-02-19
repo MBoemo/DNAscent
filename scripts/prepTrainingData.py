@@ -29,11 +29,11 @@ class arguments:
 
 #--------------------------------------------------------------------------------------------------------------------------------------
 def splashHelp():
-	s = """prepHairpinTrainingData.py: Osiris preprocessing script that will format ONT reads in the Osiris training/detection format.
-To run prepHairpinTrainingData.py, do:
-  python prepHairpinTrainingData.py [arguments]
+	s = """prepTrainingData.py: Osiris preprocessing script that will format ONT reads in the Osiris training/detection format.
+To run prepTrainingData.py, do:
+  python prepTrainingData.py [arguments]
 Example:
-  python prepHairpinTrainingData.py -r /path/to/reference.fasta -p 34 -m /path/to/template_median68pA.5mer.model -d /path/to/reads -o output.foh -t 20
+  python prepTrainingData.py -r /path/to/reference.fasta -p 3and4 -n 40 -d /path/to/aligned.bam -o output.foh -t 20
 Required arguments are:
   -r,--reference            path to reference file in fasta format,
   -p,--position             position of analogue in training data (valid arguments are 1and2, 3and4, or 5and6),
@@ -81,66 +81,6 @@ def parseArguments(args):
 		splashHelp() 
 
 	return a
-
-
-#--------------------------------------------------------------------------------------------------------------------------------------
-def reverseComplement(sequence):
-#	takes a DNA sequence and returns its reverse complement
-#	ARGUMENTS
-#       ---------
-#	- sequence: DNA sequence
-#	  type: string
-#	OUTPUTS
-#       -------
-#	- revComp: reverse complement DNA sequence
-#	  type: string
-
-	#seq to upper case
-	sequence = sequence.upper()
-
-	#build the complement
-	revComp = ''
-	for char in sequence:
-		if char == 'A':
-			revComp += 'T'
-		elif char == 'T':
-			revComp += 'A'
-		elif char == 'C':
-			revComp += 'G'
-		elif char == 'G':
-			revComp += 'C'
-		#guard against illegal characters
-		else:
-			warnings.warn('Warning: Illegal character in sequence.  Legal characters are A, T, G, and C.', Warning)
-
-	#take the reverse of the complement and return it
-	return revComp[::-1]
-
-
-#--------------------------------------------------------------------------------------------------------------------------------------
-def import_poreModel(filename):
-#	takes the filename of an ONT pore model file and returns a map from kmer (string) to [mean,std] (list of floats)
-#	ARGUMENTS
-#       ---------
-#	- filename: path to an ONT model file
-#	  type: string
-#	OUTPUTS
-#       -------
-#	- kmer2MeanStd: a map, keyed by a kmer, that returns the model mean and standard deviation signal for that kmer
-#	  type: dictionary
-
-	f = open(filename,'r')
-	g = f.readlines()
-	f.close()
-
-	kmer2MeanStd = {}
-	for line in g:
-		if line[0] != '#' and line[0:4] != 'kmer': #ignore the header
-			splitLine = line.split('\t')
-			kmer2MeanStd[ splitLine[0] ] = [ float(splitLine[1]), float(splitLine[2]) ]
-	g = None
-
-	return kmer2MeanStd
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------

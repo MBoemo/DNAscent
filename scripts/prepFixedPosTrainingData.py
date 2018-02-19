@@ -36,12 +36,15 @@ def splashHelp():
 To run prepFixedPosTrainingData.py, do:
   python prepFixedPosTrainingData.py [arguments]
 Example:
-  python prepFixedPosTrainingData.py -m /path/to/template_median68pA.5mer.model -d /path/to/alignment.bam -o output.foh -t 20
+  python prepFixedPosTrainingData.py -r /path/to/reference.fasta -p 40 -n 40 -m 100 -d /path/to/aligned.bam -o output.foh -t 20
 Required arguments are:
+  -r,--reference            path to reference file in fasta format,
+  -p,--position             position of analogue in training data,
+  -n,--minimum              minimum threshold of reads that we're allowed to train on,
   -d,--data                 path to BAM file,
-  -m,--5mer-model           path to 5mer pore model file (provided by ONT) to normalise reads,
   -o,--output               path to the output training .foh or detection .fdh file.
 Optional arguments are:
+  -m,--maximum              maximum number of reads that we're allowed to train on (default is 1000),
   -t,--threads              number of threads (default is 1 thread)."""
 
 	print s
@@ -52,56 +55,70 @@ Optional arguments are:
 def parseArguments(args):
 
 	a = arguments()
+	a.threads = 1
+	a.maxReads = 1000
 
 	for i, argument in enumerate(args):
-		if argument == '-t' or argument == '--threads':
-			a.threads = int(args[i+1])
 			
-		elif argument == '-d' or argument == '--data':
-			a.bamfile = str(args[i+1])
+		if argument == '-r' or argument == '--reference':
+			a.reference = str(args[i+1])
 
-		elif argument == '-m' or argument == '--5mer-model':
-			a.fiveMerModel = str(args[i+1])
+		elif argument == '-d' or argument == '--data':
+			a.data = str(args[i+1])
+
+		elif argument == '-p' or argument == '--position':
+			a.position = int(args[i+1])
 
 		elif argument == '-o' or argument == '--output':
 			a.outFoh = str(args[i+1])
 
+		elif argument == '-n' or argument == '--minimum':
+			a.minReads = int(args[i+1])
+
+		elif argument == '-m' or argument == '--maximum':
+			a.maxReads = int(args[i+1])
+
+		elif argument == '-t' or argument == '--threads':
+			a.threads = int(args[i+1])
+
 		elif argument == '-h' or argument == '--help':
-			splashHelp()
-		elif argument[0] == '-':
 			splashHelp()
 
 	#check that required arguments are met
-	if not hasattr( a, 'fiveMerModel') or not hasattr( a, 'bamfile') or not hasattr( a, 'outFoh'):
+	if not hasattr( a, 'position') or not hasattr( a, 'data') or not hasattr( a, 'outFoh') or not hasattr( a, 'reference') or not hasattr( a, 'minReads'):
 		splashHelp() 
 
 	return a
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def import_poreModel(filename):
-#	takes the filename of an ONT pore model file and returns a map from kmer (string) to [mean,std] (list of floats)
+def import_reference(filename):
+#	takes the filename of a fasta reference sequence and returns the reference sequence as a string.  N.B. the reference file must have only one sequence in it
 #	ARGUMENTS
 #       ---------
-#	- filename: path to an ONT model file
+#	- filename: path to a reference fasta file
 #	  type: string
 #	OUTPUTS
 #       -------
-#	- kmer2MeanStd: a map, keyed by a kmer, that returns the model mean and standard deviation signal for that kmer
-#	  type: dictionary
+#	- reference: reference string
+#	  type: string
 
 	f = open(filename,'r')
 	g = f.readlines()
 	f.close()
 
-	kmer2MeanStd = {}
+	reference = ''
 	for line in g:
-		if line[0] != '#' and line[0:4] != 'kmer': #ignore the header
-			splitLine = line.split('\t')
-			kmer2MeanStd[ splitLine[0] ] = [ float(splitLine[1]), float(splitLine[2]) ]
+		if line[0] != '>':
+			reference += line.rstrip()
 	g = None
 
-	return kmer2MeanStd
+	reference = reference.upper()
+
+	if not all(c in ['A','T','G','C','N'] for c in reference):
+		warnings.warn('Warning: Illegal character in reference.  Legal characters are A, T, G, C, and N.', Warning)
+
+	return reference
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -109,149 +126,235 @@ def export_trainingDataToFoh( kmer2normalisedReads, filename ):
 #	takes reads from a run, aligns them to a reference, and separates the resulting bam file by each reference
 #	ARGUMENTS
 #       ---------
-#	- kmer2normalisedReads: output of import_FixedPosTrainingData
-#	  type: list of lists
+#	- kmer2normalisedReads: output of import_HairpinTrainingData 
+#	  type: dictionary
 #	OUTPUTS
 #       -------
 #	- exports read observation data in the .foh format, to be read by C++ Osiris
 	
 	f = open(filename,'w')
-	f.write( '>FixedPositionTrainingData\n' )
 
-	for read in kmer2normalisedReads:
+	for key in kmer2normalisedReads:
+		
+		f.write( '>'+key+'\n' )
+
+		for read in kmer2normalisedReads[key]:
 			
-		readsStr = map( str, read )
-
-		f.write( ' '.join(readsStr) + '\n' )
+			rawStr = map( str, read[2] )
+			f.write( read[0] + '\n' )
+			f.write( read[1] + '\n' )
+			f.write( ' '.join(rawStr) + '\n' )
 
 	f.close()
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def serial_calculate_normalisedEvents(fast5Files, poreModelFile):
-#	For fixed position training data - small enough to be done in serial.  Uses a 5mer model to calculate the shift and scale
-#	pore-specific parameters for each individual read in a list of fast5 files
-#	ARGUMENTS
-#       ---------
-#	- fast5Files: list of fast5 files whose events should be normalised
-#	  type: list of strings
-#	- poreModelFile: path to a pore model file.  This should be a 5mer model in the ONT format
-#	  type: string
-#	OUTPUTS
-#       -------
-#	- allNormalisedReads: a list, where each member is itself a list of events that have been normalised to the pore model
-#	  type: list
+def displayProgress(current, total):
 
-	#open the 5mer model and make a map from the 5mer (string) to [mean,std] (list)
-	kmer2MeanStd = import_poreModel(poreModelFile)
+	barWidth = 70
+	progress = float(current)/float(total)
 
-	#now iterate through all the relevant fast5 files so we only need to open the model file once
-	allNormalisedReads = []
-	for f5File in fast5Files:
-		
-		#use 5mer model to calculate shift, scale, drift, and var to normalise events for the pore
-		f = h5py.File(f5File,'r')
-		path = '/Analyses/Basecall_1D_000/BaseCalled_template/Events'
-		Events = f[path]
+	if progress <= 1.0:
+		sys.stdout.write('[')
+		pos = int(barWidth*progress)
+		for i in range(barWidth):
+			if i < pos:
+				sys.stdout.write('=')
+			elif i == pos:
+				sys.stdout.write('>')
+			else:
+				sys.stdout.write(' ')
+		sys.stdout.write('] '+str(int(progress*100))+' %\r')
+		sys.stdout.flush()
 
-		A = np.zeros((3,3))
-		b = np.zeros((3,1))
-		for event in Events:
-			 if float(event[7]) > 0.3: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
-				model_5mer = event[4]
-				event_mean = float(event[0])
-				event_time = float(event[2])
-				model_mean = kmer2MeanStd[model_5mer][0]
-				model_std = kmer2MeanStd[model_5mer][1]
-				
-				#update matrix A
-				A[0,0] += 1/(model_std**2)
-				A[0,1] += 1/(model_std**2)*model_mean
-				A[0,2] += 1/(model_std**2)*event_time
-				A[1,1] += 1/(model_std**2)*model_mean**2
-				A[1,2] += 1/(model_std**2)*model_mean*event_time
-				A[2,2] += 1/(model_std**2)*event_time**2
+#--------------------------------------------------------------------------------------------------------------------------------------
+def normaliseRead(sequence, filename, bounds):
 
-				#update vector b
-				b[0] += 1/(model_std**2)*event_mean
-				b[1] += 1/(model_std**2)*event_mean*model_mean
-				b[2] += 1/(model_std**2)*event_mean*event_time
+	f_hdf5 = h5py.File(filename,'r')
+	
+	#get raw
+	path = '/Raw/Reads'
+	read_number = f_hdf5[path].keys()[0]
+	raw_data = f_hdf5[path + '/' + read_number + '/Signal']
+	raw_array = np.zeros(raw_data.len(),dtype='int16')
+	raw_data.read_direct(raw_array)
 
-		#use symmetry of A
-		A[1,0] = A[0,1]
-		A[2,0] = A[0,2]
-		A[2,1] = A[1,2]
-		
-		#solve Ax = b to find shift and scale
-		x = np.linalg.solve(A,b)
-		shift = x[0][0]
-		scale = x[1][0]
-		drift = x[2][0]
+	#get read-specific parameters to normalise from raw to pA
+	scaling = f_hdf5['/UniqueGlobalKey/channel_id']
+	digitisation = scaling.attrs.get('digitisation')
+	offset = scaling.attrs.get('offset')
+	rng = scaling.attrs.get('range')
+	sample_rate = scaling.attrs.get('sampling_rate')
 
-		#go through the same events as before and normalise them to the pore model using scale and shift
-		normalisedEvents = []
-		for event in Events:
-			if float(event[7]) > 0.3: #if there's a high probability (>30%) that the 5mer model called by Metrichor was the correct one
-				event_mean = float(event[0])
-				event_time = float(event[2])
-				normalisedEvent = (event_mean - shift - drift*event_time)/scale
-				if normalisedEvent > 0.0:
-					normalisedEvents.append(normalisedEvent)
+	#normalise to pA
+	raw_array = ( raw_array + offset ) * (rng/digitisation)
 
-		allNormalisedReads.append(normalisedEvents)
+	f_hdf5.close()
 
-		f.close()
-		
-	return allNormalisedReads
+	return sequence + '\n' + bounds + '\n' + ' '.join(map(str,raw_array.tolist())) + '\n'
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def import_FixedPosTrainingData(bamFile, poreModelFile):
-#	Used to import training data from reads that have an analogue in a fixed context.
+def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, maxReads, outFilename, threads):
+#	Used to import training data from a hairpin primer of the form 5'-...NNNBNNN....NNNANNN...-3'.
 #	Creates a map from kmer (string) to a list of lists, where each list is comprised of events from a read
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
 #	that they came from, normalises the events to a pore model, and returns the list of normalised events.
 #	ARGUMENTS
 #       ---------
+#	- reference: reference string from Osiris import_reference
+#	  type: string
 #	- bamFile: a BAM file from the alignment
 #	  type: string
 #	- poreModelFile: ONT model file for 5mers that can be used to normalised for shift and scale
 #	  type: string
+#	- redundant_A_Loc: location of the redundant A that is the reverse complement of BrdU (starting from 0)
+#	  type: int
+#	- position: where the analogue is in the 7mer (1&2, 3&4, 5&6)
+#	  type: string
+#	- readsThreshold: disregard a NNNANNN 7mer that only has a number of high quality reads below this threshold
+#	  type: int
 #	OUTPUTS
 #       -------
-#	- normalisedReads: a list of lists, where each element is a list of normalised events for a given read
-#	  type: list
+#	- kmer2normalisedReads: a dictionary that takes a kmer string as a key and outputs a list of lists, where each list gives the normalised events from an individual read
+#	  type: dictionary
 
-	#open up the BAM file that has been sorted by the reference that we're interested in
-	f = pysam.AlignmentFile(bamFile,'r')
+	#count and print number of entries in bam file to stdout
+	
+	f = pysam.Samfile(BAMrecords,'r')
 
-	#count the records in the bam file
-	numRecords = f.count()
-	print str(numRecords) + ' records in BAM file.'
+	analogueIndeces = range(ROI - 6, ROI + 6)
 
-	#iterate through the bam file, and for every record, add the path to the fast5 file to a list
-	fast5files = []
-	f = pysam.AlignmentFile(bamFile,'r')
+	#build up the map that takes each indiviudal 7mer to a list of fast5 files that produced the reads
+	kmer2filename = {}
+
+	#progress stuff
+	counter = 0
+
+	print "Binning BAM records..."
+
+	f = pysam.Samfile(BAMrecords,'r')
 	for record in f:
 
-		fast5files.append(record.query_name)
+		#print progress
+		counter += 1
+		displayProgress( counter, maxReads)
 
+		sequence = record.query_sequence
+
+		if len(sequence) < int(1.1*len(reference)): #if this isn't a concatenated read...
+
+			readID = record.query_name #read filename
+
+			pairs = record.get_aligned_pairs(True,True) #tuples for each mapped position (pos-on-read,pos-on-ref,base-on-ref)
+
+			analogueDomain = ['-']*len(analogueIndeces) 
+			analogPosOnRead = [0]*len(analogueIndeces)
+
+			#fill out analogueDomain and posOnRead using get_aligned_pairs() from pysam
+			for p in pairs:
+				if p[1] in analogueIndeces:
+					analogueDomain[p[1] - (ROI - 4) ] = sequence[p[0]]
+					analogPosOnRead[p[1] - (ROI - 4) ] = p[0]
+
+			#make sure there aren't any indels
+			indelFree = True
+			for i,v in enumerate(analogPosOnRead[:-1]):
+				if v != analogPosOnRead[i+1] - 1:
+					indelFree = False
+
+			brD = "".join(analogueDomain[2:-2]).upper()
+			LHS = "".join(analogueDomain[0:2]).upper()
+			RHS = "".join(analogueDomain[-2:]).upper()
+
+			#if we've identified the analogue domain completely, keep this read to train on
+			if ('-' not in analogueDomain) and (reference[ROI] == 'T') and (indelFree) and (LHS == reference[ROI-6:ROI-4]) and (RHS == reference[ROI+4:ROI+6]): 
+
+				#append to dictionary
+				if brD in kmer2filename:
+					kmer2filename[brD] += [ ( sequence, readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1] )) ]
+				else:
+					kmer2filename[brD] = [ ( sequence, readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1])) ]
+
+		if len(kmer2filename.keys()) > maxReads:
+			break
+
+	displayProgress( maxReads, maxReads)
 	f.close()
 
-	#hand this list of fast5 files to calculate_normalisedEvents which will normalise them for shift and scale
-	normalisedReads = serial_calculate_normalisedEvents(fast5files, poreModelFile)
+	print "Done."
+	print "Converting signal to pA..."
 
-	return normalisedReads
+	#only generate training data for kmers that have enough reads and write the data to the foh file
+	filtered = {}
+	for key in kmer2filename:
+		if len(kmer2filename[key]) >= readsThreshold:
+			filtered[key] = kmer2filename[key]
 
+	del kmer2filename
+
+	f_out = open(outFilename,'w')
+
+	#write the header
+	f_out.write( str(len(filtered.keys())) + ' ' + str(readsThreshold) + '\n')
+
+	for i, key in enumerate(filtered):
+
+		#print progress
+		displayProgress( i, len(filtered.keys()))
+
+		f_out.write( '>'+key+'\n' )
+
+		fnameBuffer = []
+		boundsBuffer = []
+		seqBuffer = []
+		counter = 0
+		#for each read
+		for sequence, filename, bounds in filtered[key]:
+
+			#fill up the buffer
+			fnameBuffer.append(filename)
+			boundsBuffer.append(bounds)
+			seqBuffer.append(sequence)
+
+			#do the parallel processing to normalise the reads
+			if counter == 1024:
+								
+				out = Parallel(n_jobs=threads)(delayed(normaliseRead)(s, f, b) for s, f, b in zip(seqBuffer, fnameBuffer, boundsBuffer))
+	
+				#print the contents to the foh file
+				for r in out:
+					f_out.write(r)
+
+				#empty buffer
+				fnameBuffer = []
+				boundsBuffer = []
+
+			counter += 1
+
+		#write whatever's left (or all if it if we never completely filled up the buffer)
+		out = Parallel(n_jobs=threads)(delayed(normaliseRead)(s, f, b) for s, f, b in zip(seqBuffer, fnameBuffer, boundsBuffer))
+	
+		#print whatever's left to the foh file
+		for r in out:
+			f_out.write(r)
+
+		#write the closer
+		f_out.write('<\n')
+
+	displayProgress( 1, 1 )
+	f_out.close()
+	print "Done."
 
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
+
 #parse arguments
 args = sys.argv
 a = parseArguments(args)
 
-#normalise the training data according to the ONT 5mer model
-trainingData = import_FixedPosTrainingData(a.bamfile, a.fiveMerModel)
+#import the reference from the specified fasta file
+reference = import_reference(a.reference)
 
-#write normalised reads to file in the .foh format
-export_trainingDataToFoh( trainingData, a.outFoh )
+#bin the 7mers and write the training data to the output file
+import_HairpinTrainingData(import_reference(a.reference), a.data, a.position, a.minReads, a.maxReads, a.outFoh, a.threads)
 
