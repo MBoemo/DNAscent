@@ -57,6 +57,10 @@ def parseArguments(args):
 		elif argument == '-h' or argument == '--help':
 			splashHelp()
 
+	#check that required arguments are met
+	if not hasattr( a, 'reads') or not hasattr( a, 'outFdh'):
+		splashHelp() 
+
 	return a
 
 
@@ -101,7 +105,7 @@ def readFast5Raw( filename ):
 	sample_rate = scaling.attrs.get('sampling_rate')
 
 	#normalise to pA
-	raw_array = ( raw_array + offset ) * (rng/digitisation)
+	raw_array = (raw_array + offset)*(rng / digitisation)
 
 	f_hdf5.close()
 
@@ -112,7 +116,6 @@ def readFast5Raw( filename ):
 def import_inVivoData(readsFile, outFile):
 
 	f_out = open(outFile,'w')
-
 	extension = readsFile.split('.')[-1:][0]
 
 	#data is in fasta format
@@ -120,6 +123,9 @@ def import_inVivoData(readsFile, outFile):
 		f = open(readsFile,'r')
 		g = f.readlines()
 		f.close()
+
+		#write the foh header
+		f_out.write( str(len(g)/2) + '\n' )
 
 		for i, line in enumerate(g):
 
@@ -135,11 +141,9 @@ def import_inVivoData(readsFile, outFile):
 					raw_array = readFast5Raw( filename )
 
 					#write to fdh
-					f_out.write('>' + filename + '\n' + bases + '\n')
-					f_out.write( ' '.join(map(str,raw_array.tolist())) + '\n' )
+					f_out.write( '>' + filename + '\n' + bases + '\n' )
+					f_out.write( ' '.join(map(str,raw_array.tolist())) + '\n<\n' )
 				
-
-
 				#regardless, set the new filename and empty the base string
 				filename = line[1:].rstrip()
 				bases = ''
@@ -156,6 +160,9 @@ def import_inVivoData(readsFile, outFile):
 		numOfRecords = f.count()
 		counter = 0
 
+		#write the foh header
+		f_out.write( str(numOfRecords) + '\n' )
+
 		f = pysam.AlignmentFile(readsFile,'r')
 		for record in f:
 			filename = record.query_name
@@ -163,8 +170,8 @@ def import_inVivoData(readsFile, outFile):
 			bases = record.query_sequence
 
 			#write to fdh
-			f_out.write('>' + filename + '\n' + bases + '\n')
-			f_out.write( ' '.join(map(str,raw_array.tolist())) + '\n' )
+			f_out.write( '>' + filename + '\n' + bases + '\n' )
+			f_out.write( ' '.join(map(str,raw_array.tolist())) + '\n<\n' )
 			
 			displayProgress(counter, numOfRecords)
 			counter += 1
@@ -177,13 +184,11 @@ def import_inVivoData(readsFile, outFile):
 		print "Exiting with error: invalid extension in input file ", readsFile
 		splashHelp()
 
-
 	f_out.close()
 
 
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
 args = sys.argv
 a = parseArguments(args)
-
 import_inVivoData(a.reads, a.outFdh)
 

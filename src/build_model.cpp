@@ -115,7 +115,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 }
 
 
-double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::map< std::string, std::pair< double, double > > &analogueModel, std::vector< double > &events, bool analogue ){
+double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::map< std::string, std::pair< double, double > > &analogueModel, std::vector< double > &events, unsigned int windowLength, bool analogue ){
 
 	HiddenMarkovModel hmm = HiddenMarkovModel( 3*reference.length(), 3*reference.length() + 2 );
 
@@ -131,22 +131,21 @@ double buildAndDetectHMM( std::string &reference, std::map< std::string, std::pa
 	UniformDistribution ud( 50.0, 130.0 );
 
 	std::string loc;
-	std::vector< unsigned int > analoguePositions = {7, 8, 9}; //for positions 2,3,4 of a 5mer
+	std::vector< unsigned int > analoguePositions = {windowLength, windowLength-1, windowLength-2, windowLength-3}; //for positions 1,2,3,4 of a 5mer
 
 	/*create the distributions that we need */	
 	for ( unsigned int i = 0; i < reference.length() - 5; i++ ){
 
-		/*use the trained model if we're at the right position and have data for this 5mer */
-		if ( analogue and std::find(analoguePositions.begin(), analoguePositions.end(), i) != analoguePositions.end() and analogueModel.count(( reference.substr(i, 5)).replace(10 - i, 1, "B")) > 0){
+		/*use the trained analogue model if we're at the analogue position */
+		if ( analogue and std::find(analoguePositions.begin(), analoguePositions.end(), i) != analoguePositions.end() ){
 
-			emissionMeanAndStd = analogueModel.at((reference.substr(i, 5)).replace(10 - i, 1, "B"));
+			emissionMeanAndStd = analogueModel.at((reference.substr(i, 5)).replace(windowLength - i, 1, "B"));
 		}
 		/*otherwise use the ONT model */
 		else{
 
 			emissionMeanAndStd = basePoreModel.at( reference.substr( i, 5 ) );
 		}
-
 		nd.push_back( NormalDistribution( emissionMeanAndStd.first, emissionMeanAndStd.second ) );
 
 	}

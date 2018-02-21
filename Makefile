@@ -1,4 +1,4 @@
-OBJS = event_detection.o event_handling.o common.o build_model.o data_IO.o Osiris_train.o Osiris.o
+OBJS = event_detection.o event_handling.o common.o build_model.o data_IO.o Osiris_train.o Osiris_detect.o Osiris_fixedPos.o Osiris.o
 CC = gcc
 CXX = g++
 DEBUG = -g
@@ -27,11 +27,14 @@ data_IO.o : src/error_handling.h src/data_IO.h src/data_IO.cpp
 build_model.o : src/poreSpecificParameters.h src/build_model.h src/build_model.cpp src/data_IO.h
 	$(CXX) $(CXXFLAGS) src/build_model.cpp $(LIBFLAGS)
 
+Osiris_fixedPos.o : src/common.h src/build_model.h src/data_IO.h src/error_handling.h src/event_handling.h src/poreModels.h src/Osiris_fixedPos.h src/Osiris_fixedPos.cpp
+	$(CXX) $(CXXFLAGS) src/Osiris_fixedPos.cpp $(LIBFLAGS)
+
 Osiris_train.o : src/common.h src/build_model.h src/data_IO.h src/error_handling.h src/event_handling.h src/poreModels.h src/Osiris_train.h src/Osiris_train.cpp
 	$(CXX) $(CXXFLAGS) src/Osiris_train.cpp $(LIBFLAGS)
 
-#Osiris_detect.o : src/common.h src/build_model.h src/data_IO.h src/error_handling.h src/event_handling.h src/Osiris_detect.h src/Osiris_detect.cpp
-#	$(CXX) $(CXXFLAGS) src/Osiris_detect.cpp $(LIBFLAGS)
+Osiris_detect.o : src/common.h src/build_model.h src/data_IO.h src/error_handling.h src/event_handling.h src/Osiris_detect.h src/Osiris_detect.cpp
+	$(CXX) $(CXXFLAGS) src/Osiris_detect.cpp $(LIBFLAGS)
 
 Osiris.o : src/Osiris.cpp src/Osiris_train.h src/Osiris_fixedPos.h src/data_IO.h src/build_model.h src/event_handling.h
 	$(CXX) $(CXXFLAGS) src/Osiris.cpp $(LIBFLAGS)

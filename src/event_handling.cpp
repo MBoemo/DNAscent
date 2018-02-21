@@ -96,13 +96,13 @@ double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
 }
 
 
-std::vector< std::pair< int, int > > matchWarping( std::vector< double > &raw, std::vector< double > &raw_stdv, std::string &basecall ){
+std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector< double > &raw, std::vector< double > &raw_stdv, std::string &basecall ){
 /*use dynamic time warping to calculate an alignment between the raw signal and the basecall */
 
 	unsigned int numOfRaw = raw.size();
 	unsigned int numOf5mers = basecall.size() - 4;
 
-	std::vector< std::pair< int, int > > eventSeqLocPairs;
+	std::vector< std::pair< unsigned int, unsigned int > > eventSeqLocPairs;
 
 	/*allocate the dynamic time warping lattice */
 	std::vector< std::vector< double > > dtw( numOfRaw, std::vector< double >( numOf5mers, std::numeric_limits< double >::max() ) );
@@ -196,7 +196,7 @@ std::vector< double > roughRescale( std::vector< double > means, std::string &ba
 }
 
 
-std::vector< double > normaliseEvents( read r, bool clip ){
+eventDataForRead normaliseEvents( read &r, bool clip ){
 
 	eventDataForRead thisRead;
 
@@ -279,5 +279,5 @@ std::vector< double > normaliseEvents( read r, bool clip ){
 			}
 		}
 	}
-	return thisRead.normalisedEvents;
+	return thisRead;
 }

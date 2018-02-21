@@ -17,8 +17,9 @@
 struct read{
 
 	std::string basecalls;
-	std::pair< int, int > ROIbounds;
+	std::pair< unsigned int, unsigned int > ROIbounds;
 	std::vector< double > raw;
+	std::string filename;
 };
 
 
@@ -26,7 +27,7 @@ struct read{
 std::string import_reference( std::string );
 std::map< std::string, std::pair< double, double > > import_poreModel( std::string );
 std::pair< std::string, std::vector< read > > getTrainingFrom_foh( std::string &);
-std::vector< read > import_fdh( std::string & );
+read getDetectionFrom_fdh( std::string & );
 void export_poreModel( std::map< std::string, std::vector< double > > &, std::string &);
 
 #endif

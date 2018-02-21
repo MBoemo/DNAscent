@@ -164,10 +164,10 @@ int train_main( int argc, char** argv ){
 		#pragma omp parallel for default(none) shared(trainingGroup, events, clip) num_threads(threads)
 		for ( auto r = (trainingGroup.second).begin(); r < (trainingGroup.second).end(); r++ ){
 			
-			std::vector< double > localEvents = normaliseEvents( *r, clip );			
+			eventDataForRead thisRead = normaliseEvents( *r, clip );
 			
 			#pragma omp critical
-			events.push_back( localEvents );
+			events.push_back( thisRead.normalisedEvents );
 		}
 
 		/*our reference has N's in it: replace them with the appropriate 7mer that we're goin to train on */

@@ -24,7 +24,7 @@ static const char *help=
 "Example:\n"
 "  ./Osiris detect -m /path/to/analogue.model -d /path/to/data.foh -o output.txt -t 20\n"
 "Required arguments are:\n"
-"  -m,--analogue-model       path to 6mer pore model file that includes analogues,\n"
+"  -m,--analogue-model       path to 5mer pore model file that includes analogues,\n"
 "  -d,--data                 path to .fdh file to run detection on,\n"
 "  -o,--output               path to the output file which will contain the calls.\n"
 "Optional arguments are:\n"
@@ -43,7 +43,6 @@ Arguments parseDetectionArguments( int argc, char** argv ){
 
 		std::cout << "Exiting with error.  Insufficient arguments passed to Osiris train." << std::endl << help << std::endl;
 		exit(EXIT_FAILURE);
-
 	}
 
 	if ( std::string( argv[ 1 ] ) == "-h" or std::string( argv[ 1 ] ) == "--help" ){
@@ -55,7 +54,6 @@ Arguments parseDetectionArguments( int argc, char** argv ){
 
 		std::cout << "Exiting with error.  Insufficient arguments passed to Osiris detect." << std::endl;
 		exit(EXIT_FAILURE);
-
 	}
 
 	Arguments trainArgs;
@@ -73,34 +71,28 @@ Arguments parseDetectionArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.analogueModelFilename = strArg;
 			i+=2;
-
 		}
 		else if ( flag == "-o" or flag == "--output" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.outputFilename = strArg;
 			i+=2;
-
 		}
 		else if ( flag == "-t" or flag == "--threads" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.threads = std::stoi( strArg.c_str() );
 			i+=2;
-
 		}
 		else if ( flag == "-d" or flag == "--data" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.dataFilename = strArg;
 			i+=2;
-
 		}
 		else throw InvalidOption( flag );
 	}
-
 	return trainArgs;
-
 }
 
 
@@ -108,78 +100,119 @@ int detect_main( int argc, char** argv ){
 
 	Arguments trainArgs = parseDetectionArguments( argc, argv );
 
+	/*import the analogue pore model that we specified on the command line */
 	std::map< std::string, std::pair< double, double > > analogueModel =  import_poreModel( trainArgs.analogueModelFilename );
-	std::vector< read > detectData = import_fdh( trainArgs.dataFilename );
 
 	/*IO */
 	std::ofstream outFile;
 	outFile.open( trainArgs.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( trainArgs.outputFilename );
+	std::ifstream fdhFile( trainArgs.dataFilename );
+	if ( not fdhFile.is_open() ) throw IOerror( trainArgs.dataFilename );
+	std::stringstream ss;
 
-	std::stringstream ss; //out stringstream
+	/*read foh header */
+	std::string line;
+	std::getline( fdhFile, line );
+	std::string strDetectionTotal = line.substr(0,line.find(' '));
+	int detectionTotal = atoi(strDetectionTotal.c_str());
 
-	unsigned int windowLength = 10;
+	unsigned int windowLength = 20;
 	int prog = 0;
-	int total = detectData.size();
+	std::vector< read > buffer;
+	std::string detectGroup;
 	std::cout << "Detecting base analogues..." << std::endl;
 
-	#pragma omp parallel for default(none) schedule(dynamic) shared(total, prog, windowLength, FiveMer_model, analogueModel, trainArgs, detectData, outFile) private(ss) num_threads(trainArgs.threads)
-	for( auto r = detectData.begin(); r < detectData.end(); r++ ){
+	/*get a single detection read from the input fdh */
+	while ( std::getline( fdhFile, detectGroup, '<' ) ){
 
-		/*normalise raw for shift and scale, and get an alignment between 5mers and the events that produced them */
-		eventDataForRead eventData = normaliseEvents( *r, false );
+		assert( buffer.size() < trainArgs.threads );
 
-		int readHead = 0;
+		/*push that read to the buffer */
+		if ( not fdhFile.eof() ) buffer.push_back( getDetectionFrom_fdh( detectGroup ) );
 
-		/*bound these - things tend to be rubbish at the start and end so start 15 bases in and end 30 bases early */
-		for ( unsigned int i = windowLength; i < (r -> basecalls).length() - 3*windowLength; i++ ){
+		/*if we've filled up the buffer, run detection on the number of threads we specified */
+		if ( buffer.size() == trainArgs.threads or fdhFile.eof() ){
+
+			#pragma omp parallel for default(none) schedule(dynamic) shared(detectionTotal, prog, windowLength, FiveMer_model, analogueModel, trainArgs, buffer, outFile) private(ss) num_threads(trainArgs.threads)
+			for( auto r = buffer.begin(); r < buffer.end(); r++ ){
+
+				/*push the filename for this read to the output */
+				ss << ">" << r -> filename << std::endl;
+
+				/*normalise raw for shift and scale, and get an alignment between 5mers and the events that produced them */
+				eventDataForRead eventData = normaliseEvents( *r, false );
+
+				int readHead = 0;
+				bool stable = true;
+
+				/*exclude the starts and ends of the read, as the alignment tends to be worse there */
+				for ( unsigned int i = 2*windowLength; i < (r -> basecalls).length() - 2*windowLength; i++ ){
 			
-			if ( (r -> basecalls).substr( i, 1 ) == "T"){
+					/*for each T we find in the read, calculate the log likelihood that it's an analogue */
+					if ( (r -> basecalls).substr( i, 1 ) == "T"){
 
-				std::string readSnippet = (r -> basecalls).substr( i - windowLength, 2*windowLength + 5 );
-				std::vector< double > eventSnippet;
+						bool makeCall = true;
 
-				/*get the events that correspond to the read snippet */
-				for ( unsigned int j = readHead; j < (eventData.eventAlignment).size(); j++ ){
+						/*make sure we have all the 5mers we need */
+						std::vector< unsigned int > analoguePositions = {i, i-1, i-2, i-3};
+						for ( auto pos = analoguePositions.begin(); pos < analoguePositions.end(); pos++){
 
-					if ( (eventData.eventAlignment)[j].second == i - windowLength ){
+							if (analogueModel.count(((r -> basecalls).substr(*pos, 5)).replace(i - *pos, 1, "B")) == 0) makeCall = false;
+						}
 
-						readHead = j;
+						/*if we do have all the 5mers that we need, then calculate the log likelihood of an analogue at this position */
+						if ( makeCall ){
+							std::string readSnippet = (r -> basecalls).substr(i - windowLength, 2*windowLength);
+							std::vector< double > eventSnippet;
+
+							/*get the events that correspond to the read snippet */
+							for ( unsigned int j = readHead; j < (eventData.eventAlignment).size(); j++ ){
+
+								/*move the readhead so that we can navigate through events efficiently */
+								if ( (eventData.eventAlignment)[j].second == i - windowLength ) readHead = j;
+
+								/*if an event has been aligned to a position in the window, add it */
+								if ( (eventData.eventAlignment)[j].second >= i - windowLength and (eventData.eventAlignment)[j].second <= i + windowLength ){
+
+									eventSnippet.push_back( (eventData.normalisedEvents)[j] );
+								}
+
+								/*stop once we get to the end of the window */
+								if ( (eventData.eventAlignment)[j].second > i + windowLength ) break;
+							}
+							double logProbThymidine = buildAndDetectHMM( readSnippet, FiveMer_model, analogueModel, eventSnippet, windowLength, false );
+							double logProbAnalogue = buildAndDetectHMM( readSnippet, FiveMer_model, analogueModel, eventSnippet, windowLength, true );
+							double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
+
+							if ( logProbThymidine == 0 or logProbAnalogue == 0 or logLikelihoodRatio == 0 ) stable = false;
+
+							ss << i << "\t" << logLikelihoodRatio << std::endl;
+						}
 					}
-
-					if ( (eventData.eventAlignment)[j].second >= i - windowLength and (eventData.eventAlignment)[j].second <= i + windowLength + 5 ){
-
-						eventSnippet.push_back( (eventData.normalisedEvents)[j] );
-					}
-
-					if ( (eventData.eventAlignment)[j].second > i + windowLength + 5 ) break;
 				}
 
+				#pragma omp atomic 
+				prog++;
 
-				double logProbThymidine = buildAndDetectHMM( readSnippet, FiveMer_model, analogueModel, eventSnippet, false );
-				double logProbAnalogue = buildAndDetectHMM( readSnippet, FiveMer_model, analogueModel, eventSnippet, true );
-
-				double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
-
-				ss << i << "\t" << logLikelihoodRatio << std::endl;
-
+				#pragma omp critical
+				{	/*write the log probabilities for this file to the output file */
+					if ( stable ) outFile << ss.rdbuf();
+					displayProgress( prog, detectionTotal );
+				}
 			}
-		}
 
-		#pragma omp atomic 
-		prog++;
-
-		#pragma omp critical
-		{	/*write the log probabilities for this file to the output file */
-			outFile << ss.rdbuf();
-			displayProgress( prog, total );
+			/*empty the buffer */
+			buffer.clear();
 		}
+		if ( fdhFile.eof() ) break;
+
 	}
-	displayProgress( prog, total );
+	displayProgress( detectionTotal, detectionTotal );
 	std::cout << "\nDone." << std::endl;
 
 	outFile.close();
+	fdhFile.close();
 
 	return 0;
-
 }

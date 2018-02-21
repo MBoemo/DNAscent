@@ -7,12 +7,15 @@
 //----------------------------------------------------------
 
 
+#include <fstream>
 #include "Osiris_fixedPos.h"
 #include "common.h"
 #include "build_model.h"
 #include "data_IO.h"
 #include "poreModels.h"
 #include "error_handling.h"
+#include "event_handling.h"
+#include "../Penthus/src/error_handling.h"
 
 
 static const char *help=
@@ -67,7 +70,7 @@ Arguments parseFixedPosArguments( int argc, char** argv ){
 
 	/*defaults - we'll override these if the option was specified by the user */
 	trainArgs.threads = 1;
-	trainArgs.softClip = false;
+	trainArgs.clip = false;
 
 	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -164,10 +167,10 @@ int fixedPos_main( int argc, char** argv ){
 		#pragma omp parallel for default(none) shared(trainingGroup, events, clip) num_threads(threads)
 		for ( auto r = (trainingGroup.second).begin(); r < (trainingGroup.second).end(); r++ ){
 			
-			std::vector< double > localEvents = normaliseEvents( *r, clip );			
+			eventDataForRead localEvents = normaliseEvents( *r, clip );			
 			
 			#pragma omp critical
-			events.push_back( localEvents );
+			events.push_back( localEvents.normalisedEvents );
 		}
 
 		/*if clipping was specified, adjust the reference accordingly */
@@ -194,11 +197,11 @@ int fixedPos_main( int argc, char** argv ){
 		/*if we specified that we want a log file, read the ss buffer into it now */
 		std::stringstream ssLog( ss.str() );
 		if ( trainArgs.logFile == true ){
-			logFile << ">" << brduDom_B_replace_T << std::endl << ssLog.rdbuf();
+			logFile << ">fixedPositionTrained" << std::endl << ssLog.rdbuf();
 		}
 
 		/*use brduDomLoc to determine the positions we should look at to write the model */
-		std::vector< unsigned int > posToLookAt = {brduDomLoc, brduDomLoc + 1, brduDomLoc + 2, brduDomLoc + 3, brduDomLoc + 4};
+		std::vector< unsigned int > posToLookAt = {brduDomLoc, brduDomLoc - 1, brduDomLoc - 2, brduDomLoc - 3, brduDomLoc - 4};
 
 		/*bodge to get the training data out at the relevant position without making Penthus specialised */
 		std::string line;
@@ -211,7 +214,7 @@ int fixedPos_main( int argc, char** argv ){
 			if ( std::find(posToLookAt.begin(), posToLookAt.end(), i) != posToLookAt.end() ){
 
 				std::vector< std::string > splitLine = split( line, '\t' );
-				std::string fiveMer = brduDom_B_replace_T.substr(i-brduDomLoc, 5);
+				std::string fiveMer = reference.substr(i, 5);
 				trainedModel[fiveMer] = {atof(splitLine[3].c_str()), atof(splitLine[5].c_str()), atof(splitLine[2].c_str()), atof(splitLine[4].c_str())};
 			}
 			else if ( i > posToLookAt.back() ) break;
@@ -229,10 +232,6 @@ int fixedPos_main( int argc, char** argv ){
 
 	/*some wrap-up messages */
 	std::cout << std::endl << "Done." << std::endl;
-	}
-
-	/*if we opened a log file to write on, close it now */
-	outFile.close();
 
 	return 0;
 }

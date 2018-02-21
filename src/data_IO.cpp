@@ -165,49 +165,39 @@ std::pair< std::string, std::vector< read > > getTrainingFrom_foh( std::string &
 			rawSignals.push_back( atof( event.c_str() ) );
 		}
 		currentRead.raw = rawSignals;
-
 		trainingGroupReads.push_back( currentRead );
 	}
 	return std::make_pair( sevenMerName, trainingGroupReads );
 }
 
 
-std::vector< read > import_fdh( std::string &fdhFilePath ){
+read getDetectionFrom_fdh( std::string &detectionGroup ){
 	
-	std::cout << "Importing detection data..." << std::endl;
-	std::ifstream file( fdhFilePath );
-	
-	if ( not file.is_open() ) throw IOerror( fdhFilePath );
-
-	std::string line;
-	std::string event;
-
-	std::vector< read > currentReads;
-
+	std::stringstream detectionGroupStream;	
 	read currentRead;
-	
-	/*while we have a line to read in the reference file... */
-	while ( std::getline( file, line ) ){
+	std::string line;
 
-		if ( line[0] == '>' ){
+	/*read this training group from the foh file into a stream */
+	detectionGroupStream.str( detectionGroup );
 
-			/*extract basecalls */
-			std::getline( file, line );
-			currentRead.basecalls = line;
+	/*get the filename */
+	std::getline( detectionGroupStream, line );
+	if ( line == "" ) std::getline( detectionGroupStream, line );
+	assert( line.substr(0,1) == ">" );
+	currentRead.filename = line.erase( 0, 1 );
 
-			/*extract events */
-			std::getline( file, line );
-			std::istringstream ss( line );
-			std::string event;
-			while ( std::getline( ss, event, ' ' ) ){
+	/*get the basecall */
+	std::getline( detectionGroupStream, line );
+	currentRead.basecalls = line;
 
-				(currentRead.raw).push_back( atof( event.c_str() ) );
-			}
-			currentReads.push_back( currentRead );
-		}
+	/*extract events */
+	std::getline( detectionGroupStream, line );
+	std::istringstream ss( line );
+	std::string event;	
+	while ( std::getline( ss, event, ' ' ) ){
+
+		(currentRead.raw).push_back( atof( event.c_str() ) );
 	}
 
-	std::cout << "Done." << std::endl;
-	return currentReads;
-
+	return currentRead;
 }
