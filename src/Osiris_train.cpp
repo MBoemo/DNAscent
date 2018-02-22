@@ -140,7 +140,7 @@ int train_main( int argc, char** argv ){
 		if ( not logFile.is_open() ) throw IOerror( trainArgs.logFilename );
 	}
 
-	std::map< std::string, std::vector< double> > trainedModel; //this will be filled up with results from Penthus
+	std::map< std::string, std::vector< std::pair< double, double > > > trainedModel; //this will be filled up with results from Penthus
 	int prog = 0;
 
 	std::cout << "Training..." << std::endl;
@@ -166,6 +166,9 @@ int train_main( int argc, char** argv ){
 			
 			eventDataForRead thisRead = normaliseEvents( *r, clip );
 			
+			/*disregard this event if the quality score is too low */
+			if ( thisRead.qualityScore > 4.0 ) continue;
+
 			#pragma omp critical
 			events.push_back( thisRead.normalisedEvents );
 		}
@@ -253,14 +256,11 @@ int train_main( int argc, char** argv ){
 				std::string fiveMer = brduDom_B_replace_T.substr(i-brduDomLoc, 5);
 				if ( trainedModel.count( fiveMer ) > 0 ){
 
-					if ( atof(splitLine[ 5 ].c_str()) < trainedModel[fiveMer][1] ){
-
-						trainedModel[fiveMer] = {atof(splitLine[3].c_str()), atof(splitLine[5].c_str()), atof(splitLine[2].c_str()), atof(splitLine[4].c_str())};
-					}
+					trainedModel[fiveMer].push_back( std::make_pair( atof(splitLine[3].c_str()), atof(splitLine[5].c_str()) ) );
 				}
 				else{
 
-					trainedModel[fiveMer] = {atof(splitLine[3].c_str()), atof(splitLine[5].c_str()), atof(splitLine[2].c_str()), atof(splitLine[4].c_str())};
+					trainedModel[fiveMer] = { std::make_pair( atof(splitLine[3].c_str()), atof(splitLine[5].c_str()) ) };
 				}
 			}
 			else if ( i > posToLookAt.back() ) break;

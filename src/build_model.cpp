@@ -107,7 +107,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 
 	hmm.finalise();
 
-	hmm.BaumWelch( events, 0.01, 250, 0.0, false, threads, verbose );
+	hmm.BaumWelch( events, 1.0, 250, 0.0, false, threads, verbose );
 
 	std::stringstream ss = hmm.summarise();
 

@@ -90,9 +90,11 @@ std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A,
 double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
 /*computes the length of the geodesic between N(mu1,stdv1) and N(mu2,stdv2) using the Fisher-Rao metric as a distance */
 
-	double F = sqrt( ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )*( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 + stdv2, 2.0 ) ) );
+	//double F = sqrt( ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )*( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 + stdv2, 2.0 ) ) );
 
-	return sqrt(2)*log( (F + pow( mu1 - mu2, 2.0 ) + 2*( pow( stdv1, 2.0 ) + pow( stdv2, 2.0 ) ) ) / ( 4 * stdv1 * stdv2 ) );
+	//return sqrt(2)*log( (F + pow( mu1 - mu2, 2.0 ) + 2*( pow( stdv1, 2.0 ) + pow( stdv2, 2.0 ) ) ) / ( 4 * stdv1 * stdv2 ) );
+
+	return fabs(mu1-mu2);
 }
 
 
@@ -262,6 +264,9 @@ eventDataForRead normaliseEvents( read &r, bool clip ){
 	(thisRead.normalisedEvents).reserve( (thisRead.eventAlignment).size() );
 
 	double normalisedEventMean;
+	double alignmentScore = 0.0;
+	int positionAlignedTo;
+	std::string fiveMerAlingedTo;
 	for ( unsigned int i = 0 ; i < (thisRead.eventAlignment).size(); i++ ){
 
 		normalisedEventMean = ( events_mu[i] - shift )/scale;
@@ -278,6 +283,13 @@ eventDataForRead normaliseEvents( read &r, bool clip ){
 				(thisRead.normalisedEvents).push_back( normalisedEventMean );
 			}
 		}
+
+		/*calculate a quality score for the alignment */
+		positionAlignedTo = (thisRead.eventAlignment)[i].second;
+		fiveMerAlingedTo = (r.basecalls).substr(positionAlignedTo,5);
+		alignmentScore += fabs( normalisedEventMean - FiveMer_model[fiveMerAlingedTo].first );
 	}
+	thisRead.qualityScore = alignmentScore / (double) (thisRead.eventAlignment).size();
+
 	return thisRead;
 }

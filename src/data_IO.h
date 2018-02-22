@@ -28,6 +28,6 @@ std::string import_reference( std::string );
 std::map< std::string, std::pair< double, double > > import_poreModel( std::string );
 std::pair< std::string, std::vector< read > > getTrainingFrom_foh( std::string &);
 read getDetectionFrom_fdh( std::string & );
-void export_poreModel( std::map< std::string, std::vector< double > > &, std::string &);
+void export_poreModel( std::map< std::string, std::vector< std::pair< double, double > > > &, std::string &);
 
 #endif

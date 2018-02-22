@@ -137,14 +137,16 @@ int detect_main( int argc, char** argv ){
 			#pragma omp parallel for default(none) schedule(dynamic) shared(detectionTotal, prog, windowLength, FiveMer_model, analogueModel, trainArgs, buffer, outFile) private(ss) num_threads(trainArgs.threads)
 			for( auto r = buffer.begin(); r < buffer.end(); r++ ){
 
+				/*normalise raw for shift and scale, and get an alignment between 5mers and the events that produced them */
+				eventDataForRead eventData = normaliseEvents( *r, false );
+				
+				/*disregard this read if we don't meet the minimum required quality score for the 5mer alignment */				
+				if ( eventData.qualityScore > 4.0 ) continue;
+
 				/*push the filename for this read to the output */
 				ss << ">" << r -> filename << std::endl;
 
-				/*normalise raw for shift and scale, and get an alignment between 5mers and the events that produced them */
-				eventDataForRead eventData = normaliseEvents( *r, false );
-
 				int readHead = 0;
-				bool stable = true;
 
 				/*exclude the starts and ends of the read, as the alignment tends to be worse there */
 				for ( unsigned int i = 2*windowLength; i < (r -> basecalls).length() - 2*windowLength; i++ ){
@@ -185,8 +187,6 @@ int detect_main( int argc, char** argv ){
 							double logProbAnalogue = buildAndDetectHMM( readSnippet, FiveMer_model, analogueModel, eventSnippet, windowLength, true );
 							double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
-							if ( logProbThymidine == 0 or logProbAnalogue == 0 or logLikelihoodRatio == 0 ) stable = false;
-
 							ss << i << "\t" << logLikelihoodRatio << std::endl;
 						}
 					}
@@ -197,7 +197,7 @@ int detect_main( int argc, char** argv ){
 
 				#pragma omp critical
 				{	/*write the log probabilities for this file to the output file */
-					if ( stable ) outFile << ss.rdbuf();
+					outFile << ss.rdbuf();
 					displayProgress( prog, detectionTotal );
 				}
 			}

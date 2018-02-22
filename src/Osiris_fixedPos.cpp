@@ -147,7 +147,7 @@ int fixedPos_main( int argc, char** argv ){
 	unsigned int brduDomLoc = trainArgs.analoguePosition;
 
 	/*this will be filled up with results from Penthus */
-	std::map< std::string, std::vector< double> > trainedModel;
+	std::map< std::string, std::vector< std::pair< double, double > > > trainedModel;
 
 	/*iterate on the 7mers that we want to train on */
 	std::pair< std::string, std::vector< read > > trainingGroup;
@@ -215,7 +215,7 @@ int fixedPos_main( int argc, char** argv ){
 
 				std::vector< std::string > splitLine = split( line, '\t' );
 				std::string fiveMer = reference.substr(i, 5);
-				trainedModel[fiveMer] = {atof(splitLine[3].c_str()), atof(splitLine[5].c_str()), atof(splitLine[2].c_str()), atof(splitLine[4].c_str())};
+				trainedModel[fiveMer] = { std::make_pair( atof(splitLine[3].c_str()), atof(splitLine[5].c_str()) ) };
 			}
 			else if ( i > posToLookAt.back() ) break;
 		}

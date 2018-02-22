@@ -15,6 +15,7 @@ struct eventDataForRead {
 
 	std::vector< double > normalisedEvents;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
+	double qualityScore;
 };
 
 eventDataForRead normaliseEvents( read &, bool );

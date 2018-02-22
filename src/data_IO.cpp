@@ -8,11 +8,13 @@
 
 
 #include <iostream>
+#include <random>
 #include <algorithm>
 #include <fstream>
 #include <sstream>
 #include "data_IO.h"
 #include "error_handling.h"
+#include "poreModels.h"
 
 
 std::string import_reference( std::string fastaFilePath ){
@@ -109,7 +111,7 @@ std::map< std::string, std::pair< double, double > > import_poreModel( std::stri
 }
 
 
-void export_poreModel( std::map< std::string, std::vector< double > > &trainedMap, std::string &outputFilename ){
+void export_poreModel( std::map< std::string, std::vector< std::pair< double, double > > > &trainedMap, std::string &outputFilename ){
 
 	std::ofstream outFile;
 	outFile.open( outputFilename );
@@ -119,9 +121,46 @@ void export_poreModel( std::map< std::string, std::vector< double > > &trainedMa
 	outFile << "#Analogue pore model file trained by Osiris." << std::endl;
 	outFile << "kmer\ttrMu\ttrSig\toriMu\toriSig" << std::endl;
 
+	/*uniform random number generator */
+	std::random_device rd{};
+	std::mt19937 gen{rd()};
+
+	/*for each 5mer that we trained in the model */
 	for( auto iter = trainedMap.cbegin(); iter != trainedMap.cend(); ++iter ){
 
-		outFile << iter -> first << "\t" << ( iter -> second )[ 0 ] << "\t" << ( iter -> second )[ 1 ] << "\t" << ( iter -> second )[ 2 ] << "\t" << ( iter -> second )[ 3 ] << std::endl;
+		std::vector< double > samples;
+		samples.reserve( 1000*(iter -> second).size() );
+
+		for ( auto muStdPair = (iter -> second).begin(); muStdPair< (iter -> second).end(); muStdPair++ ){
+
+			/*generator for the normal distribution corresponding to this training value */
+			std::normal_distribution<> nd{ muStdPair -> first, muStdPair -> second };
+			
+			/*draw 1000 samples */
+			for ( int i = 0; i < 1000; i++ ){
+
+				samples.push_back( nd(gen) );
+			}
+		}
+
+		/*use the samples to calculate a consensus mean and stdv between trained values */
+		double sum = 0.0;
+		for ( int i = 0; i < samples.size(); i++ ){
+
+			sum += samples[i];
+		}
+		double mean = sum / (double) samples.size();
+
+		double stdvSum = 0.0;
+		for ( int i = 0; i < samples.size(); i++ ){
+
+			stdvSum += pow(samples[i] - mean,2);
+		}
+		double stdv = sqrt( stdvSum / (double) samples.size() );
+		std::string fiveMer = (iter -> first);
+		fiveMer.replace( (iter -> first).find('B'), 1, "T" );
+
+		outFile << iter -> first << "\t" << mean << "\t" << stdv << "\t" << FiveMer_model[fiveMer].first << "\t" << FiveMer_model[fiveMer].second << std::endl;
 	}
 	outFile.close();
 }
