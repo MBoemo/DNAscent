@@ -75,7 +75,7 @@ f_index.close()
 #go through the fastq
 f_fastq = open(a.fastq,'r')
 f_out = open('reads.fasta','w')
-grapLine = False
+grabLine = False
 for line in f_fastq:
 	if line[0] == '@':
 		name = line.rstrip().split(' ')[0]

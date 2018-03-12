@@ -27,7 +27,7 @@ Example:
   python demultiplexFastq.py -r /path/to/reference.fasta --reads /path/to/reads.fasta
 Required arguments are:
   -r,--reference            path to reference file in fasta format,
-  --reads                   path to fasta file with all reads to demultiplex.
+  --reads                   path to fastq file with all reads to demultiplex.
 Optional arguments are:
   -t,--threads              number of threads (default is 1 thread)."""
 
@@ -155,17 +155,16 @@ def print_split_reference(refDict):
 args = sys.argv
 a = parseArguments(args)
 
-os.system('bwa index ' + a.reference)
+#do the alignment with graphmap
 os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d ' + a.reads + ' | samtools view -Sb - | samtools sort - alignments.sorted') 
 os.system('samtools index alignments.sorted.bam')
 
-sam_file = pysam.Samfile('alignments.sorted.bam')
-out_files = list()
-
+#split the reference
 referenceDict = split_reference(a.reference)
 print_split_reference(referenceDict)
 posDict = {}
 
+#for each reference in the reference file, locate the BrdU position
 for key in referenceDict:
 
 	if referenceDict[key].find('NTNNNNN') != -1:
@@ -178,19 +177,21 @@ for key in referenceDict:
 		print 'Warning - BrdU and/or adenine domains not found.  Is the right domain in the reference?'
 		posDict[key] = 0
 
-# open an output file for each reference sequence
+#open an output file for each reference sequence
+out_files = list()
+sam_file = pysam.Samfile('alignments.sorted.bam')
 for x in sam_file.references:
 	print x
 	out_files.append(pysam.Samfile(x + ".bam", "wb", template=sam_file))
 
+#go through alignments.sorted.bam and sort reads into bam files corresponding to the reference they best aligned to
 for record in sam_file:
-	ref_length = sam_file.lengths[record.reference_id]
 
+	#catch bad alignment
 	if record.aend is None or record.query_alignment_length is None or record.reference_name is None:
 		continue
 
 	analogueLoc = posDict[record.reference_name]
-
 	query_cover = float(record.query_alignment_length) / record.query_length
 
 	#only keep reads that have the analogue ROI mapped, reads where at least 80% aligns to the reference, and reads that aren't the reverse complement

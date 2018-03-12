@@ -36,6 +36,7 @@ Example:
   python prepTrainingData.py -r /path/to/reference.fasta -p 3and4 -n 40 -d /path/to/aligned.bam -o output.foh -t 20
 Required arguments are:
   -r,--reference            path to reference file in fasta format,
+  -i,--index                path to the index file made by index.py,
   -p,--position             position of analogue in training data (valid arguments are 1and2, 3and4, or 5and6),
   -n,--minimum              minimum threshold of reads that we're allowed to train on,
   -d,--data                 path to BAM file,
@@ -64,6 +65,9 @@ def parseArguments(args):
 		elif argument == '-p' or argument == '--position':
 			a.position = str(args[i+1])
 
+		elif argument == '-i' or argument == '--index':
+			a.indexfile = str(args[i+1])
+
 		elif argument == '-o' or argument == '--output':
 			a.outFoh = str(args[i+1])
 
@@ -77,7 +81,7 @@ def parseArguments(args):
 			splashHelp()
 
 	#check that required arguments are met
-	if not hasattr( a, 'position') or not hasattr( a, 'data') or not hasattr( a, 'outFoh') or not hasattr( a, 'reference') or not hasattr( a, 'minReads'):
+	if not hasattr( a, 'position') or not hasattr( a, 'data') or not hasattr( a, 'outFoh') or not hasattr( a, 'reference') or not hasattr( a, 'minReads') or not hasattr( a, 'indexfile'):
 		splashHelp() 
 
 	return a
@@ -188,7 +192,7 @@ def normaliseRead(sequence, filename, bounds):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFilename, threads, locInDomain):
+def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFilename, threads, locInDomain, index):
 #	Used to import training data from a hairpin primer of the form 5'-...NNNBNNN....NNNANNN...-3'.
 #	Creates a map from kmer (string) to a list of lists, where each list is comprised of events from a read
 #	First reads a BAM file to see which reads (readIDs, sequences) aligned to the references based on barcoding.  Then finds the fast5 files
@@ -241,7 +245,7 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 
 		if len(sequence) < int(1.1*len(reference)): #if this isn't a concatenated read...
 
-			readID = record.query_name #read filename
+			readRawPath = index[record.query_name] #read filename
 
 			pairs = record.get_aligned_pairs(True,True) #tuples for each mapped position (pos-on-read,pos-on-ref,base-on-ref)
 
@@ -270,9 +274,9 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 				#append to dictionary
 				if brD in kmer2filename:
 					if len(kmer2filename[brD]) < 100:#cap the top number we can have
-						kmer2filename[brD] += [ ( sequence, readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1] )) ]
+						kmer2filename[brD] += [ ( sequence, readRawPath, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1] )) ]
 				else:
-					kmer2filename[brD] = [ ( sequence, readID, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1])) ]
+					kmer2filename[brD] = [ ( sequence, readRawPath, str(analogPosOnRead[0]) + ' ' + str(analogPosOnRead[-1])) ]
 
 			else:
 				failedROIQC += 1
@@ -294,7 +298,9 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 		if len(kmer2filename[key]) >= readsThreshold:
 			filtered[key] = kmer2filename[key]
 
-	del kmer2filename
+	kmer2filename.clear()
+	index.clear()
+	gc.collect()
 
 	f_out = open(outFilename,'w')
 
@@ -321,7 +327,7 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 			seqBuffer.append(sequence)
 
 			#do the parallel processing to normalise the reads
-			if counter == 1024:
+			if counter == threads:
 								
 				out = Parallel(n_jobs=threads)(delayed(normaliseRead)(s, f, b) for s, f, b in zip(seqBuffer, fnameBuffer,boundsBuffer))
 	
@@ -330,8 +336,10 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 					f_out.write(r)
 
 				#empty buffer
-				fnameBuffer = []
-				boundsBuffer = []
+				del fnameBuffer[:]
+				del boundsBuffer[:]
+				del seqBuffer[:]
+				gc.collect()
 
 			counter += 1
 
@@ -341,6 +349,12 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 		#print whatever's left to the foh file
 		for r in out:
 			f_out.write(r)
+
+		#empty buffer
+		del fnameBuffer[:]
+		del boundsBuffer[:]
+		del seqBuffer[:]
+		gc.collect()
 
 		#write the closer
 		f_out.write('<\n')
@@ -354,6 +368,14 @@ def import_HairpinTrainingData(reference, BAMrecords, ROI, readsThreshold, outFi
 #parse arguments
 args = sys.argv
 a = parseArguments(args)
+
+#load the index
+f_index = open(a.indexfile,'r')
+index = {}
+for line in f_index:
+	splitLine = line.rstrip().split('\t')
+	index[splitLine[0]] = splitLine[1]
+f_index.close()
 
 #import the reference from the specified fasta file
 reference = import_reference(a.reference)
@@ -376,5 +398,5 @@ else:
 	splashHelp()
 
 #bin the 7mers and write the training data to the output file
-import_HairpinTrainingData(import_reference(a.reference), a.data, analogueLoc, a.minReads, a.outFoh, a.threads, locInDomain)
+import_HairpinTrainingData(import_reference(a.reference), a.data, analogueLoc, a.minReads, a.outFoh, a.threads, locInDomain, index)
 
