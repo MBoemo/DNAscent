@@ -266,30 +266,33 @@ eventDataForRead normaliseEvents( read &r, bool clip ){
 	double normalisedEventMean;
 	double alignmentScore = 0.0;
 	int positionAlignedTo;
-	std::string fiveMerAlingedTo;
+	std::string fiveMerAlignedTo;
+	int numEventsAdded = 0;
 	for ( unsigned int i = 0 ; i < (thisRead.eventAlignment).size(); i++ ){
 
 		normalisedEventMean = ( events_mu[i] - shift )/scale;
 
+		positionAlignedTo = (thisRead.eventAlignment)[i].second;
+		fiveMerAlignedTo = (r.basecalls).substr(positionAlignedTo,5);
+
 		if ( clip ){
-			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 and (thisRead.eventAlignment)[i].second >= (r.ROIbounds).first - 10 and (thisRead.eventAlignment)[i].second <= (r.ROIbounds).second + 10 ){
+			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 and (thisRead.eventAlignment)[i].second >= (r.ROIbounds).first - 16 and (thisRead.eventAlignment)[i].second <= (r.ROIbounds).second + 16 ){
 
 				(thisRead.normalisedEvents).push_back( normalisedEventMean );
+				alignmentScore += normalisedEventMean - FiveMer_model[fiveMerAlignedTo].first;
+				numEventsAdded++;
 			}
 		}
 		else{
 			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 ){
 
 				(thisRead.normalisedEvents).push_back( normalisedEventMean );
+				alignmentScore += normalisedEventMean - FiveMer_model[fiveMerAlignedTo].first;
+				numEventsAdded++;
 			}
 		}
-
-		/*calculate a quality score for the alignment */
-		positionAlignedTo = (thisRead.eventAlignment)[i].second;
-		fiveMerAlingedTo = (r.basecalls).substr(positionAlignedTo,5);
-		alignmentScore += fabs( normalisedEventMean - FiveMer_model[fiveMerAlingedTo].first );
 	}
-	thisRead.qualityScore = alignmentScore / (double) (thisRead.eventAlignment).size();
+	thisRead.qualityScore = alignmentScore / (double) numEventsAdded;
 
 	return thisRead;
 }

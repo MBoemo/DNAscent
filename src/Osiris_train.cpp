@@ -7,6 +7,8 @@
 //----------------------------------------------------------
 
 #include <exception>
+#include <math.h>
+#include <iostream>
 #include <fstream>
 #include "common.h"
 #include "build_model.h"
@@ -167,7 +169,7 @@ int train_main( int argc, char** argv ){
 			eventDataForRead thisRead = normaliseEvents( *r, clip );
 			
 			/*disregard this event if the quality score is too low */
-			if ( thisRead.qualityScore > 4.0 ) continue;
+			if ( fabs(thisRead.qualityScore) > 1.0 ) continue;
 
 			#pragma omp critical
 			events.push_back( thisRead.normalisedEvents );
@@ -253,7 +255,10 @@ int train_main( int argc, char** argv ){
 			if ( std::find(posToLookAt.begin(), posToLookAt.end(), i) != posToLookAt.end() ){
 
 				std::vector< std::string > splitLine = split( line, '\t' );
-				std::string fiveMer = brduDom_B_replace_T.substr(i-brduDomLoc, 5);
+				std::string fiveMer = brduDom_B_replace_T.substr(i - brduDomLoc, 5);
+
+				std::cout << fiveMer << '\t' << atof(splitLine[3].c_str()) << '\t' << atof(splitLine[5].c_str()) << std::endl;
+
 				if ( trainedModel.count( fiveMer ) > 0 ){
 
 					trainedModel[fiveMer].push_back( std::make_pair( atof(splitLine[3].c_str()), atof(splitLine[5].c_str()) ) );
