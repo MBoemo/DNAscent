@@ -5,10 +5,13 @@ f = open(sys.argv[1],'r')
 f_out = open('all5mersFromLog.allModel','w')
 
 dic = {}
-
+key = ''
 for line in f:
 
-	if line[0] == '>' or line[0] == 's':
+	if line[0] == '>':
+		key = line[1:].rstrip()
+		continue
+	elif line[0] == 's':
 		continue
 
 	splitLine = line.rstrip().split('\t')
@@ -21,9 +24,9 @@ for line in f:
 		oriSig = float(splitLine[4])
 		trSig = float(splitLine[5])
 		if splitStr in dic:
-			dic[splitStr].append([trMu, trSig, oriMu, oriSig])
+			dic[splitStr].append([trMu, trSig, oriMu, oriSig, key])
 		else:
-			dic[splitStr] = [[trMu, trSig, oriMu, oriSig]]
+			dic[splitStr] = [[trMu, trSig, oriMu, oriSig, key]]
 
 	elif int(splitLine[0].split('_')[0]) == 17:
 		splitStr = list(splitLine[1])
@@ -34,9 +37,9 @@ for line in f:
 		oriSig = float(splitLine[4])
 		trSig = float(splitLine[5])
 		if splitStr in dic:
-			dic[splitStr].append([trMu, trSig, oriMu, oriSig])
+			dic[splitStr].append([trMu, trSig, oriMu, oriSig, key])
 		else:
-			dic[splitStr] = [[trMu, trSig, oriMu, oriSig]]
+			dic[splitStr] = [[trMu, trSig, oriMu, oriSig, key]]
 
 	elif int(splitLine[0].split('_')[0]) == 18:
 		splitStr = list(splitLine[1])
@@ -47,16 +50,16 @@ for line in f:
 		oriSig = float(splitLine[4])
 		trSig = float(splitLine[5])
 		if splitStr in dic:
-			dic[splitStr].append([trMu, trSig, oriMu, oriSig])
+			dic[splitStr].append([trMu, trSig, oriMu, oriSig, key])
 		else:
-			dic[splitStr] = [[trMu, trSig, oriMu, oriSig]]
+			dic[splitStr] = [[trMu, trSig, oriMu, oriSig, key]]
 
 f_out.write('kmer\ttrMu\ttrSig\toriMu\toriSig\n')
 for key in dic:
 	means_bin = []
 	for n in dic[key]:
 		means_bin.append(n[0])
-		f_out.write(key+'\t'+str(n[0])+'\t'+str(n[1])+'\t'+str(n[2])+'\t'+str(n[3])+'\n')
+		f_out.write(key+'\t'+str(n[0])+'\t'+str(n[1])+'\t'+str(n[2])+'\t'+str(n[3])+'\t'+n[4]+'\n')
 	f_out.write('>>\t'+str(np.mean(means_bin))+'\t'+str(np.std(means_bin))+'\n')
 f.close()
 f_out.close()

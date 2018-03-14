@@ -90,9 +90,14 @@ std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A,
 double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
 /*computes the length of the geodesic between N(mu1,stdv1) and N(mu2,stdv2) using the Fisher-Rao metric as a distance */
 
-	//double F = sqrt( ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )*( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 + stdv2, 2.0 ) ) );
+	double F = sqrt( ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )*( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 + stdv2, 2.0 ) ) );
 
-	//return sqrt(2)*log( (F + pow( mu1 - mu2, 2.0 ) + 2*( pow( stdv1, 2.0 ) + pow( stdv2, 2.0 ) ) ) / ( 4 * stdv1 * stdv2 ) );
+	return sqrt(2)*log( (F + pow( mu1 - mu2, 2.0 ) + 2*( pow( stdv1, 2.0 ) + pow( stdv2, 2.0 ) ) ) / ( 4 * stdv1 * stdv2 ) );
+}
+
+
+double manhattanMetric( double mu1, double stdv1, double mu2, double stdv2 ){
+/*computes the length of the geodesic between N(mu1,stdv1) and N(mu2,stdv2) using the Fisher-Rao metric as a distance */
 
 	return fabs(mu1-mu2);
 }
@@ -114,7 +119,7 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 	dtw[1][1] = 0.0;
 	double mu = FiveMer_model[basecall.substr(1,5)].first;
 	double stdv = FiveMer_model[basecall.substr(1,5)].second;
-	dtw[1][1] = fisherRaoMetric( mu, stdv, raw[1], raw_stdv[1] );
+	dtw[1][1] = manhattanMetric( mu, stdv, raw[1], raw_stdv[1] );
 
 	/*RECURSION: fill in the dynamic time warping lattice */
 	for ( unsigned int row = 1; row < numOfRaw; row++ ){
@@ -123,7 +128,7 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 
 			mu = FiveMer_model[basecall.substr(col, 5)].first;
 			stdv = FiveMer_model[basecall.substr(col, 5)].second;
-			dtw[row][col] =  fisherRaoMetric( mu, stdv, raw[row], raw_stdv[row] ) + std::min( dtw[row - 1][col], std::min(dtw[row - 1][col - 1], dtw[row - 1][col - 2] ) );	
+			dtw[row][col] =  manhattanMetric( mu, stdv, raw[row], raw_stdv[row] ) + std::min( dtw[row - 1][col], std::min(dtw[row - 1][col - 1], dtw[row - 1][col - 2] ) );	
 		}
 	}
 

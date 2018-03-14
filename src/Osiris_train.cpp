@@ -257,8 +257,6 @@ int train_main( int argc, char** argv ){
 				std::vector< std::string > splitLine = split( line, '\t' );
 				std::string fiveMer = brduDom_B_replace_T.substr(i - brduDomLoc, 5);
 
-				std::cout << fiveMer << '\t' << atof(splitLine[3].c_str()) << '\t' << atof(splitLine[5].c_str()) << std::endl;
-
 				if ( trainedModel.count( fiveMer ) > 0 ){
 
 					trainedModel[fiveMer].push_back( std::make_pair( atof(splitLine[3].c_str()), atof(splitLine[5].c_str()) ) );

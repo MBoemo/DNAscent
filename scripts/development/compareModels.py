@@ -11,9 +11,15 @@
 
 import sys
 import matplotlib
+import math
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import numpy as np
+
+#------------------------------------------------------------------------------------------------------------------------------------------
+def divergence(mu1,sig1,mu2,sig2):
+
+	return math.log(sig2/sig1) + ( math.pow(sig1,2) + math.pow(mu1-mu2,2))/(2*math.pow(sig2,2)) - 0.5
 
 
 #------------------------------------------------------------------------------------------------------------------------------------------
@@ -50,7 +56,8 @@ commonKeys = [key for key in model1 if key in model2]
 
 diffs = []
 for key in commonKeys:
-	diffs.append( model1[key][0] - model2[key][0] )
+	diffs.append( divergence(model1[key][0],model1[key][1],model2[key][0],model2[key][1]) )
+	#diffs.append( abs(model1[key][0] - model2[key][0]) )
 
 plt.hist(diffs,len(diffs)/10)
 plt.xlabel('Difference Between Model Means (pA)')
