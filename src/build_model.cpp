@@ -14,10 +14,11 @@
 #include "poreSpecificParameters.h"
 #include "../Penthus/src/hmm.h"
 #include "../Penthus/src/states.h"
+#include "poreModels.h"
 #include "data_IO.h"
 
 
-std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::string, std::pair< double, double > > &basePoreModel, std::vector< std::vector< double > > &events, int &threads, bool verbose = false ){
+std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::string, std::vector< double > > &fiverMer2alignedEvents, std::vector< std::vector< double > > &events, std::vector< unsigned int > &posToLookAt, std::string analogue7mer, int brduDomLoc, int &threads, bool verbose = false ){
 
 	HiddenMarkovModel hmm = HiddenMarkovModel( 3*reference.length(), 3*reference.length() + 2 );
 
@@ -37,7 +38,7 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 	/*create the distributions that we need */			
 	for ( unsigned int i = 0; i < reference.length() - 5; i++ ){
 
-		emissionMeanAndStd = basePoreModel.at( reference.substr( i, 5 ) );		
+		emissionMeanAndStd = FiveMer_model.at( reference.substr( i, 5 ) );		
 		nd.push_back( NormalDistribution( emissionMeanAndStd.first, emissionMeanAndStd.second ) );		
 	}
 
@@ -108,6 +109,41 @@ std::stringstream buildAndTrainHMM( std::string &reference, std::map< std::strin
 	hmm.finalise();
 
 	hmm.BaumWelch( events, 1.0, 250, 0.0, true, threads, verbose );
+
+	/*START - get alignment */
+	for ( auto eventSet = events.begin(); eventSet < events.end(); eventSet++ ){
+
+		auto viterbiData = hmm.viterbi( *eventSet );		
+		std::vector< State > statePath = viterbiData.second;
+
+		/*filter state path to only emitting states */
+		std::vector< State > emittingStatePath;
+		for ( auto s = statePath.begin(); s < statePath.end(); s++ ){
+
+			/*check character */
+			if ( ((*s).name).substr(((*s).name).find('_') + 1,1) == "M" or ((*s).name).substr(((*s).name).find('_') + 1,1) == "I" ){
+				emittingStatePath.push_back( *s );
+			}
+
+		}
+
+		/*print out the alignment to stdout */
+		for ( unsigned int i = 0; i < (*eventSet).size(); i++ ){
+
+			/*if this event matched to one of the positions we need to pay attention to */
+			int posOfMatch = atoi(((emittingStatePath[i].name).substr(0, (emittingStatePath[i].name).find('_'))).c_str());
+
+			if ( std::find( posToLookAt.begin(), posToLookAt.end(), posOfMatch ) != posToLookAt.end() ){
+
+				std::string brduFiveMer = analogue7mer.substr(posOfMatch - brduDomLoc, 5);
+				fiverMer2alignedEvents[ brduFiveMer ].push_back( (*eventSet)[i] );
+			}
+
+			
+			//std::cout << (*eventSet)[i] << '\t' << emittingStatePath[i].name << '\t' << emittingStatePath[i].dist -> trained_param1 << '\t' << emittingStatePath[i].dist -> trained_param2 << '\t' << emittingStatePath[i].dist -> param1 << '\t' << emittingStatePath[i].dist -> param2 << std::endl;
+		}
+	}
+	/*END */
 
 	std::stringstream ss = hmm.summarise();
 

@@ -150,6 +150,10 @@ int train_main( int argc, char** argv ){
 	/*iterate on the 7mers that we want to train on */
 	std::pair< std::string, std::vector< read > > trainingGroup;
 	std::string trainingGroupStr;
+
+	/*store the events from the event alignment */
+	std::map< std::string, std::vector< double > > fiverMer2alignedEvents;
+
 	while ( std::getline( fohFile, trainingGroupStr, '<' ) ){
 
 		/*stop if we're at the end of the file */
@@ -229,7 +233,7 @@ int train_main( int argc, char** argv ){
 		/*do the training */
 		std::stringstream ss;
 		try{
-			ss = buildAndTrainHMM( refLocal, FiveMer_model, events, trainArgs.threads, false );
+			ss = buildAndTrainHMM( refLocal, fiverMer2alignedEvents, events, posToLookAt, brduDom_B_replace_T, brduDomLoc, trainArgs.threads, false );
 		}
 		catch ( NumericalInstability &ni ){
 			std::cout << ni.what() << std::endl << "Aborted training on this 7mer, skipping: "<< brduDom_B_replace_T << std::endl;
@@ -272,6 +276,36 @@ int train_main( int argc, char** argv ){
 		prog++;
 	}
 	displayProgress( trainingTotal, trainingTotal );
+
+	/*write the eventalign model */
+	std::string eventAlignModelname = trainArgs.trainingOutputFilename + ".eventalign";
+	std::ofstream outEventAlign;
+	outEventAlign.open( eventAlignModelname );
+	if ( not outEventAlign.is_open() ) throw IOerror( eventAlignModelname );
+	outEventAlign << "#Analogue pore model file trained by Osiris." << std::endl;
+	outEventAlign << "kmer\ttrMu\ttrSig\toriMu\toriSig" << std::endl;
+
+	std::map< std::string, std::pair< double, double > > trainedEventAlign;
+	for( auto iter = fiverMer2alignedEvents.cbegin(); iter != fiverMer2alignedEvents.cend(); ++iter ){
+
+		double sum = 0.0;
+		for ( int i = 0; i < (iter -> second).size(); i++ ){
+
+			sum += (iter -> second)[i];
+		}
+		double mean = sum / (double) (iter -> second).size();
+
+		double stdvSum = 0.0;
+		for ( int i = 0; i < (iter -> second).size(); i++ ){
+
+			stdvSum += pow((iter -> second)[i] - mean,2);
+		}
+		double stdv = sqrt( stdvSum / (double) (iter -> second).size() );
+		
+		std::string thymFiveMer = (iter -> first);
+		thymFiveMer.replace( (iter -> first).find('B'), 1, "T" );
+		outEventAlign << iter -> first << "\t" << mean << "\t" << stdv << "\t" << FiveMer_model[thymFiveMer].first << "\t" << FiveMer_model[thymFiveMer].second << std::endl;
+	}
 
 	/*make a pore model file from the map */
 	export_poreModel( trainedModel, trainArgs.trainingOutputFilename );

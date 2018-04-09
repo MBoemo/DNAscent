@@ -55,7 +55,7 @@ diffs=[[],[],[],[],[]]
 
 for key in model:
 	mu1, sig1, mu2, sig2 = model[key]
-	diffs[key.find("B")].append( divergence(mu1,sig1,mu2,sig2) )
+	diffs[key.find("B")].append(abs(mu1-mu2)) #append( divergence(mu1,sig1,mu2,sig2) )
 
 for i,d in enumerate(diffs):
 
@@ -63,7 +63,7 @@ for i,d in enumerate(diffs):
 		continue
 	g = plt.figure(i)
 	plt.hist(d,len(d)/10)
-	plt.xlabel('Divergence')
+	plt.xlabel('Difference Between Means')#plt.xlabel('Divergence')
 	plt.ylabel('Count')
 	plt.title('Comparison Between BrdU and Thymidine Models, N=' + str(len(d)))
 	axes = plt.gca()

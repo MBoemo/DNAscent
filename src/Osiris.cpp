@@ -11,7 +11,7 @@
 #include <map>
 #include <functional>
 #include "Osiris_train.h"
-#include "Osiris_fixedPos.h"
+//#include "Osiris_fixedPos.h"
 #include "Osiris_detect.h"
 #include "error_handling.h"
 
@@ -22,7 +22,7 @@ int show_options( int, char** );
 /*map from name of the Osiris function passed as argument on the command line to the function that it should call */
 static std::map< std::string, std::function< int( int, char** ) > > executables = {
 	{"train", 	train_main},
-	{"fixedPos", 	fixedPos_main},
+//	{"fixedPos", 	fixedPos_main},
 	{"detect", 	detect_main},
 	{"--help",	show_options},
 	{"-h",	show_options}
