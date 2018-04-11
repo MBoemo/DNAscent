@@ -203,7 +203,7 @@ std::vector< double > roughRescale( std::vector< double > means, std::string &ba
 }
 
 
-eventDataForRead normaliseEvents( read &r, bool clip ){
+eventDataForRead normaliseEvents( read &r ){
 
 	eventDataForRead thisRead;
 
@@ -280,22 +280,9 @@ eventDataForRead normaliseEvents( read &r, bool clip ){
 		positionAlignedTo = (thisRead.eventAlignment)[i].second;
 		fiveMerAlignedTo = (r.basecalls).substr(positionAlignedTo,5);
 
-		if ( clip ){
-			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 and (thisRead.eventAlignment)[i].second >= (r.ROIbounds).first - 16 and (thisRead.eventAlignment)[i].second <= (r.ROIbounds).second + 16 ){
-
-				(thisRead.normalisedEvents).push_back( normalisedEventMean );
-				alignmentScore += normalisedEventMean - FiveMer_model[fiveMerAlignedTo].first;
-				numEventsAdded++;
-			}
-		}
-		else{
-			if ( normalisedEventMean > 50.0 and normalisedEventMean < 130 ){
-
-				(thisRead.normalisedEvents).push_back( normalisedEventMean );
-				alignmentScore += normalisedEventMean - FiveMer_model[fiveMerAlignedTo].first;
-				numEventsAdded++;
-			}
-		}
+		(thisRead.normalisedEvents).push_back( normalisedEventMean );
+		alignmentScore += normalisedEventMean - FiveMer_model[fiveMerAlignedTo].first;
+		numEventsAdded++;
 	}
 	thisRead.qualityScore = alignmentScore / (double) numEventsAdded;
 

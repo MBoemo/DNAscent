@@ -17,20 +17,18 @@
 #include "../Penthus/src/error_handling.h"
 #include "../Penthus/src/hmm.h"
 #include "../Penthus/src/states.h"
-#include "../Penthus/src/unsupervised_learning.h"
 #include "poreModels.h"
-#include "Osiris_train.h"
+#include "Osiris_scan.h"
 #include "poreSpecificParameters.h"
 
 static const char *help=
-"train: Osiris executable that determines the mean and standard deviation of a base analogue's current.\n"
-"To run Osiris train, do:\n"
-"  ./Osiris train [arguments]\n"
+"train: Osiris executable that scans a sequence for events that deviate from expectation.\n"
+"To run Osiris scan, do:\n"
+"  ./Osiris scan [arguments]\n"
 "Example:\n"
-"  ./Osiris train -d /path/to/data.foh -b 150 650 -o output.txt -t 20\n"
+"  ./Osiris scan -d /path/to/data.foh -o output.txt -t 20\n"
 "Required arguments are:\n"
 "  -d,--trainingData         path to training data in the .foh format (made with prepTrainingData.py),\n"
-"  -b,--bounds               indices of where the de Bruijn sequence starts and ends in the reference,\n"
 "  -o,--output               path to the output pore model file that Osiris will train.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread).\n";
@@ -42,8 +40,6 @@ struct Arguments {
 	bool logFile;
 	std::string logFilename;
 	int threads;
-	int boundLower;
-	int boundUpper;
 };
 
 Arguments parseTrainingArguments( int argc, char** argv ){
@@ -79,14 +75,6 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 			trainArgs.trainingOutputFilename = strArg;
 			i+=2;
 		}
-		else if ( flag == "-b" or flag == "--bounds" ){
-
-			std::string strLower( argv[ i + 1 ] );
-			trainArgs.boundLower = std::stoi( strLower.c_str() );
-			std::string strUpper( argv[ i + 2 ] );
-			trainArgs.boundUpper = std::stoi( strUpper.c_str() );
-			i+=3;
-		}
 		else if ( flag == "-t" or flag == "--threads" ){
 
 			std::string strArg( argv[ i + 1 ] );
@@ -109,9 +97,7 @@ int train_main( int argc, char** argv ){
 
 	/*open output file */
 	std::ofstream outFile( trainArgs.trainingOutputFilename );
-	if ( not outFile.is_open() ) throw IOerror( trainArgs.trainingOutputFilename );
-
-	outFile << "5mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_2" << '\t' << "pi_2" << '\t' << "mean_1" << '\t' << "stdv_2" << std::endl;
+	if ( not fohFile.is_open() ) throw IOerror( trainArgs.trainingOutputFilename );
 
 	/*read the foh header - total count and reference */
 	std::string line, reference;
@@ -119,11 +105,9 @@ int train_main( int argc, char** argv ){
 	std::getline( fohFile, line );
 	int trainingTotal = atoi(line.c_str());
 
+
 	int prog = 0;
 
-	std::map< int, std::vector< double > > eventPileup;
-
-	/*align the training data */
 	while ( std::getline( fohFile, line) ){
 
 		/*get data for a read from foh */
@@ -261,49 +245,12 @@ int train_main( int argc, char** argv ){
 		/*print out the alignment to output */
 		for ( unsigned int i = 0; i < (eventData.normalisedEvents).size(); i++ ){
 
-			/*get the position */
-			std::vector< std::string > findIndex = split( emittingStatePath[i].name, '_' );
-			unsigned int posOnReference = atoi(findIndex[0].c_str());
-
-			if ( posOnReference >= trainArgs.boundLower and posOnReference < trainArgs.boundUpper ){
-				eventPileup[posOnReference].push_back( (eventData.normalisedEvents)[i] );
-			}
+			outFile << (eventData.normalisedEvents)[i] << '\t' << emittingStatePath[i].name << '\t' << emittingStatePath[i].meta << '\t' << emittingStatePath[i].dist -> param1 << '\t' << emittingStatePath[i].dist -> param2 << std::endl;
 		}
+		outFile << ">" << std::endl;
 
 		displayProgress( prog, trainingTotal );
 		prog++;
 	}
-	fohFile.close();
-
-	/*fit a mixture model to the events that aligned to each position in the reference */
-	double mu1, stdv1, mu2, stdv2;
-	for ( auto iter = eventPileup.cbegin(); iter != eventPileup.cend(); ++iter ){
-
-		/*get the ONT distribution for the mixture */
-		std::string fiveMer = reference.substr( iter -> first, 5 );
-		mu1 = FiveMer_model[fiveMer].first;
-		stdv1 = FiveMer_model[fiveMer].second;
-
-		/*make a second distribution that's similar to the ONT distribution */
-		mu2 = mu1 + 1.0;
-		stdv2 = stdv1;
-
-		/*fit the model */
-		std::vector< double > events = iter -> second;
-		std::vector< double > fitParameters;
-		try{
-			fitParameters = gaussianMixtureEM( mu1, stdv1, mu2, stdv2, events, 0.0001 );
-		}
-		catch ( NegativeLog &nl ){
-
-			std::cout << nl.what() << std::endl << "Aborted training on: "<< fiveMer << std::endl;
-			continue;
-		}
-
-		outFile << fiveMer << '\t' << mu1 << '\t' << stdv1 << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << std::endl; 
-
-	}
-	outFile.close();
-
 	return 0;
 }

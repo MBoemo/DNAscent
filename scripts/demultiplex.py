@@ -107,8 +107,8 @@ def import_reference(filename):
 
 	reference = reference.upper()
 
-	if not all(c in ['A','T','G','C','N'] for c in reference):
-		warnings.warn('Warning: Illegal character in reference.  Legal characters are A, T, G, C, and N.', Warning)
+	if not all(c in ['A','T','G','C'] for c in reference):
+		warnings.warn('Warning: Illegal character in reference.  Legal characters are A, T, G, and C.', Warning)
 
 	return reference
 
@@ -161,21 +161,7 @@ os.system('samtools index alignments.sorted.bam')
 
 #split the reference
 referenceDict = split_reference(a.reference)
-print_split_reference(referenceDict)
-posDict = {}
-
-#for each reference in the reference file, locate the BrdU position
-for key in referenceDict:
-
-	if referenceDict[key].find('NTNNNNN') != -1:
-		posDict[key] = referenceDict[key].find('NTNNNNN')
-	elif referenceDict[key].find('NNNTNNN') != -1:
-		posDict[key] = referenceDict[key].find('NNNTNNN')
-	elif referenceDict[key].find('NNNNNTN') != -1:
-		posDict[key] = referenceDict[key].find('NNNNNTN')
-	else:
-		print 'Warning - BrdU and/or adenine domains not found.  Is the right domain in the reference?'
-		posDict[key] = 0
+print_split_reference(referenceDict
 
 #open an output file for each reference sequence
 out_files = list()
@@ -191,16 +177,11 @@ for record in sam_file:
 	if record.aend is None or record.query_alignment_length is None or record.reference_name is None:
 		continue
 
-	analogueLoc = posDict[record.reference_name]
-	query_cover = float(record.query_alignment_length) / record.query_length
+	query_cover = float(record.query_alignment_length) / record.query_length #fraction of the read that aligns to the reference
 
 	#only keep reads that have the analogue ROI mapped, reads where at least 80% aligns to the reference, and reads that aren't the reverse complement
-	if analogueLoc > 0:
-		if (record.reference_start < analogueLoc - 15) and (record.reference_end > analogueLoc + 21) and query_cover > 0.8 and (record.is_reverse == False):
-			out_files[record.reference_id].write(record)
-	else:
-		if query_cover > 0.8 and (record.is_reverse == False):
-			out_files[record.reference_id].write(record)	
+	if query_cover > 0.8 and (record.is_reverse == False):
+		out_files[record.reference_id].write(record)	
 
 #index the new BAM files
 for x in sam_file.references:

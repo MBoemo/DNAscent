@@ -13,9 +13,11 @@
 #include <sstream>
 #include <string>
 #include <map>
+#include "../Penthus/src/hmm.h"
 
 
 /*function prototypes */
+HiddenMarkovModel buildHMMFromRef( std::string & );
 std::stringstream buildAndTrainHMM( std::string &, std::map< std::string, std::vector< double > > &, std::vector< std::vector< double > > &, std::vector< unsigned int > &, std::string, int, int &, bool );
 double buildAndDetectHMM( std::string &, std::map< std::string, std::pair< double, double > > &, std::map< std::string, std::pair< double, double > > &, std::vector< double > &, unsigned int, bool );
 
