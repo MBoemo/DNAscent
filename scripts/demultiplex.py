@@ -156,12 +156,12 @@ args = sys.argv
 a = parseArguments(args)
 
 #do the alignment with graphmap
-os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d ' + a.reads + ' | samtools view -Sb - | samtools sort - alignments.sorted') 
-os.system('samtools index alignments.sorted.bam')
+#os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d ' + a.reads + ' | samtools view -Sb - | samtools sort - alignments.sorted') 
+#os.system('samtools index alignments.sorted.bam')
 
 #split the reference
 referenceDict = split_reference(a.reference)
-print_split_reference(referenceDict
+print_split_reference(referenceDict)
 
 #open an output file for each reference sequence
 out_files = list()
@@ -177,10 +177,13 @@ for record in sam_file:
 	if record.aend is None or record.query_alignment_length is None or record.reference_name is None:
 		continue
 
-	query_cover = float(record.query_alignment_length) / record.query_length #fraction of the read that aligns to the reference
+	query_cover = float(record.query_alignment_length) / float(record.query_length) #fraction of the read that aligns to the reference
+	reference_cover = float( record.reference_length) / float( sam_file.lengths[record.reference_id] )
+	overflow = float(record.query_length) / float( sam_file.lengths[record.reference_id] )
 
-	#only keep reads that have the analogue ROI mapped, reads where at least 80% aligns to the reference, and reads that aren't the reverse complement
-	if query_cover > 0.8 and (record.is_reverse == False):
+	#only keep reads that have the analogue ROI mapped, reads where at least 90% aligns to the reference, and reads that aren't the reverse complement
+	if query_cover > 0.9 and reference_cover > 0.9 and overflow < 1.2 and (record.is_reverse == False):
+
 		out_files[record.reference_id].write(record)	
 
 #index the new BAM files

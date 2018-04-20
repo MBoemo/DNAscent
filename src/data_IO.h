@@ -17,7 +17,8 @@
 struct read{
 
 	std::string basecalls;
-	std::pair< unsigned int, unsigned int > ROIbounds;
+	std::pair< unsigned int, unsigned int > bounds_reference;
+	std::pair< unsigned int, unsigned int > bounds_query;
 	std::vector< double > raw;
 	std::string filename;
 };

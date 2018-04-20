@@ -145,6 +145,15 @@ def normaliseRead(filename):
 	return ' '.join(map(str,raw_array.tolist()))
 
 
+#--------------------------------------------------------------------------------------------------------------------------------------
+def parallel_helper(sequence, bounds_r, bounds_q, path):
+
+	#get the events from the fast5 file corresponding to this read, normalised to pA
+	events = normaliseRead(path)
+
+	return sequence + '\n' + bounds_r + '\n' + bounds_q + '\n' + events + '\n'
+
+
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
 
 #parse arguments
@@ -181,17 +190,22 @@ for counter, record in enumerate(f_in):
 
 	#print progress to stdout
 	displayProgress( counter, numOfRecords );
+	
+	#use the index to get the fast5 file path from the readID
+	readRawPath = record.query_name#index[record.query_name]
+	
+	buffer_records.append( (record.query_sequence, str(record.reference_start) + ' ' + str(record.reference_end), str(record.query_alignment_start) + ' ' + str(record.query_alignment_end), readRawPath) )
 
-	if len(record.query_sequence) <= int(1.1*len(reference)): #if this isn't a concatenated read...
-		
-		#use the index to get the fast5 file path from the readID
-		readRawPath = record.query_name#index[record.query_name]
+	if len(buffer_records) > a.threads:
 
-		#get the events from the fast5 file corresponding to this read, normalised to pA
-		events = normaliseRead(readRawPath)
-			
-		#write the output to the foh file
-		f_out.write(record.query_sequence + '\n' + str(record.reference_start) + ' ' + str(record.reference_end) + '\n' + events + '\n')
+		out = Parallel(n_jobs=a.threads)(delayed(parallel_helper)(s,b_r,b_q,p) for s,b_r,b_q,p in buffer_records)
+
+		for s in out:
+
+			f_out.write(s)
+
+		del buffer_records[:]
+		gc.collect()
 
 f_in.close()
 f_out.close()

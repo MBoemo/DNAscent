@@ -189,10 +189,15 @@ std::pair< std::string, std::vector< read > > getTrainingFrom_foh( std::string &
 		/*the basecall line */
 		currentRead.basecalls = line;
 
-		/*the bounds line */
+		/*the reference bounds line */
 		std::getline( trainingGroupStream, line );
-		(currentRead.ROIbounds).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
-		(currentRead.ROIbounds).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
+		(currentRead.bounds_reference).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
+		(currentRead.bounds_reference).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
+
+		/*the query bounds line */
+		std::getline( trainingGroupStream, line );
+		(currentRead.bounds_query).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
+		(currentRead.bounds_query).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
 
 		/*the raw signal line */
 		std::getline( trainingGroupStream, line );

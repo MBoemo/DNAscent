@@ -18,6 +18,59 @@
 #include <map>
 #include <sstream>
 #include <iostream>
+#include <chrono>
+#include <iomanip>
+
+
+class progressBar{
+
+	private:
+		std::chrono::time_point<std::chrono::steady_clock> _startTime;
+		std::chrono::time_point<std::chrono::steady_clock> _currentTime;
+		unsigned int maxNumber;
+		unsigned int barWidth = 70;
+		unsigned int _digits;
+
+	public:
+		progressBar( unsigned int maxNumber ){
+		
+			this -> maxNumber = maxNumber;
+			_digits = std::to_string( maxNumber).length() + 1;
+			_startTime = std::chrono::steady_clock::now();
+		}
+		void displayProgress( unsigned int currentNumber, unsigned int failed ){
+
+			_currentTime = std::chrono::steady_clock::now();
+			 std::chrono::duration<double> elapsedTime = _currentTime - _startTime;
+
+			double progress = (double) currentNumber / (double) maxNumber;
+			
+			if ( progress <= 1.0 ){
+
+				std::cout << "[";
+				int pos = barWidth * progress;
+				for (int i = 0; i < barWidth; ++i) {
+					if (i < pos) std::cout << "=";
+					else if (i == pos) std::cout << ">";
+					else std::cout << " ";
+				}
+				std::cout << "] " << std::right << std::setw(3) << int(progress * 100.0) << "%  ";
+
+				std::cout << std::right << std::setw(_digits) << currentNumber << "/" << maxNumber << "  ";
+
+
+				unsigned int estTimeLeft = elapsedTime.count() * ( (double) maxNumber / (double) currentNumber - 1.0 );			
+				unsigned int hours = estTimeLeft / 3600;
+				unsigned int mins = (estTimeLeft % 3600) / 60;
+				unsigned int secs = (estTimeLeft % 3600) % 60;
+
+				std::cout << std::right << std::setw(2) << hours << "hr" << std::setw(2) << mins << "min" << std::setw(2) << secs << "sec  ";
+				std::cout << "f: " << std::right << std::setw(_digits) << failed << std::setw(3) << "\r";
+				std::cout.flush();
+
+			}
+		} 
+};
 
 
 inline std::string reverseComplement( std::string DNAseq ){

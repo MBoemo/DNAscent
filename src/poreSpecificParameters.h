@@ -10,6 +10,7 @@
 #define PORESPECIFICPARAMETERS_H
 
 //Initial transitions within modules (internal transitions)
+/*
 double internalSS2M1 = 0.97;
 double internalSS2M2 = 0.03;
 double internalD2I = 0.01;
@@ -27,5 +28,17 @@ double externalD2SS = 0.14;
 double externalI2SS = 0.01;
 double externalSE2D = 0.12;
 double externalSE2SS = 0.87;
+*/
+
+double internalD2I = 0.01;
+double internalI2I = 0.5;
+double internalM2I = 0.05;
+double internalM2M = 0.5;
+
+double externalD2D = 0.85;
+double externalD2M = 0.14;
+double externalI2M = 0.5;
+double externalM2M = 0.4;
+double externalM2D = 0.05;
 
 #endif

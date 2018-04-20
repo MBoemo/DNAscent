@@ -107,35 +107,47 @@ int train_main( int argc, char** argv ){
 	std::ifstream fohFile( trainArgs.trainingDataFilename );
 	if ( not fohFile.is_open() ) throw IOerror( trainArgs.trainingDataFilename );
 
-	/*open output file */
-	std::ofstream outFile( trainArgs.trainingOutputFilename );
-	if ( not outFile.is_open() ) throw IOerror( trainArgs.trainingOutputFilename );
-
-	outFile << "5mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_2" << '\t' << "pi_2" << '\t' << "mean_1" << '\t' << "stdv_2" << std::endl;
-
 	/*read the foh header - total count and reference */
 	std::string line, reference;
 	std::getline( fohFile, reference );
 	std::getline( fohFile, line );
 	int trainingTotal = atoi(line.c_str());
 
-	int prog = 0;
+	/*initialise progress */
+	progressBar pb_align( trainingTotal );
+	int prog = 0, offloadCount = 0, failed = 0;
 
+	/*open output file */
+	std::ofstream outFile( trainArgs.trainingOutputFilename );
+	if ( not outFile.is_open() ) throw IOerror( trainArgs.trainingOutputFilename );
+
+	/*open work file */
+	std::ofstream workFile( "workingData.osiris" );
+	if ( not workFile.is_open() ) throw IOerror( "workingData.osiris" );
+
+	/*buffers */
 	std::map< int, std::vector< double > > eventPileup;
+	std::vector< read > buffer;
 
 	/*align the training data */
+	std::cout << "Aligning events..." << std::endl;
 	while ( std::getline( fohFile, line) ){
-
+		
 		/*get data for a read from foh */
 		read currentRead;
 
 		/*the basecall line */
 		currentRead.basecalls = line;
 
-		/*the bounds line */
+		/*the reference bounds line */
 		std::getline( fohFile, line );
-		(currentRead.ROIbounds).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
-		(currentRead.ROIbounds).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
+		(currentRead.bounds_reference).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
+		(currentRead.bounds_reference).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
+
+		/*the query bounds line */
+		std::getline( fohFile, line );
+		(currentRead.bounds_query).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
+		(currentRead.bounds_query).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
 
 		/*the raw signal line */
 		std::getline( fohFile, line );
@@ -148,162 +160,230 @@ int train_main( int argc, char** argv ){
 		}
 		currentRead.raw = rawSignals;
 
-		/*normalise for shift and scale */
-		eventDataForRead eventData = normaliseEvents( currentRead );
+		/*push it to the buffer or run Viterbi if the buffer is full */
+		buffer.push_back( currentRead );
+		if ( (buffer.size() < trainArgs.threads)  ) continue;
 
-		/*disregard this event if the quality score is too low */
-		if ( fabs(eventData.qualityScore) > 1.0 ) continue;
+		/*Viterbi event alignment */
+		#pragma omp parallel for default(none) shared(reference,failed,pb_align,eventPileup,buffer,trainArgs,trainingTotal,prog,FiveMer_model,internalD2I,internalI2I,internalM2I,internalM2M,externalD2D,externalD2M,externalI2M,externalM2M,externalM2D) num_threads(trainArgs.threads)
+		for ( auto read = buffer.begin(); read < buffer.end(); read++ ){
 
-		std::string refSeqMapped = reference.substr((currentRead.ROIbounds).first, (currentRead.ROIbounds).second - (currentRead.ROIbounds).first);
+			/*normalise for shift and scale */
+			eventDataForRead eventData = normaliseEvents( *read );
 
-		HiddenMarkovModel hmm = HiddenMarkovModel( 3*refSeqMapped.length(), 3*refSeqMapped.length() + 2 );
+			/*disregard this event if the quality score is too low */
+			if ( fabs(eventData.qualityScore) > 1.0 ){
 
-		std::pair< double, double > emissionMeanAndStd;
-
-		/*STATES - vector (of vectors) to hold the states at each position on the reference - fill with dummy values */
-		std::vector< std::vector< State > > states( 6, std::vector< State >( refSeqMapped.length() - 5, State( NULL, "", "", "", 1.0 ) ) );
-
-		/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
-		std::vector< NormalDistribution > nd;
-		nd.reserve( refSeqMapped.length() - 5 );		
-		SilentDistribution sd( 0.0, 0.0 );
-		UniformDistribution ud( 50.0, 150.0 );
-
-		std::string loc;
-
-		/*create the distributions that we need */			
-		for ( unsigned int i = 0; i < refSeqMapped.length() - 5; i++ ){
-
-			emissionMeanAndStd = FiveMer_model.at( refSeqMapped.substr( i, 5 ) );		
-			nd.push_back( NormalDistribution( emissionMeanAndStd.first, emissionMeanAndStd.second ) );		
-		}
-
-		/*add states to model, handle internal module transitions */
-		for ( unsigned int i = 0; i < refSeqMapped.length() - 5; i++ ){
-
-			loc = std::to_string( i + (currentRead.ROIbounds).first );
-			std::string fiveMer = refSeqMapped.substr( i, 5 );
-
-			states[ 0 ][ i ] = State( &sd, 		loc + "_SS",	fiveMer,	"", 		1.0 );
-			states[ 1 ][ i ] = State( &sd,		loc + "_D", 	fiveMer,	"", 		1.0 );		
-			states[ 2 ][ i ] = State( &ud,		loc + "_I", 	fiveMer,	"", 		1.0 );
-			states[ 3 ][ i ] = State( &nd[i], 	loc + "_M1", 	fiveMer,	loc + "_match", 1.0 );
-			states[ 4 ][ i ] = State( &nd[i], 	loc + "_M2", 	fiveMer,	loc + "_match", 1.0 );
-			states[ 5 ][ i ] = State( &sd, 		loc + "_SE", 	fiveMer,	"", 		1.0 );
-
-			/*add state to the model */
-			for ( unsigned int j = 0; j < 6; j++ ){
-
-				states[ j ][ i ].meta = fiveMer;
-				hmm.add_state( states[ j ][ i ] );
+				failed++;
+				prog++;
+				continue;
 			}
 
-			/*transitions between states, internal to a single base */
-			/*from SS */
-			hmm.add_transition( states[0][i], states[3][i], internalSS2M1 );
-			hmm.add_transition( states[0][i], states[4][i], internalSS2M2 );
+			/*get the subsequence of the reference this read mapped to and build an HMM from it */
+			std::string refSeqMapped = reference.substr(((*read).bounds_reference).first, ((*read).bounds_reference).second - ((*read).bounds_reference).first);
+			HiddenMarkovModel hmm = HiddenMarkovModel( 3*refSeqMapped.length(), 3*refSeqMapped.length() + 2 );
 
-			/*from D */
-			hmm.add_transition( states[1][i], states[2][i], internalD2I );
+			/*STATES - vector (of vectors) to hold the states at each position on the reference - fill with dummy values */
+			std::vector< std::vector< State > > states( 6, std::vector< State >( refSeqMapped.length() - 5, State( NULL, "", "", "", 1.0 ) ) );
 
-			/*from I */
-			hmm.add_transition( states[2][i], states[2][i], internalI2I );
-			hmm.add_transition( states[2][i], states[0][i], internalI2SS );
+			/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
+			std::vector< NormalDistribution > nd;
+			nd.reserve( refSeqMapped.length() - 5 );		
+			SilentDistribution sd( 0.0, 0.0 );
+			UniformDistribution ud( 50.0, 150.0 );
 
-			/*from M1 */
-			hmm.add_transition( states[3][i], states[3][i], internalM12M1 );
-			hmm.add_transition( states[3][i], states[5][i], internalM12SE );
+			std::string loc, fiveMer;
 
-			/*from M2 */
-			hmm.add_transition( states[4][i], states[4][i], internalM22M2 );
-			hmm.add_transition( states[4][i], states[5][i], internalM22SE );
+			/*create make normal distributions for each reference position using the ONT 5mer model */			
+			for ( unsigned int i = 0; i < refSeqMapped.length() - 5; i++ ){
 
-			/*from SE */
-			hmm.add_transition( states[5][i], states[2][i], internalSE2I );		
+				fiveMer = refSeqMapped.substr( i, 5 );
+				nd.push_back( NormalDistribution( FiveMer_model[fiveMer].first, FiveMer_model[fiveMer].second ) );		
+			}
 
-		}
+			/*add states to the model, handle internal module transitions */
+			for ( unsigned int i = 0; i < refSeqMapped.length() - 5; i++ ){
 
-		/*add transitions between modules (external transitions) */
-		for ( unsigned int i = 0; i < refSeqMapped.length() - 6; i++ ){
+				loc = std::to_string( i + ((*read).bounds_reference).first );
+				fiveMer = refSeqMapped.substr( i, 5 );
 
-			hmm.add_transition( states[1][i], states[1][i + 1], externalD2D );
-			hmm.add_transition( states[1][i], states[0][i + 1], externalD2SS );
-			hmm.add_transition( states[2][i], states[0][i + 1], externalI2SS );
-			hmm.add_transition( states[5][i], states[0][i + 1], externalSE2SS );
-			hmm.add_transition( states[5][i], states[1][i + 1], externalSE2D );
-		}
+				states[ 0 ][ i ] = State( &sd,		loc + "_D", 	fiveMer,	"", 		1.0 );		
+				states[ 1 ][ i ] = State( &ud,		loc + "_I", 	fiveMer,	"", 		1.0 );
+				states[ 2 ][ i ] = State( &nd[i], 	loc + "_M", 	fiveMer,	loc + "_match", 1.0 );
 
-		/*handle start states */
-		hmm.add_transition( hmm.start, states[0][0], 0.5 );
-		hmm.add_transition( hmm.start, states[1][0], 0.5 );
+				/*add state to the model */
+				for ( unsigned int j = 0; j < 3; j++ ){
 
-		/*handle end states */
-		hmm.add_transition( states[1][refSeqMapped.length() - 6], hmm.end, externalD2D + externalD2SS );
-		hmm.add_transition( states[2][refSeqMapped.length() - 6], hmm.end, externalI2SS );
-		hmm.add_transition( states[5][refSeqMapped.length() - 6], hmm.end, externalSE2SS + externalSE2D );
+					states[ j ][ i ].meta = fiveMer;
+					hmm.add_state( states[ j ][ i ] );
+				}
 
-		hmm.finalise();
+				/*transitions between states, internal to a single base */
+				/*from D */
+				hmm.add_transition( states[0][i], states[1][i], internalD2I );
 
-		/*event alignment using Viterbi */
-		auto viterbiData = hmm.viterbi( eventData.normalisedEvents );
-		std::vector< State > statePath = viterbiData.second;
+				/*from I */
+				hmm.add_transition( states[1][i], states[1][i], internalI2I );
 
-		/*filter state path to only emitting states */
-		std::vector< State > emittingStatePath;
-		for ( auto s = statePath.begin(); s < statePath.end(); s++ ){
+				/*from M */
+				hmm.add_transition( states[2][i], states[1][i], internalM2I );
+				hmm.add_transition( states[2][i], states[2][i], internalM2M );	
+			}
 
-			/*check character */
-			if ( ((*s).name).substr(((*s).name).find('_') + 1,1) == "M" or ((*s).name).substr(((*s).name).find('_') + 1,1) == "I" ){
-				emittingStatePath.push_back( *s );
+			/*add transitions between modules (external transitions) */
+			for ( unsigned int i = 0; i < refSeqMapped.length() - 6; i++ ){
+
+				hmm.add_transition( states[0][i], states[0][i + 1], externalD2D );
+				hmm.add_transition( states[0][i], states[2][i + 1], externalD2M );
+				hmm.add_transition( states[1][i], states[2][i + 1], externalI2M );
+				hmm.add_transition( states[2][i], states[0][i + 1], externalM2D );
+				hmm.add_transition( states[2][i], states[2][i + 1], externalM2M );
+			}
+
+			/*handle start states */
+			State startInsertion( &ud, "-1_I", "", "", 1.0 );
+			hmm.add_state( startInsertion );
+			hmm.add_transition( startInsertion, startInsertion, 0.25 );
+			hmm.add_transition( startInsertion, states[0][0], 0.25 );
+			hmm.add_transition( startInsertion, states[2][0], 0.50 );
+			hmm.add_transition( hmm.start, states[0][0], 0.25 );
+			hmm.add_transition( hmm.start, startInsertion, 0.25 );
+			hmm.add_transition( hmm.start, states[2][0], 0.50 );
+
+			/*handle end states */
+			hmm.add_transition( states[0][refSeqMapped.length() - 6], hmm.end, externalD2D + externalD2M );
+			hmm.add_transition( states[1][refSeqMapped.length() - 6], hmm.end, externalI2M );
+			hmm.add_transition( states[2][refSeqMapped.length() - 6], hmm.end, externalM2D + externalM2M );
+
+			hmm.finalise();
+
+			/*do the event alignment with the Penthus Viterbi algorithm */
+			auto viterbiData = hmm.viterbi( eventData.normalisedEvents ); 
+			double viterbiScore = viterbiData.first;
+			if  ( std::isnan( viterbiScore ) ){
+
+				failed++;
+				prog++;
+				continue;
+			}	
+			std::vector< std::string > statePath = viterbiData.second;
+
+			/*filter state path to only emitting states */
+			std::vector< std::string > emittingStatePath;
+			for ( auto s = statePath.begin(); s < statePath.end(); s++ ){
+
+				if ( (*s).substr((*s).find('_') + 1,1) == "M" or (*s).substr((*s).find('_') + 1,1) == "I" ){
+					emittingStatePath.push_back( *s );
+				}
+			}
+
+			/*add the events to the eventPileup hash table - these events are keyed by their position in the reference */
+			#pragma omp critical
+			{
+				for ( unsigned int i = 0; i < (eventData.normalisedEvents).size(); i++ ){
+
+					std::vector< std::string > findIndex = split( emittingStatePath[i], '_' );
+					unsigned int posOnReference = atoi(findIndex[0].c_str());
+
+					if ( posOnReference >= trainArgs.boundLower and posOnReference < trainArgs.boundUpper and (findIndex[1].substr(0,1) == "M" or findIndex[1].substr(0,1) == "I") ){
+						eventPileup[posOnReference].push_back( (eventData.normalisedEvents)[i] );
+					}
+				}
+			pb_align.displayProgress( prog, failed );
+			prog++;
 			}
 		}
+		offloadCount++;
+		buffer.clear();
 
-		/*print out the alignment to output */
-		for ( unsigned int i = 0; i < (eventData.normalisedEvents).size(); i++ ){
+		/*after running through the buffer a few times, offload event data to file so we don't flood memory */
+		if ( offloadCount == 5 ){
 
-			/*get the position */
-			std::vector< std::string > findIndex = split( emittingStatePath[i].name, '_' );
-			unsigned int posOnReference = atoi(findIndex[0].c_str());
+			for ( auto iter = eventPileup.cbegin(); iter != eventPileup.cend(); ++iter ){
 
-			if ( posOnReference >= trainArgs.boundLower and posOnReference < trainArgs.boundUpper ){
-				eventPileup[posOnReference].push_back( (eventData.normalisedEvents)[i] );
+				workFile << iter -> first;
+				for ( auto e = (iter -> second).begin(); e < (iter -> second).end(); e++ ){
+
+					workFile << ' ' << *e;
+				}
+				workFile << std::endl;
 			}
+			offloadCount = 0;
+			eventPileup.clear();
 		}
-
-		displayProgress( prog, trainingTotal );
-		prog++;
 	}
+
+	/*wrap up */
 	fohFile.close();
+	workFile.close();
+	eventPileup.clear();
+	pb_align.displayProgress( trainingTotal, failed );
+	failed = prog = 0;
+	std::cout << std::endl << "Done." << std::endl;
+
+	/*get events from the work file */
+	std::cout << "Fitting Gaussian mixture model..." << std::endl;
+
+	std::ifstream eventFile( "workingData.osiris" );
+	if ( not eventFile.is_open() ) throw IOerror( "workingData.osiris" );
+
+	std::vector< std::vector< double > > importedEvents( trainArgs.boundUpper - trainArgs.boundLower );
+
+	while ( std::getline( eventFile, line) ){
+
+		std::vector< double > rawSignals;
+		std::istringstream ss( line );
+		std::string event;
+		std::getline( ss, event, ' ' );
+		int position = atoi(event.c_str());
+
+		while ( std::getline( ss, event, ' ' ) ){
+
+			rawSignals.push_back( atof( event.c_str() ) );
+		}
+		importedEvents[position-trainArgs.boundLower].insert( importedEvents[position-trainArgs.boundLower].end(), rawSignals.begin(), rawSignals.end() );
+	}
+	eventFile.close();
 
 	/*fit a mixture model to the events that aligned to each position in the reference */
-	double mu1, stdv1, mu2, stdv2;
-	for ( auto iter = eventPileup.cbegin(); iter != eventPileup.cend(); ++iter ){
+	outFile << "5mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_1" << '\t' << "pi_2" << '\t' << "mean_2" << '\t' << "stdv_2" << std::endl;
+	progressBar pb_fit( importedEvents.size() );
+
+	#pragma omp parallel for default(none) shared(pb_fit, FiveMer_model, prog, failed, outFile, importedEvents, trainArgs, reference) num_threads(trainArgs.threads)
+	for ( int i = 0; i < importedEvents.size(); i++ ){
+
+		double mu1, stdv1, mu2, stdv2;
 
 		/*get the ONT distribution for the mixture */
-		std::string fiveMer = reference.substr( iter -> first, 5 );
+		std::string fiveMer = reference.substr( i + trainArgs.boundLower, 5 );
 		mu1 = FiveMer_model[fiveMer].first;
 		stdv1 = FiveMer_model[fiveMer].second;
 
 		/*make a second distribution that's similar to the ONT distribution */
-		mu2 = mu1 + 1.0;
-		stdv2 = stdv1;
+		mu2 = FiveMer_model[fiveMer].first;
+		stdv2 = 2*FiveMer_model[fiveMer].second;
 
 		/*fit the model */
-		std::vector< double > events = iter -> second;
 		std::vector< double > fitParameters;
 		try{
-			fitParameters = gaussianMixtureEM( mu1, stdv1, mu2, stdv2, events, 0.0001 );
+			fitParameters = gaussianMixtureEM_PRIOR( mu1, stdv1, mu2, stdv2, importedEvents[i], 0.0001 );
 		}
 		catch ( NegativeLog &nl ){
 
-			std::cout << nl.what() << std::endl << "Aborted training on: "<< fiveMer << std::endl;
+			failed++;
+			prog++;
 			continue;
 		}
+		#pragma omp critical
+		{
+			outFile << fiveMer << '\t' << mu1 << '\t' << stdv1 << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << std::endl; 
 
-		outFile << fiveMer << '\t' << mu1 << '\t' << stdv1 << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << std::endl; 
-
+			pb_fit.displayProgress( prog, failed );
+			prog++;
+		}
 	}
 	outFile.close();
+	std::cout << std::endl << "Done." << std::endl;
 
 	return 0;
 }

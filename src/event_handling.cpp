@@ -280,9 +280,15 @@ eventDataForRead normaliseEvents( read &r ){
 		positionAlignedTo = (thisRead.eventAlignment)[i].second;
 		fiveMerAlignedTo = (r.basecalls).substr(positionAlignedTo,5);
 
-		(thisRead.normalisedEvents).push_back( normalisedEventMean );
-		alignmentScore += normalisedEventMean - FiveMer_model[fiveMerAlignedTo].first;
-		numEventsAdded++;
+		if ( positionAlignedTo >= (r.bounds_query).first and positionAlignedTo <= (r.bounds_query).second ){
+
+			(thisRead.normalisedEvents).push_back( normalisedEventMean );
+			alignmentScore += normalisedEventMean - FiveMer_model[fiveMerAlignedTo].first;
+			numEventsAdded++;
+
+			//std::cout << normalisedEventMean << '\t' << fiveMerAlignedTo << '\t' << FiveMer_model[fiveMerAlignedTo].first << '\t' << FiveMer_model[fiveMerAlignedTo].second << std::endl;
+
+		}
 	}
 	thisRead.qualityScore = alignmentScore / (double) numEventsAdded;
 
