@@ -10,35 +10,24 @@
 #define PORESPECIFICPARAMETERS_H
 
 //Initial transitions within modules (internal transitions)
-/*
-double internalSS2M1 = 0.97;
-double internalSS2M2 = 0.03;
+double internalSS2M1 = 0.9;
+double internalSS2M2 = 0.1;
 double internalD2I = 0.01;
-double internalI2I = 0.50;
-double internalI2SS = 0.49;
-double internalM12M1 = 0.51;
-double internalM12SE = 0.49;
-double internalM22M2 = 0.97;
-double internalM22SE = 0.03;
+double internalI2I = 0.1;//0.50;
+double internalI2SS = 0.45;//0.49;
+double internalM12M1 = 0.4;
+double internalM12M2 = 0.1;
+double internalM12SE = 0.5;
+double internalM22M2 = 0.4;
+double internalM22M1 = 0.1;
+double internalM22SE = 0.5;
 double internalSE2I = 0.01;
 
 //Initial transitions between modules (external transitions)
-double externalD2D = 0.85;
-double externalD2SS = 0.14;
-double externalI2SS = 0.01;
+double externalD2D = 0.14;//0.85;
+double externalD2SS = 0.85;//0.14;
+double externalI2SS = 0.45;//0.01;
 double externalSE2D = 0.12;
 double externalSE2SS = 0.87;
-*/
-
-double internalD2I = 0.01;
-double internalI2I = 0.5;
-double internalM2I = 0.05;
-double internalM2M = 0.5;
-
-double externalD2D = 0.85;
-double externalD2M = 0.14;
-double externalI2M = 0.5;
-double externalM2M = 0.4;
-double externalM2D = 0.05;
 
 #endif

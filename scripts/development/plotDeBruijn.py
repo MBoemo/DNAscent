@@ -22,7 +22,7 @@ f.close()
 for i, key in enumerate(pos2events):
 	
 	plt.figure(i)
-	plt.hist( pos2events[key], 30 )
+	plt.hist( pos2events[key], 100 )
 	plt.xlabel('pA')
 	plt.ylabel('Count')
 	plt.title( reference[int(key):int(key)+5] )
