@@ -26,7 +26,7 @@ def get_readID(fast5file,root):
 			fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
 			ffast5 = h5py.File(root+'/'+fast5file,'r')
 			fastq = ffast5[fast5path2fastq].value
-			return fastq + '\n'
+			return fastq
 
 		except KeyError:
 			warnings.warn('File '+root+'/'+fast5file+' did not have a valid readID path.  Skipping.', Warning)

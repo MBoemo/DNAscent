@@ -125,7 +125,7 @@ int train_main( int argc, char** argv ){
 	std::map< int, std::vector< double > > eventPileup;
 	std::vector< read > buffer;
 
-	#if false
+	//#if false
 	/*open work file */
 	std::ofstream workFile( "workingData.osiris" );
 	if ( not workFile.is_open() ) throw IOerror( "workingData.osiris" );
@@ -166,7 +166,7 @@ int train_main( int argc, char** argv ){
 		if ( (buffer.size() < trainArgs.threads)  ) continue;
 
 		/*Viterbi event alignment */
-		#pragma omp parallel for default(none) shared(reference,failed,pb_align,eventPileup,buffer,trainArgs,trainingTotal,prog,FiveMer_model,internalSS2M1, internalSS2M2, internalD2I, internalI2I, internalI2SS, internalM12M1, internalM12M2, internalM12SE, internalM22M2, internalM22M1, internalM22SE, internalSE2I, externalD2D, externalD2SS, externalI2SS, externalSE2D, externalSE2SS) num_threads(trainArgs.threads)
+		#pragma omp parallel for default(none) shared(reference,failed,pb_align,eventPileup,buffer,trainArgs,trainingTotal,prog,FiveMer_model,internalSS2M1, internalSS2M2, internalI2I, internalI2SS, internalM12M1, internalM12SE, internalM22M2, internalM22SE, internalSE2I, externalD2D, externalD2SS, externalI2SS, externalSE2D, externalSE2SS) num_threads(trainArgs.threads)
 		for ( auto read = buffer.begin(); read < buffer.end(); read++ ){
 
 			/*normalise for shift and scale */
@@ -210,64 +210,68 @@ int train_main( int argc, char** argv ){
 				loc = std::to_string( i + ((*read).bounds_reference).first );
 				fiveMer = refSeqMapped.substr( i, 5 );
 
-				states[ 0 ][ i ] = State( &sd, 		loc + "_SS",	fiveMer,	"", 		1.0 );
-				states[ 1 ][ i ] = State( &sd,		loc + "_D", 	fiveMer,	"", 		1.0 );		
-				states[ 2 ][ i ] = State( &ud,		loc + "_I", 	fiveMer,	"", 		1.0 );
-				states[ 3 ][ i ] = State( &nd[i], 	loc + "_M1", 	fiveMer,	loc + "_match", 1.0 );
-				states[ 4 ][ i ] = State( &ndWide[i], 	loc + "_M2", 	fiveMer,	loc + "_match", 1.0 );
-				states[ 5 ][ i ] = State( &sd, 		loc + "_SE", 	fiveMer,	"", 		1.0 );
+				states[ 0 ][ i ] = State( &sd,		loc + "_D", 	fiveMer,	"", 		1.0 );		
+				states[ 1 ][ i ] = State( &ud,		loc + "_I", 	fiveMer,	"", 		1.0 );
+				states[ 2 ][ i ] = State( &nd[i], 	loc + "_M1", 	fiveMer,	loc + "_match", 1.0 );
+				states[ 3 ][ i ] = State( &ndWide[i], 	loc + "_M2", 	fiveMer,	loc + "_match", 1.0 );
 
 				/*add state to the model */
-				for ( unsigned int j = 0; j < 6; j++ ){
+				for ( unsigned int j = 0; j < 4; j++ ){
 
 					states[ j ][ i ].meta = fiveMer;
 					hmm.add_state( states[ j ][ i ] );
 				}
 
 				/*transitions between states, internal to a single base */
-				/*from SS */
-				hmm.add_transition( states[0][i], states[3][i], internalSS2M1 );
-				hmm.add_transition( states[0][i], states[4][i], internalSS2M2 );
-
+	
 				/*from D */
-				hmm.add_transition( states[1][i], states[2][i], internalD2I );
+				//hmm.add_transition( states[0][i], states[1][i], internalD2I );
 
 				/*from I */
-				hmm.add_transition( states[2][i], states[2][i], internalI2I );
-				hmm.add_transition( states[2][i], states[0][i], internalI2SS );
+				hmm.add_transition( states[1][i], states[1][i], internalI2I );
+				hmm.add_transition( states[1][i], states[2][i], internalI2SS*internalSS2M1 );
+				hmm.add_transition( states[1][i], states[3][i], internalI2SS*internalSS2M2 );
 
 				/*from M1 */
-				hmm.add_transition( states[3][i], states[3][i], internalM12M1 );
-				hmm.add_transition( states[3][i], states[4][i], internalM12M2 );
-				hmm.add_transition( states[3][i], states[5][i], internalM12SE );
+				hmm.add_transition( states[2][i], states[2][i], internalM12M1 );
+				//hmm.add_transition( states[2][i], states[3][i], internalM12M2 );
+				hmm.add_transition( states[2][i], states[1][i], internalM12SE*internalSE2I );
 
 				/*from M2 */
-				hmm.add_transition( states[4][i], states[4][i], internalM22M2 );
-				hmm.add_transition( states[4][i], states[3][i], internalM22M1 );
-				hmm.add_transition( states[4][i], states[5][i], internalM22SE );
-
-				/*from SE */
-				hmm.add_transition( states[5][i], states[2][i], internalSE2I );
+				hmm.add_transition( states[3][i], states[3][i], internalM22M2 );
+				//hmm.add_transition( states[3][i], states[2][i], internalM22M1 );
+				hmm.add_transition( states[3][i], states[1][i], internalM22SE*internalSE2I );
 			}
 
 			/*add transitions between modules (external transitions) */
 			for ( unsigned int i = 0; i < refSeqMapped.length() - 6; i++ ){
 
-				hmm.add_transition( states[1][i], states[1][i + 1], externalD2D );
-				hmm.add_transition( states[1][i], states[0][i + 1], externalD2SS );
-				hmm.add_transition( states[2][i], states[0][i + 1], externalI2SS );
-				hmm.add_transition( states[5][i], states[0][i + 1], externalSE2SS );
-				hmm.add_transition( states[5][i], states[1][i + 1], externalSE2D );
+				hmm.add_transition( states[0][i], states[0][i + 1], externalD2D );
+				hmm.add_transition( states[0][i], states[2][i + 1], externalD2SS*internalSS2M1 );
+				hmm.add_transition( states[0][i], states[3][i + 1], externalD2SS*internalSS2M2 );
+
+				hmm.add_transition( states[1][i], states[2][i + 1], externalI2SS*internalSS2M1 );
+				hmm.add_transition( states[1][i], states[3][i + 1], externalI2SS*internalSS2M2 );
+
+				hmm.add_transition( states[2][i], states[0][i + 1], internalM12SE*externalSE2D );
+				hmm.add_transition( states[2][i], states[2][i + 1], internalM12SE*externalSE2SS*internalSS2M1 );
+				hmm.add_transition( states[2][i], states[3][i + 1], internalM12SE*externalSE2SS*internalSS2M2 );
+
+				hmm.add_transition( states[3][i], states[0][i + 1], internalM22SE*externalSE2D );
+				hmm.add_transition( states[3][i], states[2][i + 1], internalM22SE*externalSE2SS*internalSS2M1 );
+				hmm.add_transition( states[3][i], states[3][i + 1], internalM22SE*externalSE2SS*internalSS2M2 );
 			}
 
 			/*handle start states */
-			hmm.add_transition( hmm.start, states[0][0], 0.5 );
 			hmm.add_transition( hmm.start, states[1][0], 0.5 );
+			hmm.add_transition( hmm.start, states[2][0], 0.5*internalSS2M1 );
+			hmm.add_transition( hmm.start, states[3][0], 0.5*internalSS2M2 );
 
 			/*handle end states */
-			hmm.add_transition( states[1][refSeqMapped.length() - 6], hmm.end, externalD2D + externalD2SS );
-			hmm.add_transition( states[2][refSeqMapped.length() - 6], hmm.end, externalI2SS );
-			hmm.add_transition( states[5][refSeqMapped.length() - 6], hmm.end, externalSE2SS + externalSE2D );
+			hmm.add_transition( states[0][refSeqMapped.length() - 6], hmm.end, externalD2D + externalD2SS );
+			hmm.add_transition( states[1][refSeqMapped.length() - 6], hmm.end, externalI2SS );
+			hmm.add_transition( states[2][refSeqMapped.length() - 6], hmm.end, internalM12SE*externalSE2SS + internalM12SE*externalSE2D );
+			hmm.add_transition( states[3][refSeqMapped.length() - 6], hmm.end, internalM22SE*externalSE2SS + internalM22SE*externalSE2D );
 
 			hmm.finalise();
 
@@ -300,7 +304,7 @@ int train_main( int argc, char** argv ){
 					unsigned int posOnReference = atoi(findIndex[0].c_str());
 
 					if ( posOnReference >= trainArgs.boundLower and posOnReference < trainArgs.boundUpper and findIndex[1].substr(0,1) == "M" ){
-						//std::cout << (eventData.normalisedEvents)[i] << '\t' << emittingStatePath[i] << '\t' << reference.substr(posOnReference,5) << '\t' << FiveMer_model[reference.substr(posOnReference,5)].first << '\t' << FiveMer_model[reference.substr(posOnReference,5)].second << std::endl;
+						//std::cout << (eventData.normalisedEvents)[i] << '\t' << posOnReference << '\t' << emittingStatePath[i] << '\t' << reference.substr(posOnReference,5) << '\t' << FiveMer_model[reference.substr(posOnReference,5)].first << '\t' << FiveMer_model[reference.substr(posOnReference,5)].second << std::endl;
 						eventPileup[posOnReference].push_back( (eventData.normalisedEvents)[i] );
 					}
 				}
@@ -336,7 +340,7 @@ int train_main( int argc, char** argv ){
 	failed = prog = 0;
 	std::cout << std::endl << "Done." << std::endl;
 
-	#endif
+	//#endif
 
 	/*get events from the work file */
 	std::cout << "Fitting Gaussian mixture model..." << std::endl;
@@ -393,7 +397,7 @@ int train_main( int argc, char** argv ){
 		}
 		#pragma omp critical
 		{
-			outFile << fiveMer << '\t' << mu1 << '\t' << stdv1 << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << std::endl; 
+			outFile << fiveMer << '\t' << i + trainArgs.boundLower << '\t' << mu1 << '\t' << stdv1 << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << std::endl; 
 
 			pb_fit.displayProgress( prog, failed );
 			prog++;

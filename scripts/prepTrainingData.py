@@ -161,12 +161,12 @@ args = sys.argv
 a = parseArguments(args)
 
 #load the index
-#f_index = open(a.indexfile,'r')
-#index = {}
-#for line in f_index:
-#	splitLine = line.rstrip().split('\t')
-#	index[splitLine[0]] = splitLine[1]
-#f_index.close()
+f_index = open(a.indexfile,'r')
+index = {}
+for line in f_index:
+	splitLine = line.rstrip().split('\t')
+	index[splitLine[0]] = splitLine[1]
+f_index.close()
 
 #open input/output files
 f_in = pysam.Samfile(a.data,'r')
@@ -192,7 +192,7 @@ for counter, record in enumerate(f_in):
 	displayProgress( counter, numOfRecords );
 	
 	#use the index to get the fast5 file path from the readID
-	readRawPath = record.query_name#index[record.query_name]
+	readRawPath =index[record.query_name]# record.query_name
 	
 	buffer_records.append( (record.query_sequence, str(record.reference_start) + ' ' + str(record.reference_end), str(record.query_alignment_start) + ' ' + str(record.query_alignment_end), readRawPath) )
 

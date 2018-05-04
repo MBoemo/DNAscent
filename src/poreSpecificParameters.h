@@ -12,22 +12,22 @@
 //Initial transitions within modules (internal transitions)
 double internalSS2M1 = 0.9;
 double internalSS2M2 = 0.1;
-double internalD2I = 0.01;
-double internalI2I = 0.1;//0.50;
-double internalI2SS = 0.45;//0.49;
+//double internalD2I = 0.01;
+double internalI2I = 0.001;//0.1;
+double internalI2SS = 0.4995;//0.45;
 double internalM12M1 = 0.4;
-double internalM12M2 = 0.1;
-double internalM12SE = 0.5;
+//double internalM12M2 = 0.1;
+double internalM12SE = 0.6;//0.5;
 double internalM22M2 = 0.4;
-double internalM22M1 = 0.1;
-double internalM22SE = 0.5;
-double internalSE2I = 0.01;
+//double internalM22M1 = 0.1;
+double internalM22SE = 0.6;//0.5;
+double internalSE2I = 0.001;//0.01;
 
 //Initial transitions between modules (external transitions)
-double externalD2D = 0.14;//0.85;
-double externalD2SS = 0.85;//0.14;
-double externalI2SS = 0.45;//0.01;
-double externalSE2D = 0.12;
-double externalSE2SS = 0.87;
+double externalD2D = 0.3;//0.14;
+double externalD2SS = 0.7;//0.85;
+double externalI2SS = 0.4995;//0.45;
+double externalSE2D = 0.0025;//0.12;
+double externalSE2SS = 0.9965;//0.87;
 
 #endif

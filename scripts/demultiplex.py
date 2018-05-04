@@ -156,8 +156,8 @@ args = sys.argv
 a = parseArguments(args)
 
 #do the alignment with graphmap
-#os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d ' + a.reads + ' | samtools view -Sb - | samtools sort - alignments.sorted') 
-#os.system('samtools index alignments.sorted.bam')
+os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d ' + a.reads + ' | samtools view -Sb - | samtools sort - alignments.sorted') 
+os.system('samtools index alignments.sorted.bam')
 
 #split the reference
 referenceDict = split_reference(a.reference)
@@ -182,8 +182,9 @@ for record in sam_file:
 	overflow = float(record.query_length) / float( sam_file.lengths[record.reference_id] )
 
 	#only keep reads that have the analogue ROI mapped, reads where at least 90% aligns to the reference, and reads that aren't the reverse complement
-	if query_cover > 0.9 and reference_cover > 0.9 and overflow < 1.2 and (record.is_reverse == False):
+	#if query_cover > 0.9 and reference_cover > 0.9 and overflow < 1.2 and (record.is_reverse == False):
 
+	if record.is_reverse == False:
 		out_files[record.reference_id].write(record)	
 
 #index the new BAM files
