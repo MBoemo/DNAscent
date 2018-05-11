@@ -223,9 +223,6 @@ int train_main( int argc, char** argv ){
 				}
 
 				/*transitions between states, internal to a single base */
-	
-				/*from D */
-				//hmm.add_transition( states[0][i], states[1][i], internalD2I );
 
 				/*from I */
 				hmm.add_transition( states[1][i], states[1][i], internalI2I );
@@ -234,12 +231,10 @@ int train_main( int argc, char** argv ){
 
 				/*from M1 */
 				hmm.add_transition( states[2][i], states[2][i], internalM12M1 );
-				//hmm.add_transition( states[2][i], states[3][i], internalM12M2 );
 				hmm.add_transition( states[2][i], states[1][i], internalM12SE*internalSE2I );
 
 				/*from M2 */
 				hmm.add_transition( states[3][i], states[3][i], internalM22M2 );
-				//hmm.add_transition( states[3][i], states[2][i], internalM22M1 );
 				hmm.add_transition( states[3][i], states[1][i], internalM22SE*internalSE2I );
 			}
 
