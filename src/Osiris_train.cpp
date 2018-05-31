@@ -27,10 +27,9 @@ static const char *help=
 "To run Osiris train, do:\n"
 "  ./Osiris train [arguments]\n"
 "Example:\n"
-"  ./Osiris train -d /path/to/data.foh -b 150 650 -o output.txt -t 20\n"
+"  ./Osiris train -d /path/to/data.foh -o output.txt -t 20\n"
 "Required arguments are:\n"
 "  -d,--trainingData         path to training data in the .foh format (made with prepTrainingData.py),\n"
-"  -b,--bounds               indices of where the de Bruijn sequence starts and ends in the reference,\n"
 "  -o,--output               path to the output pore model file that Osiris will train.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread).\n";
@@ -42,8 +41,6 @@ struct Arguments {
 	bool logFile;
 	std::string logFilename;
 	int threads;
-	int boundLower;
-	int boundUpper;
 };
 
 Arguments parseTrainingArguments( int argc, char** argv ){
@@ -79,14 +76,6 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 			trainArgs.trainingOutputFilename = strArg;
 			i+=2;
 		}
-		else if ( flag == "-b" or flag == "--bounds" ){
-
-			std::string strLower( argv[ i + 1 ] );
-			trainArgs.boundLower = std::stoi( strLower.c_str() );
-			std::string strUpper( argv[ i + 2 ] );
-			trainArgs.boundUpper = std::stoi( strUpper.c_str() );
-			i+=3;
-		}
 		else if ( flag == "-t" or flag == "--threads" ){
 
 			std::string strArg( argv[ i + 1 ] );
@@ -107,9 +96,8 @@ int train_main( int argc, char** argv ){
 	std::ifstream fohFile( trainArgs.trainingDataFilename );
 	if ( not fohFile.is_open() ) throw IOerror( trainArgs.trainingDataFilename );
 
-	/*read the foh header - total count and reference */
-	std::string line, reference;
-	std::getline( fohFile, reference );
+	/*read the foh header - total count */
+	std::string line;
 	std::getline( fohFile, line );
 	int trainingTotal = atoi(line.c_str());
 
@@ -122,7 +110,7 @@ int train_main( int argc, char** argv ){
 	if ( not outFile.is_open() ) throw IOerror( trainArgs.trainingOutputFilename );
 
 	/*buffers */
-	std::map< int, std::vector< double > > eventPileup;
+	std::map< std::string, std::vector< double > > eventPileup;
 	std::vector< read > buffer;
 
 	//#if false
@@ -137,18 +125,12 @@ int train_main( int argc, char** argv ){
 		/*get data for a read from foh */
 		read currentRead;
 
-		/*the basecall line */
-		currentRead.basecalls = line;
+		/*subsequence of the reference that the read mapped to */
+		currentRead.mappedRefSubseq = line;
 
-		/*the reference bounds line */
+		/*the basecalled sequence */
 		std::getline( fohFile, line );
-		(currentRead.bounds_reference).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
-		(currentRead.bounds_reference).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
-
-		/*the query bounds line */
-		std::getline( fohFile, line );
-		(currentRead.bounds_query).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
-		(currentRead.bounds_query).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
+		currentRead.basecall = line;
 
 		/*the raw signal line */
 		std::getline( fohFile, line );
@@ -166,107 +148,102 @@ int train_main( int argc, char** argv ){
 		if ( (buffer.size() < trainArgs.threads)  ) continue;
 
 		/*Viterbi event alignment */
-		#pragma omp parallel for default(none) shared(reference,failed,pb_align,eventPileup,buffer,trainArgs,trainingTotal,prog,FiveMer_model,internalSS2M1, internalSS2M2, internalI2I, internalI2SS, internalM12M1, internalM12SE, internalM22M2, internalM22SE, internalSE2I, externalD2D, externalD2SS, externalI2SS, externalSE2D, externalSE2SS) num_threads(trainArgs.threads)
-		for ( auto read = buffer.begin(); read < buffer.end(); read++ ){
+		#pragma omp parallel for schedule(dynamic) shared(failed,pb_align,eventPileup,buffer,trainArgs,trainingTotal,prog,SixMer_model,internalM12I, internalI2I, internalM12M1, externalD2D, externalD2M1, externalI2M1, externalM12D, externalM12M1) num_threads(trainArgs.threads)
+		for ( auto r = buffer.begin(); r < buffer.end(); r++ ){
 
 			/*normalise for shift and scale */
-			eventDataForRead eventData = normaliseEvents( *read );
+			eventDataForRead eventData = normaliseEvents( *r );
 
 			/*disregard this event if the quality score is too low */
-			if ( fabs(eventData.qualityScore) > 1.0 ){
+			//if ( fabs(eventData.qualityScore) > 1.0 ){
 
-				failed++;
-				prog++;
-				continue;
-			}
+			//	failed++;
+			//	prog++;
+			//	continue;
+			//}
 
 			/*get the subsequence of the reference this read mapped to and build an HMM from it */
-			std::string refSeqMapped = reference.substr(((*read).bounds_reference).first, ((*read).bounds_reference).second - ((*read).bounds_reference).first);
+			std::string refSeqMapped = (*r).mappedRefSubseq;
 			HiddenMarkovModel hmm = HiddenMarkovModel( 3*refSeqMapped.length(), 3*refSeqMapped.length() + 2 );
 
 			/*STATES - vector (of vectors) to hold the states at each position on the reference - fill with dummy values */
 			std::vector< std::vector< State > > states( 6, std::vector< State >( refSeqMapped.length() - 5, State( NULL, "", "", "", 1.0 ) ) );
 
 			/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
-			std::vector< NormalDistribution > nd, ndWide;
+			std::vector< NormalDistribution > nd;
 			nd.reserve( refSeqMapped.length() - 5 );
-			ndWide.reserve( refSeqMapped.length() - 5 );				
+
 			SilentDistribution sd( 0.0, 0.0 );
 			UniformDistribution ud( 50.0, 150.0 );
 
-			std::string loc, fiveMer;
+			std::string loc, sixMer;
 
-			/*create make normal distributions for each reference position using the ONT 5mer model */			
-			for ( unsigned int i = 0; i < refSeqMapped.length() - 5; i++ ){
+			/*create make normal distributions for each reference position using the ONT 6mer model */			
+			for ( unsigned int i = 0; i < refSeqMapped.length() - 6; i++ ){
 
-				fiveMer = refSeqMapped.substr( i, 5 );
-				nd.push_back( NormalDistribution( FiveMer_model[fiveMer].first, FiveMer_model[fiveMer].second ) );
-				ndWide.push_back( NormalDistribution( FiveMer_model[fiveMer].first, 2*(FiveMer_model[fiveMer].second) ) );				
+				sixMer = refSeqMapped.substr( i, 6 );
+				nd.push_back( NormalDistribution( SixMer_model[sixMer].first, SixMer_model[sixMer].second ) );
 			}
 
+			/*the first insertion state after start */
+			State firstI = State( &ud, "-1_I", "", "", 1.0 );
+			hmm.add_state( firstI );
+
 			/*add states to the model, handle internal module transitions */
-			for ( unsigned int i = 0; i < refSeqMapped.length() - 5; i++ ){
+			for ( unsigned int i = 0; i < refSeqMapped.length() - 6; i++ ){
 
-				loc = std::to_string( i + ((*read).bounds_reference).first );
-				fiveMer = refSeqMapped.substr( i, 5 );
+				loc = std::to_string( i );
+				sixMer = refSeqMapped.substr( i, 6 );
 
-				states[ 0 ][ i ] = State( &sd,		loc + "_D", 	fiveMer,	"", 		1.0 );		
-				states[ 1 ][ i ] = State( &ud,		loc + "_I", 	fiveMer,	"", 		1.0 );
-				states[ 2 ][ i ] = State( &nd[i], 	loc + "_M1", 	fiveMer,	loc + "_match", 1.0 );
-				states[ 3 ][ i ] = State( &ndWide[i], 	loc + "_M2", 	fiveMer,	loc + "_match", 1.0 );
+				states[ 0 ][ i ] = State( &sd,		loc + "_D", 	sixMer,	"", 		1.0 );		
+				states[ 1 ][ i ] = State( &ud,		loc + "_I", 	sixMer,	"", 		1.0 );
+				states[ 2 ][ i ] = State( &nd[i], 	loc + "_M1", 	sixMer,	loc + "_match", 1.0 );
 
 				/*add state to the model */
-				for ( unsigned int j = 0; j < 4; j++ ){
+				for ( unsigned int j = 0; j < 3; j++ ){
 
-					states[ j ][ i ].meta = fiveMer;
+					states[ j ][ i ].meta = sixMer;
 					hmm.add_state( states[ j ][ i ] );
 				}
 
 				/*transitions between states, internal to a single base */
-
 				/*from I */
 				hmm.add_transition( states[1][i], states[1][i], internalI2I );
-				hmm.add_transition( states[1][i], states[2][i], internalI2SS*internalSS2M1 );
-				hmm.add_transition( states[1][i], states[3][i], internalI2SS*internalSS2M2 );
 
 				/*from M1 */
 				hmm.add_transition( states[2][i], states[2][i], internalM12M1 );
-				hmm.add_transition( states[2][i], states[1][i], internalM12SE*internalSE2I );
-
-				/*from M2 */
-				hmm.add_transition( states[3][i], states[3][i], internalM22M2 );
-				hmm.add_transition( states[3][i], states[1][i], internalM22SE*internalSE2I );
+				hmm.add_transition( states[2][i], states[1][i], internalM12I );
 			}
 
 			/*add transitions between modules (external transitions) */
-			for ( unsigned int i = 0; i < refSeqMapped.length() - 6; i++ ){
+			for ( unsigned int i = 0; i < refSeqMapped.length() - 7; i++ ){
 
+				/*from D */
 				hmm.add_transition( states[0][i], states[0][i + 1], externalD2D );
-				hmm.add_transition( states[0][i], states[2][i + 1], externalD2SS*internalSS2M1 );
-				hmm.add_transition( states[0][i], states[3][i + 1], externalD2SS*internalSS2M2 );
+				hmm.add_transition( states[0][i], states[2][i + 1], externalD2M1 );
 
-				hmm.add_transition( states[1][i], states[2][i + 1], externalI2SS*internalSS2M1 );
-				hmm.add_transition( states[1][i], states[3][i + 1], externalI2SS*internalSS2M2 );
+				/*from I */
+				hmm.add_transition( states[1][i], states[2][i + 1], externalI2M1 );
 
-				hmm.add_transition( states[2][i], states[0][i + 1], internalM12SE*externalSE2D );
-				hmm.add_transition( states[2][i], states[2][i + 1], internalM12SE*externalSE2SS*internalSS2M1 );
-				hmm.add_transition( states[2][i], states[3][i + 1], internalM12SE*externalSE2SS*internalSS2M2 );
-
-				hmm.add_transition( states[3][i], states[0][i + 1], internalM22SE*externalSE2D );
-				hmm.add_transition( states[3][i], states[2][i + 1], internalM22SE*externalSE2SS*internalSS2M1 );
-				hmm.add_transition( states[3][i], states[3][i + 1], internalM22SE*externalSE2SS*internalSS2M2 );
+				/*from M */
+				hmm.add_transition( states[2][i], states[0][i + 1], externalM12D );
+				hmm.add_transition( states[2][i], states[2][i + 1], externalM12M1 );
 			}
 
 			/*handle start states */
-			hmm.add_transition( hmm.start, states[1][0], 0.5 );
-			hmm.add_transition( hmm.start, states[2][0], 0.5*internalSS2M1 );
-			hmm.add_transition( hmm.start, states[3][0], 0.5*internalSS2M2 );
+			hmm.add_transition( hmm.start, firstI, 0.25 );
+			hmm.add_transition( hmm.start, states[0][0], 0.25 );
+			hmm.add_transition( hmm.start, states[2][0], 0.5 );
+
+			/*transitions from first insertion */
+			hmm.add_transition( firstI, firstI, 0.25 );
+			hmm.add_transition( firstI, states[0][0], 0.25 );
+			hmm.add_transition( firstI, states[2][0], 0.5 );
 
 			/*handle end states */
-			hmm.add_transition( states[0][refSeqMapped.length() - 6], hmm.end, externalD2D + externalD2SS );
-			hmm.add_transition( states[1][refSeqMapped.length() - 6], hmm.end, externalI2SS );
-			hmm.add_transition( states[2][refSeqMapped.length() - 6], hmm.end, internalM12SE*externalSE2SS + internalM12SE*externalSE2D );
-			hmm.add_transition( states[3][refSeqMapped.length() - 6], hmm.end, internalM22SE*externalSE2SS + internalM22SE*externalSE2D );
+			hmm.add_transition( states[0][refSeqMapped.length() - 7], hmm.end, 1.0 );
+			hmm.add_transition( states[1][refSeqMapped.length() - 7], hmm.end, externalI2M1 );
+			hmm.add_transition( states[2][refSeqMapped.length() - 7], hmm.end, externalM12M1 + externalM12D );
 
 			hmm.finalise();
 
@@ -298,9 +275,9 @@ int train_main( int argc, char** argv ){
 					std::vector< std::string > findIndex = split( emittingStatePath[i], '_' );
 					unsigned int posOnReference = atoi(findIndex[0].c_str());
 
-					if ( posOnReference >= trainArgs.boundLower and posOnReference < trainArgs.boundUpper and findIndex[1].substr(0,1) == "M" ){
+					if ( findIndex[1].substr(0,1) == "M" ){
 						//std::cout << (eventData.normalisedEvents)[i] << '\t' << posOnReference << '\t' << emittingStatePath[i] << '\t' << reference.substr(posOnReference,5) << '\t' << FiveMer_model[reference.substr(posOnReference,5)].first << '\t' << FiveMer_model[reference.substr(posOnReference,5)].second << std::endl;
-						eventPileup[posOnReference].push_back( (eventData.normalisedEvents)[i] );
+						eventPileup[refSeqMapped.substr(posOnReference,6)].push_back( (eventData.normalisedEvents)[i] );
 					}
 				}
 			pb_align.displayProgress( prog, failed );
@@ -327,6 +304,18 @@ int train_main( int argc, char** argv ){
 		}
 	}
 
+	/*empty the buffer at the end */
+	for ( auto iter = eventPileup.cbegin(); iter != eventPileup.cend(); ++iter ){
+
+		workFile << iter -> first;
+		for ( auto e = (iter -> second).begin(); e < (iter -> second).end(); e++ ){
+
+			workFile << ' ' << *e;
+		}
+		workFile << std::endl;
+	}
+	eventPileup.clear();
+
 	/*wrap up */
 	fohFile.close();
 	workFile.close();
@@ -340,10 +329,21 @@ int train_main( int argc, char** argv ){
 	/*get events from the work file */
 	std::cout << "Fitting Gaussian mixture model..." << std::endl;
 
-	std::ifstream eventFile( "workingData.osiris" );
+	std::ifstream eventFile("workingData.osiris");
 	if ( not eventFile.is_open() ) throw IOerror( "workingData.osiris" );
 
-	std::vector< std::vector< double > > importedEvents( trainArgs.boundUpper - trainArgs.boundLower );
+	/*fudge for openmp */
+	std::map< int, std::string > indexToSixmer;
+	std::map< std::string, int > sixmerToIndex;
+	int index = 0;
+	for ( auto i = SixMer_model.cbegin(); i != SixMer_model.cend(); i++ ){
+
+		indexToSixmer[index] = i -> first;
+		sixmerToIndex[i->first] = index;
+		index++;
+	}
+
+	std::vector< std::vector< double > > importedEvents( 4096 );
 
 	while ( std::getline( eventFile, line) ){
 
@@ -351,38 +351,50 @@ int train_main( int argc, char** argv ){
 		std::istringstream ss( line );
 		std::string event;
 		std::getline( ss, event, ' ' );
-		int position = atoi(event.c_str());
+		std::string sixMer = event;
 
 		while ( std::getline( ss, event, ' ' ) ){
 
 			rawSignals.push_back( atof( event.c_str() ) );
 		}
-		importedEvents[position-trainArgs.boundLower].insert( importedEvents[position-trainArgs.boundLower].end(), rawSignals.begin(), rawSignals.end() );
+		importedEvents[sixmerToIndex[sixMer]].insert( importedEvents[sixmerToIndex[sixMer]].end(), rawSignals.begin(), rawSignals.end() );
 	}
 	eventFile.close();
 
 	/*fit a mixture model to the events that aligned to each position in the reference */
-	outFile << "5mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_1" << '\t' << "pi_2" << '\t' << "mean_2" << '\t' << "stdv_2" << std::endl;
+	outFile << "6mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_1" << '\t' << "pi_2" << '\t' << "mean_2" << '\t' << "stdv_2" << std::endl;
 	progressBar pb_fit( importedEvents.size() );
 
-	#pragma omp parallel for default(none) shared(pb_fit, FiveMer_model, prog, failed, outFile, importedEvents, trainArgs, reference) num_threads(trainArgs.threads)
+	#pragma omp parallel for default(none) shared(pb_fit, indexToSixmer, SixMer_model, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
 	for ( int i = 0; i < importedEvents.size(); i++ ){
 
+		/*don't train if we have less than 2000 events for this 6mer */
+		if ( importedEvents[i].size() < 2000 ){
+
+			prog++;
+			continue;
+		}
+
+		std::string sixMer = indexToSixmer[i];
 		double mu1, stdv1, mu2, stdv2;
+		double mu3, stdv3;
 
 		/*get the ONT distribution for the mixture */
-		std::string fiveMer = reference.substr( i + trainArgs.boundLower, 5 );
-		mu1 = FiveMer_model[fiveMer].first;
-		stdv1 = FiveMer_model[fiveMer].second;
+		mu1 = SixMer_model[sixMer].first;
+		stdv1 = SixMer_model[sixMer].second;
 
 		/*make a second distribution that's similar to the ONT distribution */
-		mu2 = FiveMer_model[fiveMer].first;
-		stdv2 = 2*FiveMer_model[fiveMer].second;
+		mu2 = SixMer_model[sixMer].first;
+		stdv2 = 2*SixMer_model[sixMer].second;
+
+		//third
+		mu3 = SixMer_model[sixMer].first;
+		stdv3 = 3*SixMer_model[sixMer].second;
 
 		/*fit the model */
 		std::vector< double > fitParameters;
 		try{
-			fitParameters = gaussianMixtureEM_PRIOR( mu1, stdv1, mu2, stdv2, importedEvents[i], 0.0001 );
+			fitParameters = gaussianMixtureEM_TRIMODAL( mu1, stdv1, mu2, stdv2, mu3, stdv3, importedEvents[i], 0.0001 );
 		}
 		catch ( NegativeLog &nl ){
 
@@ -390,13 +402,11 @@ int train_main( int argc, char** argv ){
 			prog++;
 			continue;
 		}
-		#pragma omp critical
-		{
-			outFile << fiveMer << '\t' << i + trainArgs.boundLower << '\t' << mu1 << '\t' << stdv1 << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << std::endl; 
+			
+		outFile << sixMer << '\t' << mu1 << '\t' << stdv1 << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << fitParameters[6] << '\t' << fitParameters[7] << '\t' << fitParameters[8] << std::endl; 
 
-			pb_fit.displayProgress( prog, failed );
-			prog++;
-		}
+		pb_fit.displayProgress( prog, failed );
+		prog++;
 	}
 	outFile.close();
 	std::cout << std::endl << "Done." << std::endl;

@@ -22,10 +22,19 @@ def get_readID(fast5file,root):
 	if fast5file.endswith('.fast5'):
 		
 		try:
-			#get signalID
+			#get fastq and readID
 			fast5path2fastq = '/Analyses/Basecall_1D_000/BaseCalled_template/Fastq'
 			ffast5 = h5py.File(root+'/'+fast5file,'r')
 			fastq = ffast5[fast5path2fastq].value
+			path = '/Raw/Reads'
+			read_number = ffast5[path].keys()[0]
+			readInfo = ffast5[path + '/' + read_number]
+			readID = readInfo.attrs.get('read_id')
+			
+			#fix the sequence name
+			splitFastq = fastq.split('\n')
+			splitFastq[0] = '@'+readID
+			fastq = '\n'.join(splitFastq)
 			return fastq
 
 		except KeyError:
@@ -48,7 +57,9 @@ for root, dirs, files in os.walk(sys.argv[1], topdown=True):
 	out = Parallel(n_jobs=50)(delayed(get_readID)(f, root) for f in files)
 	
 	for r in out:
-		fout.write(r)
+		if r is not None:
+
+			fout.write(r)
 	
 	progress += len(out)
 	sys.stdout.write("\rFinished exporting " + str(progress) + ' fast5 files...')

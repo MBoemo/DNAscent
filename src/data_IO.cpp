@@ -166,55 +166,6 @@ void export_poreModel( std::map< std::string, std::vector< std::pair< double, do
 }
 
 
-std::pair< std::string, std::vector< read > > getTrainingFrom_foh( std::string &trainingGroup ){
-	
-	std::string line, sevenMerName, event, bound;
-	std::stringstream trainingGroupStream;
-
-	read currentRead;
-	std::vector< read > trainingGroupReads;
-
-	/*read this training group from the foh file into a stream */
-	trainingGroupStream.str( trainingGroup );
-
-	/*get the 7mer name */
-	std::getline( trainingGroupStream, line );
-	if ( line == "" ) std::getline( trainingGroupStream, line );
-	assert( line.substr(0,1) == ">" );
-	sevenMerName = line.erase( 0, 1 );
-	
-	/*go through each read */
-	while ( std::getline( trainingGroupStream, line ) ){
-
-		/*the basecall line */
-		currentRead.basecalls = line;
-
-		/*the reference bounds line */
-		std::getline( trainingGroupStream, line );
-		(currentRead.bounds_reference).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
-		(currentRead.bounds_reference).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
-
-		/*the query bounds line */
-		std::getline( trainingGroupStream, line );
-		(currentRead.bounds_query).first = atoi( (line.substr( 0, line.find(' ') )).c_str() );
-		(currentRead.bounds_query).second = atoi( (line.substr( line.find(' ') + 1, line.size() - line.find(' ') )).c_str() );
-
-		/*the raw signal line */
-		std::getline( trainingGroupStream, line );
-		std::vector< double > rawSignals;
-		std::istringstream ss( line );
-		std::string event;
-		while ( std::getline( ss, event, ' ' ) ){
-
-			rawSignals.push_back( atof( event.c_str() ) );
-		}
-		currentRead.raw = rawSignals;
-		trainingGroupReads.push_back( currentRead );
-	}
-	return std::make_pair( sevenMerName, trainingGroupReads );
-}
-
-
 read getDetectionFrom_fdh( std::string &detectionGroup ){
 	
 	std::stringstream detectionGroupStream;	
@@ -232,7 +183,7 @@ read getDetectionFrom_fdh( std::string &detectionGroup ){
 
 	/*get the basecall */
 	std::getline( detectionGroupStream, line );
-	currentRead.basecalls = line;
+	currentRead.basecall = line;
 
 	/*extract events */
 	std::getline( detectionGroupStream, line );

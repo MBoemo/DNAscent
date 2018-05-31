@@ -16,9 +16,8 @@
 
 struct read{
 
-	std::string basecalls;
-	std::pair< unsigned int, unsigned int > bounds_reference;
-	std::pair< unsigned int, unsigned int > bounds_query;
+	std::string mappedRefSubseq;
+	std::string basecall;
 	std::vector< double > raw;
 	std::string filename;
 };

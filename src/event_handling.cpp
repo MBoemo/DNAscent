@@ -174,9 +174,9 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 }
 
 
-std::vector< double > roughRescale( std::vector< double > means, std::string &basecalls ){
+std::vector< double > roughRescale( std::vector< double > means, std::string &basecall ){
 
-	unsigned int numOfFiveMers = basecalls.size() - 4;
+	unsigned int numOfFiveMers = basecall.size() - 4;
 
 	/*get a rough estimate for shift */
 	double event_sum = 0.0;
@@ -186,18 +186,29 @@ std::vector< double > roughRescale( std::vector< double > means, std::string &ba
 	}
 
 	double fiveMer_sum = 0.0;
+	double fiveMer_sq_sum = 0.0;
 	for ( unsigned int i = 0; i < numOfFiveMers; i ++ ){
 
-		double fiveMer_mean = FiveMer_model[basecalls.substr(i, 5)].first;
+		double fiveMer_mean = FiveMer_model[basecall.substr(i, 5)].first;
 		fiveMer_sum += fiveMer_mean;
+		fiveMer_sq_sum += pow( fiveMer_mean, 2.0 );
 	}
 
 	double shift = event_sum / means.size() - fiveMer_sum / numOfFiveMers;
 
-	/*rescale using shift */
+	/*get a rough estimate for scale */
+	double event_sq_sum = 0.0;
 	for ( unsigned int i = 0; i < means.size(); i++ ){
 
-		means[i] = means[i] - shift;
+		event_sq_sum += pow( means[i] - shift, 2.0 );
+	}
+
+	double scale = (event_sq_sum / means.size()) / (fiveMer_sq_sum / numOfFiveMers ); 
+
+	/*reestimate event means adjusting for shift and scale */
+	for ( unsigned int i = 0; i < means.size(); i++ ){
+
+		means[i] = (means[i] - shift) / scale;
 	}
 	return means;
 }
@@ -232,10 +243,13 @@ eventDataForRead normaliseEvents( read &r ){
 	free(c_events);
 
 	/*rough calculation of shift and scale so that we can align events */
-	std::vector< double > rough_mu = roughRescale( events_mu, r.basecalls );
+	std::vector< double > rough_mu = roughRescale( events_mu, r.basecall );
 
+	thisRead.normalisedEvents = rough_mu;
+
+	#if false
 	/*align 5mers to events using the basecall */
-	thisRead.eventAlignment = matchWarping( rough_mu, events_stdv, r.basecalls );
+	thisRead.eventAlignment = matchWarping( rough_mu, events_stdv, r.basecall );
 
 	/*calculate shift and scale */
 	std::vector< std::vector< double > > A( 2, std::vector< double >( 2, 0.0 ) );
@@ -244,7 +258,7 @@ eventDataForRead normaliseEvents( read &r ){
 	for ( auto event = (thisRead.eventAlignment).begin(); event < (thisRead.eventAlignment).end(); event++ ){
 
 		double event_mean = events_mu[ event -> first ];
-		std::string fiveMer = (r.basecalls).substr(event -> second, 5);
+		std::string fiveMer = (r.basecall).substr(event -> second, 5);
 		double model_mean = FiveMer_model[fiveMer].first;
 		double model_stdv = FiveMer_model[fiveMer].second;
 
@@ -278,7 +292,7 @@ eventDataForRead normaliseEvents( read &r ){
 		normalisedEventMean = ( events_mu[i] - shift )/scale;
 
 		positionAlignedTo = (thisRead.eventAlignment)[i].second;
-		fiveMerAlignedTo = (r.basecalls).substr(positionAlignedTo,5);
+		fiveMerAlignedTo = (r.basecall).substr(positionAlignedTo,5);
 
 		if ( positionAlignedTo >= (r.bounds_query).first and positionAlignedTo <= (r.bounds_query).second ){
 
@@ -291,6 +305,7 @@ eventDataForRead normaliseEvents( read &r ){
 		}
 	}
 	thisRead.qualityScore = alignmentScore / (double) numEventsAdded;
+	#endif
 
 	return thisRead;
 }
