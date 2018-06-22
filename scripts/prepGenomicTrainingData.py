@@ -174,7 +174,7 @@ f_out = open(a.outFoh,'w')
 #load the reference
 reference = import_reference(a.reference)
 
-numOfRecords = f_in.count()
+numOfRecords = 10000#f_in.count()
 f_out.write(str(numOfRecords) + '\n')
 
 buffer_records = []
@@ -208,6 +208,9 @@ for counter, record in enumerate(f_in):
 
 		del buffer_records[:]
 		gc.collect()
+
+	if counter == 10000:
+		break
 
 f_in.close()
 f_out.close()

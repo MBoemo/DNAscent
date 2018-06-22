@@ -32,6 +32,7 @@ static const char *help=
 "  -d,--trainingData         path to training data in the .foh format (made with prepTrainingData.py),\n"
 "  -o,--output               path to the output pore model file that Osiris will train.\n"
 "Optional arguments are:\n"
+"  -e,--eventalign           take input from nanopolish eventalign,\n"
 "  -t,--threads              number of threads (default is 1 thread).\n";
 
 struct Arguments {
@@ -41,6 +42,8 @@ struct Arguments {
 	bool logFile;
 	std::string logFilename;
 	int threads;
+	bool useNanopolish;
+	std::string eventalignFilename;
 };
 
 Arguments parseTrainingArguments( int argc, char** argv ){
@@ -58,6 +61,7 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 
 	/*defaults - we'll override these if the option was specified by the user */
 	trainArgs.threads = 1;
+	trainArgs.useNanopolish = false;
 
 	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -76,6 +80,13 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 			trainArgs.trainingOutputFilename = strArg;
 			i+=2;
 		}
+		else if ( flag == "-e" or flag == "--eventalign" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			trainArgs.eventalignFilename = strArg;
+			trainArgs.useNanopolish = true;
+			i+=2;
+		}
 		else if ( flag == "-t" or flag == "--threads" ){
 
 			std::string strArg( argv[ i + 1 ] );
@@ -88,9 +99,7 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 }
 
 
-int train_main( int argc, char** argv ){
-
-	Arguments trainArgs = parseTrainingArguments( argc, argv );
+void alignToSixmer( Arguments &trainArgs ){
 
 	/*get a filestream to the foh file - we'll load training data dynamically */
 	std::ifstream fohFile( trainArgs.trainingDataFilename );
@@ -105,15 +114,10 @@ int train_main( int argc, char** argv ){
 	progressBar pb_align( trainingTotal );
 	int prog = 0, offloadCount = 0, failed = 0;
 
-	/*open output file */
-	std::ofstream outFile( trainArgs.trainingOutputFilename );
-	if ( not outFile.is_open() ) throw IOerror( trainArgs.trainingOutputFilename );
-
 	/*buffers */
 	std::map< std::string, std::vector< double > > eventPileup;
 	std::vector< read > buffer;
 
-	//#if false
 	/*open work file */
 	std::ofstream workFile( "workingData.osiris" );
 	if ( not workFile.is_open() ) throw IOerror( "workingData.osiris" );
@@ -323,14 +327,27 @@ int train_main( int argc, char** argv ){
 	pb_align.displayProgress( trainingTotal, failed );
 	failed = prog = 0;
 	std::cout << std::endl << "Done." << std::endl;
+}
 
-	//#endif
+
+int train_main( int argc, char** argv ){
+
+	Arguments trainArgs = parseTrainingArguments( argc, argv );
+
+	if ( not trainArgs.useNanopolish){
+
+		alignToSixmer( trainArgs );
+	}
+
+	/*open output file */
+	std::ofstream outFile( trainArgs.trainingOutputFilename );
+	if ( not outFile.is_open() ) throw IOerror( trainArgs.trainingOutputFilename );
 
 	/*get events from the work file */
 	std::cout << "Fitting Gaussian mixture model..." << std::endl;
 
-	std::ifstream eventFile("workingData.osiris");
-	if ( not eventFile.is_open() ) throw IOerror( "workingData.osiris" );
+	std::string line;
+	int prog, failed;
 
 	/*fudge for openmp */
 	std::map< int, std::string > indexToSixmer;
@@ -345,39 +362,79 @@ int train_main( int argc, char** argv ){
 
 	std::vector< std::vector< double > > importedEvents( 4096 );
 
-	while ( std::getline( eventFile, line) ){
+	if (trainArgs.useNanopolish) {
 
-		std::vector< double > rawSignals;
-		std::istringstream ss( line );
-		std::string event;
-		std::getline( ss, event, ' ' );
-		std::string sixMer = event;
+		std::ifstream eventFile(trainArgs.eventalignFilename);
+		if ( not eventFile.is_open() ) throw IOerror( trainArgs.eventalignFilename );
 
-		while ( std::getline( ss, event, ' ' ) ){
+		std::getline( eventFile, line);//throw away the header
 
-			rawSignals.push_back( atof( event.c_str() ) );
+		while ( std::getline( eventFile, line) ){
+
+			std::istringstream ss( line );
+			std::string sixMer, entry;
+			double eventMean, eventLength;
+
+			int col = 0;
+			while ( std::getline( ss, entry, '\t' ) ){
+
+				if ( col == 9 ){
+
+					sixMer = entry;
+					break;
+				}
+				else if ( col == 6 ){
+
+					eventMean = atof( entry.c_str() );
+				}
+				else if ( col == 8 ){
+
+					eventLength = atof( entry.c_str() );
+				}
+				col++;
+			}
+			if ( eventLength >= 0.002 ) importedEvents[sixmerToIndex[sixMer]].push_back( eventMean );
 		}
-		importedEvents[sixmerToIndex[sixMer]].insert( importedEvents[sixmerToIndex[sixMer]].end(), rawSignals.begin(), rawSignals.end() );
+		eventFile.close();
 	}
-	eventFile.close();
+	else {
+
+		std::ifstream eventFile("workingData.osiris");
+		if ( not eventFile.is_open() ) throw IOerror( "workingData.osiris" );
+
+		while ( std::getline( eventFile, line) ){
+
+			std::vector< double > rawSignals;
+			std::istringstream ss( line );
+			std::string event;
+			std::getline( ss, event, ' ' );
+			std::string sixMer = event;
+
+			while ( std::getline( ss, event, ' ' ) ){
+
+				rawSignals.push_back( atof( event.c_str() ) );
+			}
+			importedEvents[sixmerToIndex[sixMer]].insert( importedEvents[sixmerToIndex[sixMer]].end(), rawSignals.begin(), rawSignals.end() );
+		}
+		eventFile.close();
+	}
 
 	/*fit a mixture model to the events that aligned to each position in the reference */
 	outFile << "6mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_1" << '\t' << "pi_2" << '\t' << "mean_2" << '\t' << "stdv_2" << std::endl;
 	progressBar pb_fit( importedEvents.size() );
 
-	#pragma omp parallel for default(none) shared(pb_fit, indexToSixmer, SixMer_model, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
+	#pragma omp parallel for schedule(dynamic) shared(pb_fit, indexToSixmer, SixMer_model, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
 	for ( int i = 0; i < importedEvents.size(); i++ ){
 
 		/*don't train if we have less than 2000 events for this 6mer */
-		if ( importedEvents[i].size() < 2000 ){
+		if ( importedEvents[i].size() < 200 ){
 
 			prog++;
 			continue;
 		}
 
 		std::string sixMer = indexToSixmer[i];
-		double mu1, stdv1, mu2, stdv2;
-		double mu3, stdv3;
+		double mu1, stdv1, mu2, stdv2, mu3, stdv3;
 
 		/*get the ONT distribution for the mixture */
 		mu1 = SixMer_model[sixMer].first;
@@ -387,7 +444,7 @@ int train_main( int argc, char** argv ){
 		mu2 = SixMer_model[sixMer].first;
 		stdv2 = 2*SixMer_model[sixMer].second;
 
-		//third
+		/*make a second distribution that's similar to the ONT distribution */
 		mu3 = SixMer_model[sixMer].first;
 		stdv3 = 3*SixMer_model[sixMer].second;
 
@@ -402,10 +459,12 @@ int train_main( int argc, char** argv ){
 			prog++;
 			continue;
 		}
-			
-		outFile << sixMer << '\t' << mu1 << '\t' << stdv1 << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << fitParameters[6] << '\t' << fitParameters[7] << '\t' << fitParameters[8] << std::endl; 
+		#pragma omp critical
+		{	
+			outFile << sixMer << '\t' << SixMer_model[sixMer].first << '\t' << SixMer_model[sixMer].second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << fitParameters[6] << '\t' << fitParameters[7] << '\t' << fitParameters[8] << '\t' << (importedEvents[i]).size() << std::endl; 
 
-		pb_fit.displayProgress( prog, failed );
+			pb_fit.displayProgress( prog, failed );
+		}
 		prog++;
 	}
 	outFile.close();

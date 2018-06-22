@@ -44,7 +44,7 @@ for line in f:
 		continue
 	
 	splitLine = line.rstrip().split('\t')
-	mixture[splitLine[0]] = [ float(splitLine[4]), float(splitLine[5]), float(splitLine[7]), float(splitLine[8]), float(splitLine[10]), float(splitLine[11]) ]
+	mixture[splitLine[0]] = [ float(splitLine[4]), float(splitLine[5]), float(splitLine[7]), float(splitLine[8]), float(splitLine[10]), float(splitLine[11]), float(splitLine[12]) ]
 f.close()
 
 for i, key in enumerate(sixmer2eventsBrdU):
@@ -73,7 +73,7 @@ for i, key in enumerate(sixmer2eventsBrdU):
 		#plotting stuff
 		plt.xlabel('pA')
 		plt.ylabel('Count')
-		plt.title( key )
+		plt.title( key + '  N=' + str(mixture[key][6]) )
 		plt.legend(loc='upper right')
 		plt.savefig( key + '.png' )
 		plt.close()

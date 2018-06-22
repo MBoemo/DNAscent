@@ -67,13 +67,14 @@ args = sys.argv
 a = parseArguments(args)
 
 #do the alignment with graphmap
+#os.system('/data/software_local/minimap2-2.10/minimap2 -ax map-ont -t ' + str(a.threads) + ' ' + a.reference + ' ' + a.reads + ' | samtools view -Sb - | samtools sort - alignments.minimap2.sorted') 
 #os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d ' + a.reads + ' | samtools view -Sb - | samtools sort - alignments.sorted') 
-#os.system('samtools index alignments.sorted.bam')
+#os.system('samtools index alignments.minimap2.sorted.bam')
 
 #open the sorted bam file and output bam file
 out_files = list()
-sam_file = pysam.Samfile('alignments.sorted.bam')
-filtered_file = pysam.Samfile('filteredOut.bam', "wb", template=sam_file)
+sam_file = pysam.Samfile('alignments.minimap2.sorted.bam')
+filtered_file = pysam.Samfile('filteredOut.leq15kb.minimap2.bam', "wb", template=sam_file)
 
 #go through the sorted bam file and crop out mitochondrial and ribosomal DNA
 reverseTally = 0
@@ -87,9 +88,9 @@ for record in sam_file:
 	if record.reference_id != -1:
 
 		#skip reverse complements and unmapped reads
-		if record.is_reverse:
-			reverseTally += 1
-			continue
+		#if record.is_reverse:
+		#	reverseTally += 1
+		#	continue
 	
 		#skip mitochondrial DNA
 		if record.reference_name == 'chrM':
@@ -107,7 +108,8 @@ for record in sam_file:
 			continue
 
 		#exclude any read that's shorter than 200bp
-		elif len(record.query_sequence) < 200 or len(record.query_sequence) > 1500:
+		#elif len(record.query_sequence) < 1000 or len(record.query_sequence) > 4000:
+		elif len(record.query_sequence) > 15000:
 			lengthTally += 1
 			continue
 
@@ -117,9 +119,9 @@ for record in sam_file:
 sam_file.close()
 filtered_file.close()
 
-os.system('samtools index filteredOut.bam')
+os.system('samtools index filteredOut.leq15kb.minimap2.bam')
 
-sam_file = pysam.Samfile('alignments.sorted.bam')
+sam_file = pysam.Samfile('alignments.minimap2.sorted.bam')
 numOfReads = sam_file.count()
 sam_file.close()
 
