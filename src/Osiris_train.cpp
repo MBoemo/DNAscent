@@ -434,7 +434,7 @@ int train_main( int argc, char** argv ){
 		}
 
 		std::string sixMer = indexToSixmer[i];
-		double mu1, stdv1, mu2, stdv2, mu3, stdv3;
+		double mu1, stdv1, mu2, stdv2;//, mu3, stdv3;
 
 		/*get the ONT distribution for the mixture */
 		mu1 = SixMer_model[sixMer].first;
@@ -445,13 +445,14 @@ int train_main( int argc, char** argv ){
 		stdv2 = 2*SixMer_model[sixMer].second;
 
 		/*make a second distribution that's similar to the ONT distribution */
-		mu3 = SixMer_model[sixMer].first;
-		stdv3 = 3*SixMer_model[sixMer].second;
+		//mu3 = SixMer_model[sixMer].first;
+		//stdv3 = 5*SixMer_model[sixMer].second;
 
 		/*fit the model */
 		std::vector< double > fitParameters;
 		try{
-			fitParameters = gaussianMixtureEM_TRIMODAL( mu1, stdv1, mu2, stdv2, mu3, stdv3, importedEvents[i], 0.0001 );
+			//fitParameters = gaussianMixtureEM_TRIMODAL( mu1, stdv1, mu2, stdv2, mu3, stdv3, importedEvents[i], 0.0001 );
+			fitParameters = gaussianMixtureEM_PRIOR( mu1, stdv1, mu2, stdv2, importedEvents[i], 10 );
 		}
 		catch ( NegativeLog &nl ){
 
@@ -461,7 +462,8 @@ int train_main( int argc, char** argv ){
 		}
 		#pragma omp critical
 		{	
-			outFile << sixMer << '\t' << SixMer_model[sixMer].first << '\t' << SixMer_model[sixMer].second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << fitParameters[6] << '\t' << fitParameters[7] << '\t' << fitParameters[8] << '\t' << (importedEvents[i]).size() << std::endl; 
+			//outFile << sixMer << '\t' << SixMer_model[sixMer].first << '\t' << SixMer_model[sixMer].second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << fitParameters[6] << '\t' << fitParameters[7] << '\t' << fitParameters[8] << '\t' << (importedEvents[i]).size() << std::endl;
+			outFile << sixMer << '\t' << SixMer_model[sixMer].first << '\t' << SixMer_model[sixMer].second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << (importedEvents[i]).size() << std::endl; 
 
 			pb_fit.displayProgress( prog, failed );
 		}

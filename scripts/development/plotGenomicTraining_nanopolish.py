@@ -83,7 +83,7 @@ for line in f:
 		continue
 	
 	splitLine = line.rstrip().split('\t')
-	mixture[splitLine[0]] = [ float(splitLine[4]), float(splitLine[5]), float(splitLine[7]), float(splitLine[8]), float(splitLine[10]), float(splitLine[11]) ]
+	mixture[splitLine[0]] = [ float(splitLine[4]), float(splitLine[5]), float(splitLine[7]), float(splitLine[8]) ]#, float(splitLine[10]), float(splitLine[11]) ]
 f.close()
 
 for i, key in enumerate(sixmer2eventsBrdU):
@@ -110,8 +110,8 @@ for i, key in enumerate(sixmer2eventsBrdU):
 			plt.plot( x, yMix, label='Fit Distribution (1)')
 			yMix = mlab.normpdf( x, mixture[key][2], mixture[key][3] )
 			plt.plot( x, yMix, label='Fit Distribution (2)')
-			yMix = mlab.normpdf( x, mixture[key][4], mixture[key][5] )
-			plt.plot( x, yMix, label='Fit Distribution (3)')
+			#yMix = mlab.normpdf( x, mixture[key][4], mixture[key][5] )
+			#plt.plot( x, yMix, label='Fit Distribution (3)')
 
 		#plotting stuff
 		plt.xlabel('pA')
