@@ -20,6 +20,7 @@ struct read{
 	std::string basecall;
 	std::vector< double > raw;
 	std::string filename;
+	std::map< int, int > refToQuery;
 };
 
 

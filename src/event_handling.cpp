@@ -107,7 +107,7 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 /*use dynamic time warping to calculate an alignment between the raw signal and the basecall */
 
 	unsigned int numOfRaw = raw.size();
-	unsigned int numOf5mers = basecall.size() - 4;
+	unsigned int numOf5mers = basecall.size() - 5;
 
 	std::vector< std::pair< unsigned int, unsigned int > > eventSeqLocPairs;
 
@@ -117,8 +117,8 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 	/*INITIALISATION */
 	dtw[0][0] = 0.0;
 	dtw[1][1] = 0.0;
-	double mu = FiveMer_model[basecall.substr(1,5)].first;
-	double stdv = FiveMer_model[basecall.substr(1,5)].second;
+	double mu = SixMer_model[basecall.substr(1,6)].first;
+	double stdv = SixMer_model[basecall.substr(1,6)].second;
 	dtw[1][1] = manhattanMetric( mu, stdv, raw[1], raw_stdv[1] );
 
 	/*RECURSION: fill in the dynamic time warping lattice */
@@ -126,8 +126,8 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 
 		for ( unsigned int col = 2; col < numOf5mers; col++ ){
 
-			mu = FiveMer_model[basecall.substr(col, 5)].first;
-			stdv = FiveMer_model[basecall.substr(col, 5)].second;
+			mu = SixMer_model[basecall.substr(col, 6)].first;
+			stdv = SixMer_model[basecall.substr(col, 6)].second;
 			dtw[row][col] =  manhattanMetric( mu, stdv, raw[row], raw_stdv[row] ) + std::min( dtw[row - 1][col], std::min(dtw[row - 1][col - 1], dtw[row - 1][col - 2] ) );	
 		}
 	}
@@ -176,7 +176,7 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 
 std::vector< double > roughRescale( std::vector< double > means, std::string &basecall ){
 
-	unsigned int numOfFiveMers = basecall.size() - 4;
+	unsigned int numOfSixMers = basecall.size() - 5;
 
 	/*get a rough estimate for shift */
 	double event_sum = 0.0;
@@ -185,16 +185,16 @@ std::vector< double > roughRescale( std::vector< double > means, std::string &ba
 		event_sum += means[i];
 	}
 
-	double fiveMer_sum = 0.0;
-	double fiveMer_sq_sum = 0.0;
-	for ( unsigned int i = 0; i < numOfFiveMers; i ++ ){
+	double sixMer_sum = 0.0;
+	double sixMer_sq_sum = 0.0;
+	for ( unsigned int i = 0; i < numOfSixMers; i ++ ){
 
-		double fiveMer_mean = FiveMer_model[basecall.substr(i, 5)].first;
-		fiveMer_sum += fiveMer_mean;
-		fiveMer_sq_sum += pow( fiveMer_mean, 2.0 );
+		double sixMer_mean = SixMer_model[basecall.substr(i, 6)].first;
+		sixMer_sum += sixMer_mean;
+		sixMer_sq_sum += pow( sixMer_mean, 2.0 );
 	}
 
-	double shift = event_sum / means.size() - fiveMer_sum / numOfFiveMers;
+	double shift = event_sum / means.size() - sixMer_sum / numOfSixMers;
 
 	/*get a rough estimate for scale */
 	double event_sq_sum = 0.0;
@@ -203,7 +203,7 @@ std::vector< double > roughRescale( std::vector< double > means, std::string &ba
 		event_sq_sum += pow( means[i] - shift, 2.0 );
 	}
 
-	double scale = (event_sq_sum / means.size()) / (fiveMer_sq_sum / numOfFiveMers ); 
+	double scale = (event_sq_sum / means.size()) / (sixMer_sq_sum / numOfSixMers ); 
 
 	/*reestimate event means adjusting for shift and scale */
 	for ( unsigned int i = 0; i < means.size(); i++ ){
@@ -247,10 +247,10 @@ eventDataForRead normaliseEvents( read &r ){
 
 	thisRead.normalisedEvents = rough_mu;
 
-	#if false
 	/*align 5mers to events using the basecall */
 	thisRead.eventAlignment = matchWarping( rough_mu, events_stdv, r.basecall );
 
+	#if false
 	/*calculate shift and scale */
 	std::vector< std::vector< double > > A( 2, std::vector< double >( 2, 0.0 ) );
 	std::vector< double > b( 2, 0.0 );
@@ -258,9 +258,9 @@ eventDataForRead normaliseEvents( read &r ){
 	for ( auto event = (thisRead.eventAlignment).begin(); event < (thisRead.eventAlignment).end(); event++ ){
 
 		double event_mean = events_mu[ event -> first ];
-		std::string fiveMer = (r.basecall).substr(event -> second, 5);
-		double model_mean = FiveMer_model[fiveMer].first;
-		double model_stdv = FiveMer_model[fiveMer].second;
+		std::string sixMer = (r.basecall).substr(event -> second, 5);
+		double model_mean = SixMer_model[sixMer].first;
+		double model_stdv = SixMer_model[sixMer].second;
 
 		A[0][0] += 1.0/pow( model_stdv, 2 );
 		A[0][1] += 1.0/pow( model_stdv, 2 ) * model_mean;
@@ -281,31 +281,28 @@ eventDataForRead normaliseEvents( read &r ){
 
 	/*normalise event means for shift and scale */
 	(thisRead.normalisedEvents).reserve( (thisRead.eventAlignment).size() );
+	#endif
 
 	double normalisedEventMean;
 	double alignmentScore = 0.0;
 	int positionAlignedTo;
-	std::string fiveMerAlignedTo;
+	std::string sixMerAlignedTo;
 	int numEventsAdded = 0;
 	for ( unsigned int i = 0 ; i < (thisRead.eventAlignment).size(); i++ ){
 
-		normalisedEventMean = ( events_mu[i] - shift )/scale;
+		normalisedEventMean = rough_mu[i];//( events_mu[i] - shift )/scale;
 
 		positionAlignedTo = (thisRead.eventAlignment)[i].second;
-		fiveMerAlignedTo = (r.basecall).substr(positionAlignedTo,5);
+		sixMerAlignedTo = (r.basecall).substr(positionAlignedTo, 6);
 
-		if ( positionAlignedTo >= (r.bounds_query).first and positionAlignedTo <= (r.bounds_query).second ){
+		//(thisRead.normalisedEvents).push_back( normalisedEventMean );
+		alignmentScore += normalisedEventMean - SixMer_model[sixMerAlignedTo].first;
+		numEventsAdded++;
 
-			(thisRead.normalisedEvents).push_back( normalisedEventMean );
-			alignmentScore += normalisedEventMean - FiveMer_model[fiveMerAlignedTo].first;
-			numEventsAdded++;
-
-			//std::cout << normalisedEventMean << '\t' << fiveMerAlignedTo << '\t' << FiveMer_model[fiveMerAlignedTo].first << '\t' << FiveMer_model[fiveMerAlignedTo].second << std::endl;
-
-		}
+		std::cout << positionAlignedTo << '\t' << normalisedEventMean << '\t' << sixMerAlignedTo << '\t' << SixMer_model[sixMerAlignedTo].first << '\t' << SixMer_model[sixMerAlignedTo].second << std::endl;
 	}
+	std::cout << "-------------" << std::endl;
 	thisRead.qualityScore = alignmentScore / (double) numEventsAdded;
-	#endif
 
 	return thisRead;
 }

@@ -145,14 +145,37 @@ def normaliseRead(filename):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def parallel_helper(refSequence, basecall, path):
+def parallel_helper(refSequence, basecall, path, pairs):
 
 	#get the events from the fast5 file corresponding to this read, normalised to pA
 	events = normaliseRead(path)
 
-	return refSequence + '\n' + basecall + '\n' + events + '\n'
+	return refSequence + '\n' + basecall + '\n' + events + '\n' + pairs + '\n'
 
+#--------------------------------------------------------------------------------------------------------------------------------------
+def fix_pairs( pairs ):
 
+	fixed = []
+	currentR = pairs[0][1]
+	currentQ = pairs[0][0]
+	fixed.append( (currentQ, currentR) )
+
+	for p in pairs[1:]:
+
+		if p[1] == currentR + 1:
+			currentR = p[1]
+			currentQ = p[0]
+			fixed.append( (currentQ, currentR) )
+		else:
+			rollingR = p[1]
+			currentQ = p[0]
+			while rollingR != currentR:
+				fixed.append( (currentQ, rollingR) )
+				rollingR -= 1
+			currentR = p[1]
+			
+	return fixed
+				
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
 
 #parse arguments
@@ -174,7 +197,7 @@ f_out = open(a.outFoh,'w')
 #load the reference
 reference = import_reference(a.reference)
 
-numOfRecords = 10000#f_in.count()
+numOfRecords = 1000#f_in.count()
 f_out.write(str(numOfRecords) + '\n')
 
 buffer_records = []
@@ -184,33 +207,47 @@ bufferMax = a.threads
 f_in = pysam.Samfile(a.data,'r')
 for counter, record in enumerate(f_in):
 
-	#print progress to stdout
-	displayProgress( counter, numOfRecords );
+	if record.is_reverse == False:
+		counter += 1
+
+		#print progress to stdout
+		displayProgress( counter, numOfRecords );
 	
-	#use the index to get the fast5 file path from the readID
-	readRawPath =index[record.query_name]
+		#use the index to get the fast5 file path from the readID
+		readRawPath =index[record.query_name]
 
-	#get the subsequence of the reference that this read mapped to
-	refAlignedSequence = reference[ record.reference_name ][ record.reference_start: record.reference_end ]
+		#get the subsequence of the reference that this read mapped to
+		refAlignedSequence = reference[ record.reference_name ][ record.reference_start: record.reference_end ]
 
-	#get the Albacore basecall
-	basecall = record.query_sequence
+		#get the Albacore basecall
+		basecall = record.query_sequence
+
+		#aligned pairs
+		pairs = fix_pairs(record.get_aligned_pairs(True,False))
+		pairs_str = ''
+		correctiveFactor = pairs[0][1]
+		if correctiveFactor != record.reference_start:
+			print "WARNING"
+
+
+		for p in pairs:
+			pairs_str += str(p[0]) + ' ' + str(p[1] - correctiveFactor) + ' '
 	
-	buffer_records.append( (refAlignedSequence, basecall, readRawPath) )
+		buffer_records.append( (refAlignedSequence, basecall, readRawPath, pairs_str) )
 
-	if len(buffer_records) > a.threads:
+		if len(buffer_records) > a.threads:
 
-		out = Parallel(n_jobs=a.threads)(delayed(parallel_helper)(s,b,p) for s,b,p in buffer_records)
+			out = Parallel(n_jobs=a.threads)(delayed(parallel_helper)(s,b,p,pairs) for s,b,p,pairs in buffer_records)
 
-		for s in out:
+			for s in out:
 
-			f_out.write(s)
+				f_out.write(s)
 
-		del buffer_records[:]
-		gc.collect()
+			del buffer_records[:]
+			gc.collect()
 
-	if counter == 10000:
-		break
+		if counter == 1000:
+			break
 
 f_in.close()
 f_out.close()

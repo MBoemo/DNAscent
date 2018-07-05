@@ -34,11 +34,33 @@ To run prepDetectionData.py, do:
 Example:
   python prepDetectionData.py -d /path/to/reads.fasta -o output.fdh
 Required arguments are:
-  -d,--data                 path to reads .fasta file or .bam file,
+  -r,--reference            path to the reference file,
+  -i,--index                path to the index file made by index.py,
+  -d,--data                 path to alignment bam file,
   -o,--output               path to the output detection .fdh file."""
 
 	print s
 	exit(0)
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------
+def import_reference(filename):
+
+	f = open(filename,'r')
+	g = f.readlines()
+	f.close()
+
+	reference = {}
+	for line in g:
+
+		if line[0] == '>':
+			currentChromosome = line[1:].rstrip()
+			reference[ currentChromosome ] = ''
+
+		if line[0] != '>':
+			reference[ currentChromosome ] += line.rstrip().upper()
+
+	return reference
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -51,6 +73,12 @@ def parseArguments(args):
 		if argument == '-d' or argument == '--data':
 			a.reads = str(args[i+1])
 
+		elif argument == '-r' or argument == '--reference':
+			a.reference = str(args[i+1])
+
+		elif argument == '-i' or argument == '--index':
+			a.index = str(args[i+1])
+
 		elif argument == '-o' or argument == '--output':
 			a.outFdh = str(args[i+1])
 
@@ -58,7 +86,7 @@ def parseArguments(args):
 			splashHelp()
 
 	#check that required arguments are met
-	if not hasattr( a, 'reads') or not hasattr( a, 'outFdh'):
+	if not hasattr( a, 'reads') or not hasattr( a, 'outFdh') or not hasattr( a, 'reference') or not hasattr( a, 'index'):
 		splashHelp() 
 
 	return a
@@ -116,79 +144,49 @@ def readFast5Raw( filename ):
 def import_inVivoData(readsFile, outFile):
 
 	f_out = open(outFile,'w')
-	extension = readsFile.split('.')[-1:][0]
-
-	#data is in fasta format
-	if extension in ['fasta', 'fa']:
-		f = open(readsFile,'r')
-		g = f.readlines()
-		f.close()
-
-		#write the foh header
-		f_out.write( str(len(g)/2) + '\n' )
-
-		for i, line in enumerate(g):
-
-			#print progress
-			displayProgress(i, len(g))
-
-			#if you find a fasta header, it's either the first read or you've got a complete read with all bases
-			if line[0] == '>':
-
-				#if this isn't the first entry, write the filename, basecalls, and raw to the fdh file
-				if i != 0:
-					
-					raw_array = readFast5Raw( filename )
-
-					#write to fdh
-					f_out.write( '>' + filename + '\n' + bases + '\n' )
-					f_out.write( ' '.join(map(str,raw_array.tolist())) + '\n<\n' )
-				
-				#regardless, set the new filename and empty the base string
-				filename = line[1:].rstrip()
-				bases = ''
-
-			#otherwise, it's a basecall line (of which there may be several if we're sticking to 60char width)
-			else:
-				bases += line.rstrip()
-
-		displayProgress(len(g), len(g))
 
 	#data is in bam format from demultiplexing
-	elif extension == 'bam':
-		f = pysam.AlignmentFile(readsFile,'r')
-		numOfRecords = f.count()
-		counter = 0
+	f = pysam.AlignmentFile(readsFile,'r')
+	numOfRecords = f.count()
+	counter = 0
 
-		#write the foh header
-		f_out.write( str(numOfRecords) + '\n' )
+	#write the foh header
+	f_out.write( str(numOfRecords) + '\n' )
 
-		f = pysam.AlignmentFile(readsFile,'r')
-		for record in f:
-			filename = record.query_name
-			raw_array = readFast5Raw( filename )
-			bases = record.query_sequence
+	f = pysam.AlignmentFile(readsFile,'r')
+	for record in f:
+		filename = record.query_name
+		raw_array = readFast5Raw( filename )
+		bases = record.query_sequence
 
-			#write to fdh
-			f_out.write( '>' + filename + '\n' + bases + '\n' )
-			f_out.write( ' '.join(map(str,raw_array.tolist())) + '\n<\n' )
+		#write to fdh
+		f_out.write( '>' + filename + '\n' + bases + '\n' )
+		f_out.write( ' '.join(map(str,raw_array.tolist())) + '\n<\n' )
 			
-			displayProgress(counter, numOfRecords)
-			counter += 1
+		displayProgress(counter, numOfRecords)
+		counter += 1
 
-		displayProgress(numOfRecords, numOfRecords)
-		f.close()
-
-	#bad or missing extension	
-	else:
-		print "Exiting with error: invalid extension in input file ", readsFile
-		splashHelp()
-
+	displayProgress(numOfRecords, numOfRecords)
+	f.close()
 	f_out.close()
 
 
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
 args = sys.argv
 a = parseArguments(args)
+
+#load the index
+f_index = open(a.indexfile,'r')
+index = {}
+for line in f_index:
+	splitLine = line.rstrip().split('\t')
+	index[splitLine[0]] = splitLine[1]
+f_index.close()
+
+#load the reference
+reference = import_reference(a.reference)
+
+
+
 import_inVivoData(a.reads, a.outFdh)
 

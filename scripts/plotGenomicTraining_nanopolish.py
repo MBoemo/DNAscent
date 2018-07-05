@@ -14,6 +14,13 @@ from sklearn import mixture
 totalReads = 10000
 
 #--------------------------------------------------------------------------------------------------------------------------------------
+def KLdivergence( mu1, sigma1, mu2, sigma2 ):
+
+	out = math.log(sigma2 / sigma1) + (sigma1**2 + (mu1 - mu2)**2)/(2.0*sigma_2**2) - 0.5
+
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------
 def displayProgress(current, total):
 
 	barWidth = 70
@@ -32,8 +39,6 @@ def displayProgress(current, total):
 		sys.stdout.write('] '+str(int(progress*100))+' %\r')
 		sys.stdout.flush()
 #--------------------------------------------------------------------------------------------------------------------------------------
-
-
 #eventalign output
 sixmer2eventsBrdU = {}
 f = open(sys.argv[1],'r')
@@ -124,11 +129,9 @@ for i, key in enumerate(sixmer2eventsBrdU):
 			plt.plot( x, yMix, label='Fit Distribution (2)')
 
 			if abs(model[key][0] - out.means_[0]) < abs(model[key][0] - out.means_[1]):
-				print key + '\t' + str(out.means_[1][0]) + '\t' + str(math.sqrt(out.covars_[1]))
+				print key + '\t' + str(out.means_[1][0]) + '\t' + str(math.sqrt(out.covars_[1])) '\t' + str(out.means_[0][0]) + '\t' + str(math.sqrt(out.covars_[0])) + '\t' + KLdivergence( out.means_[1][0], math.sqrt(out.covars_[1]), out.means_[0][0], math.sqrt(out.covars_[0]) )
 			else:
-				print key + '\t' + str(out.means_[0][0]) + '\t' + str(math.sqrt(out.covars_[0]))
-
-
+				print key + '\t' + str(out.means_[0][0]) + '\t' + str(math.sqrt(out.covars_[0])) '\t' + str(out.means_[1][0]) + '\t' + str(math.sqrt(out.covars_[1])) + '\t' + KLdivergence( out.means_[0][0], math.sqrt(out.covars_[0]), out.means_[1][0], math.sqrt(out.covars_[1]) )
 
 		#density
 		densityBrdU = stats.kde.gaussian_kde( sixmer2eventsBrdU[key] )
