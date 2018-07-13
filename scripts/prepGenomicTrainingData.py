@@ -205,7 +205,8 @@ bufferMax = a.threads
 
 #go through the BAM - when the buffer is full, get bounds and normalised events in parallel
 f_in = pysam.Samfile(a.data,'r')
-for counter, record in enumerate(f_in):
+counter = 0
+for record in f_in:
 
 	if record.is_reverse == False:
 		counter += 1

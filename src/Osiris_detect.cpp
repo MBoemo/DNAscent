@@ -265,7 +265,7 @@ int detect_main( int argc, char** argv ){
 		if ( (buffer.size() < trainArgs.threads)  ) continue;
 
 		/*HMM BrdU detection using the forward algorithm */
-		//#pragma omp parallel for schedule(dynamic) shared(failed,pb_align,buffer,trainArgs,detectionTotal,prog,SixMer_model,analogueModel) num_threads(trainArgs.threads)
+		#pragma omp parallel for schedule(dynamic) shared(failed,pb_align,buffer,trainArgs,detectionTotal,prog,SixMer_model,analogueModel) num_threads(trainArgs.threads)
 		for ( auto r = buffer.begin(); r < buffer.end(); r++ ){
 
 			/*normalise for shift and scale */
@@ -290,7 +290,7 @@ int detect_main( int argc, char** argv ){
 			int readHead = (r -> refToQuery)[0];
 
 			/*exclude the starts and ends of the read, as the alignment tends to be worse there */
-			for ( unsigned int i = 2*windowLength; i < refSeqMapped.length() - 2*windowLength; i++ ){
+			for ( unsigned int i = windowLength; i < refSeqMapped.length() - 2*windowLength; i++ ){
 			
 				/*for each T we find in the read, calculate the log likelihood that it's an analogue */
 				if ( analogueModel.count( refSeqMapped.substr(i, 6) ) > 0 ){
@@ -319,7 +319,7 @@ int detect_main( int argc, char** argv ){
 					double logProbAnalogue = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, true);
 					double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
-					ss << posOnQuery << "\t" << logLikelihoodRatio << "\t" << refSeqMapped.substr(i, 6) << "\t" << (r->basecall).substr(posOnQuery, 6) << std::endl;
+					ss << i << "\t" << logLikelihoodRatio << "\t" << refSeqMapped.substr(i, 6) << "\t" << (r->basecall).substr(posOnQuery, 6) << std::endl;
 				}
 			}
 			#pragma omp atomic 

@@ -299,9 +299,9 @@ eventDataForRead normaliseEvents( read &r ){
 		alignmentScore += normalisedEventMean - SixMer_model[sixMerAlignedTo].first;
 		numEventsAdded++;
 
-		std::cout << positionAlignedTo << '\t' << normalisedEventMean << '\t' << sixMerAlignedTo << '\t' << SixMer_model[sixMerAlignedTo].first << '\t' << SixMer_model[sixMerAlignedTo].second << std::endl;
+		//std::cout << positionAlignedTo << '\t' << normalisedEventMean << '\t' << sixMerAlignedTo << '\t' << SixMer_model[sixMerAlignedTo].first << '\t' << SixMer_model[sixMerAlignedTo].second << std::endl;
 	}
-	std::cout << "-------------" << std::endl;
+	//std::cout << "-------------" << std::endl;
 	thisRead.qualityScore = alignmentScore / (double) numEventsAdded;
 
 	return thisRead;
