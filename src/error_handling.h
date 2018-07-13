@@ -78,5 +78,12 @@ struct MismatchedDimensions : public std::exception {
 	}
 };
 
+
+struct ParsingError : public std::exception {
+	const char * what () const throw () {
+		return "Parsing error reading BAM file.";
+	}
+};
+
 #endif
 

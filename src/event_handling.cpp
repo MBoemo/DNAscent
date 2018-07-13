@@ -214,9 +214,7 @@ std::vector< double > roughRescale( std::vector< double > means, std::string &ba
 }
 
 
-eventDataForRead normaliseEvents( read &r ){
-
-	eventDataForRead thisRead;
+void normaliseEvents( read &r ){
 
 	/*allocate some space for event detection */
 	event_s *c_events = (event_s *)calloc( (r.raw).size(), sizeof( event_s) );
@@ -245,17 +243,17 @@ eventDataForRead normaliseEvents( read &r ){
 	/*rough calculation of shift and scale so that we can align events */
 	std::vector< double > rough_mu = roughRescale( events_mu, r.basecall );
 
-	thisRead.normalisedEvents = rough_mu;
+	r.normalisedEvents = rough_mu;
 
 	/*align 5mers to events using the basecall */
-	thisRead.eventAlignment = matchWarping( rough_mu, events_stdv, r.basecall );
+	r.eventAlignment = matchWarping( rough_mu, events_stdv, r.basecall );
 
 	#if false
 	/*calculate shift and scale */
 	std::vector< std::vector< double > > A( 2, std::vector< double >( 2, 0.0 ) );
 	std::vector< double > b( 2, 0.0 );
 
-	for ( auto event = (thisRead.eventAlignment).begin(); event < (thisRead.eventAlignment).end(); event++ ){
+	for ( auto event = (r.eventAlignment).begin(); event < (r.eventAlignment).end(); event++ ){
 
 		double event_mean = events_mu[ event -> first ];
 		std::string sixMer = (r.basecall).substr(event -> second, 5);
@@ -280,7 +278,7 @@ eventDataForRead normaliseEvents( read &r ){
 	double scale = solution[1];
 
 	/*normalise event means for shift and scale */
-	(thisRead.normalisedEvents).reserve( (thisRead.eventAlignment).size() );
+	(r.normalisedEvents).reserve( (r.eventAlignment).size() );
 	#endif
 
 	double normalisedEventMean;
@@ -288,21 +286,19 @@ eventDataForRead normaliseEvents( read &r ){
 	int positionAlignedTo;
 	std::string sixMerAlignedTo;
 	int numEventsAdded = 0;
-	for ( unsigned int i = 0 ; i < (thisRead.eventAlignment).size(); i++ ){
+	for ( unsigned int i = 0 ; i < (r.eventAlignment).size(); i++ ){
 
 		normalisedEventMean = rough_mu[i];//( events_mu[i] - shift )/scale;
 
-		positionAlignedTo = (thisRead.eventAlignment)[i].second;
+		positionAlignedTo = (r.eventAlignment)[i].second;
 		sixMerAlignedTo = (r.basecall).substr(positionAlignedTo, 6);
 
-		//(thisRead.normalisedEvents).push_back( normalisedEventMean );
+		//(r.normalisedEvents).push_back( normalisedEventMean );
 		alignmentScore += normalisedEventMean - SixMer_model[sixMerAlignedTo].first;
 		numEventsAdded++;
 
 		//std::cout << positionAlignedTo << '\t' << normalisedEventMean << '\t' << sixMerAlignedTo << '\t' << SixMer_model[sixMerAlignedTo].first << '\t' << SixMer_model[sixMerAlignedTo].second << std::endl;
 	}
 	//std::cout << "-------------" << std::endl;
-	thisRead.qualityScore = alignmentScore / (double) numEventsAdded;
-
-	return thisRead;
+	r.qualityScore = alignmentScore / (double) numEventsAdded;
 }

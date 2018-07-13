@@ -20,7 +20,11 @@ struct read{
 	std::string basecall;
 	std::vector< double > raw;
 	std::string filename;
+	std::string readID;
 	std::map< int, int > refToQuery;
+	std::vector< double > normalisedEvents;
+	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
+	double qualityScore;
 };
 
 

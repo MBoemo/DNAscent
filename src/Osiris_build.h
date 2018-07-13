@@ -6,18 +6,10 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
-#ifndef EVENT_HANDLING_H
-#define EVENT_HANDLING_H
+#ifndef OSIRIS_BUILD_H
+#define OSIRIS_BUILD_H
 
-#include "data_IO.h"
-
-struct eventDataForRead {
-
-	std::vector< double > normalisedEvents;
-	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
-	double qualityScore;
-};
-
-void normaliseEvents( read & );
+/*function prototypes */
+int build_main( int argc, char** argv );
 
 #endif
