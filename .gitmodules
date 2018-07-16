@@ -7,5 +7,5 @@
 	url = https://github.com/mateidavid/fast5
 
 [submodule "htslib"]
-	path = htslib-1.8
-	url = https://github.com/samtools/htslib
+	path = htslib
+	url = https://github.com/samtools/htslib.git
