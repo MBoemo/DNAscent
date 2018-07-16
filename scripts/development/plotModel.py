@@ -24,7 +24,7 @@ def divergence(mu1,sig1,mu2,sig2):
 
 
 #------------------------------------------------------------------------------------------------------------------------------------------
-def import_poreModel(filename):
+def import_poreModel(filename,c1,c2):
 #	takes the filename of an ONT pore model file and returns a map from kmer (string) to [mean,std] (list of floats)
 #	ARGUMENTS
 #       ---------
@@ -43,24 +43,47 @@ def import_poreModel(filename):
 	for line in g:
 		if line[0] != '#' and line[0:4] != 'kmer': #ignore the header
 			splitLine = line.split('\t')
-			kmer2MeanStd[ splitLine[0] ] = ( float(splitLine[1]), float(splitLine[2]), float(splitLine[3]), float(splitLine[4]) )
+			kmer2MeanStd[ splitLine[0] ] = ( float(splitLine[c1]), float(splitLine[c2]), float(splitLine[1]), float(splitLine[2]) )
 	g = None
 
 	return kmer2MeanStd
 
 
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
-model = import_poreModel( sys.argv[1] )
 
+plt.figure()
+
+model = import_poreModel( sys.argv[1], 4, 5 )
 diffs = []
 for key in model:
 	mu1, sig1, mu2, sig2 = model[key]
 	diffs.append( divergence(mu1,sig1,mu2,sig2) )
 
-plt.hist(diffs,len(diffs)/10)
-plt.xlabel('Divergence')
+plt.subplot(2,1,1)
+plt.hist(diffs,50)
+plt.tick_params(axis='both', which='major', labelsize=8)
+plt.tick_params(axis='both', which='minor', labelsize=8)
 plt.ylabel('Count')
-plt.title('Comparison Between BrdU and Thymidine Models, N=' + str(len(diffs)))
+plt.title('Expected Log Likelihood of BrdU to ONT Model')
 axes = plt.gca()
-axes.set_xlim([0,10])
+axes.set_xlim([0,3.5])
+
+model = import_poreModel( sys.argv[1], 7, 8 )
+diffs = []
+for key in model:
+	mu1, sig1, mu2, sig2 = model[key]
+	diffs.append( divergence(mu1,sig1,mu2,sig2) )
+
+plt.subplot(2,1,2)
+plt.hist(diffs,50)
+plt.tick_params(axis='both', which='major', labelsize=8)
+plt.tick_params(axis='both', which='minor', labelsize=8)
+plt.xlabel('Expected Log Likelihood')
+plt.ylabel('Count')
+plt.title('Expected Log Likelihood of Trained Thymidine to ONT Model')
+axes = plt.gca()
+axes.set_xlim([0,3.5])
+
+
+plt.tight_layout()
 plt.savefig('modelDifferencePlot.pdf')

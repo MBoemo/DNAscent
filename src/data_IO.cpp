@@ -17,55 +17,48 @@
 #include "poreModels.h"
 
 
-
-
-
-std::string import_reference( std::string fastaFilePath ){
+std::map< std::string, std::string > import_reference( std::string fastaFilePath ){
 	
 	std::ifstream file( fastaFilePath );
-
 	if ( not file.is_open() ) throw IOerror( fastaFilePath );
 
-	std::string line;
-	std::string reference;
+	std::string line, currentRefName;
+	std::map< std::string, std::string > reference;
 	int referencesInFile = 0;
 	
 	/*while we have a line to read in the reference file... */
 	while ( std::getline( file, line ) ){
 
 		/*if this line is a fasta header line */
-		if ( line[0] == '>' ) referencesInFile++;
+		if ( line[0] == '>' ){
 
-		/*if this line is not a fasta header line AND is the first entry */
-		if ( line[0] != '>' and referencesInFile == 1 ){
+			currentRefName = line.substr(1);
+			reference[currentRefName] = "";
+			referencesInFile++;
+		}
+		else {
 
-			/*append the line to the reference string */
-			reference.append( line );
+			std::transform( line.begin(), line.end(), line.begin(), toupper );
+
+			/*grammar check: reference should only have A,T,G,C,N */
+			for ( auto it = line.begin(); it < line.end(); it++ ){
+
+				/*ignire carriage returns */
+				if ( *it == '\r' ) continue;
+
+				if ( *it != 'A' and *it != 'T' and *it != 'G' and *it != 'C' and *it != 'N' ){
+					std::cout << "Exiting with error.  Illegal character in reference file: " << *it << std::endl;
+					exit( EXIT_FAILURE );
+				}
+			}
+			reference[currentRefName] += line;
 		}
 	}
 
 	/*some warning messages for silly inputs */
-	if ( referencesInFile > 1 ){
-		std::cout << "WARNING: reference fasta file contains multiple entries.  Only using the first one." << std::endl;
-	}
 	if ( referencesInFile == 0 ){
 		std::cout << "Exiting with error.  No fasta header (>) found in reference file." << std::endl;
 		exit( EXIT_FAILURE );
-	}
-
-	/*put all characters in the reference to upper case */
-	std::transform( reference.begin(), reference.end(), reference.begin(), toupper );
-
-	/*grammar check: reference should only have A,T,G,C,N */
-	for ( auto it = reference.begin(); it < reference.end(); it++ ){
-
-		/*ignire carriage returns */
-		if ( *it == '\r' ) continue;
-
-		if ( *it != 'A' and *it != 'T' and *it != 'G' and *it != 'C' and *it != 'N' ){
-			std::cout << "Exiting with error.  Illegal character in reference file: " << *it << std::endl;
-			exit( EXIT_FAILURE );
-		}
 	}
 	return reference;
 }

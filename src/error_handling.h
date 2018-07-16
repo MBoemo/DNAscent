@@ -65,9 +65,16 @@ struct InsufficientArguments : public std::exception {
 };
 
 
-struct NsInReference : public std::exception {
+struct FastaFormatting : public std::exception {
 	const char * what () const throw () {
-		return "There are unsubstituted Ns in the reference.";
+		return "Reference file is not in the correct format - fasta format required.";
+	}
+};
+
+
+struct BadFast5Field : public std::exception {
+	const char * what () const throw () {
+		return "Fast5 field could not be opened.";
 	}
 };
 

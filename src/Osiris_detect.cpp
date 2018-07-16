@@ -6,7 +6,6 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
-
 #include <fstream>
 #include "Osiris_detect.h"
 #include "common.h"
@@ -16,33 +15,40 @@
 #include "event_handling.h"
 #include "poreModels.h"
 #include "poreSpecificParameters.h"
+#include "../htslib/htslib/hts.h"
+#include "../htslib/htslib/sam.h"
+#include "../fast5/include/fast5.hpp"
 
 
 static const char *help=
-"detect: Osiris executable that determines the position of base analogues in a Nanopore read.\n"
-"To run Osiris detect, do:\n"
-"  ./Osiris detect [arguments]\n"
+"build: Osiris executable that builds detection data for later processing by Osiris detect.\n"
+"To run Osiris build, do:\n"
+"  ./Osiris build [arguments]\n"
 "Example:\n"
-"  ./Osiris detect -m /path/to/analogue.model -d /path/to/data.foh -o output.txt -t 20\n"
+"  ./Osiris build -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.index -o /path/to/output.out -t 20\n"
 "Required arguments are:\n"
-"  -m,--analogue-model       path to 5mer pore model file that includes analogues,\n"
-"  -d,--data                 path to .foh file to run detection on,\n"
-"  -o,--output               path to the output file which will contain the calls.\n"
+"  -b,--bam                  path to alignment BAM file,\n"
+"  -r,--reference            path to genome reference in fasta format,\n"
+"  -m,--analogue-model       path to analogue model file,\n"
+"  -i,--index                path to Osiris index,\n"
+"  -o,--output               path to output file that will be generated.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread).\n";
 
 struct Arguments {
-	std::string analogueModelFilename;
-	std::string dataFilename;
+	std::string bamFilename;
+	std::string referenceFilename;
 	std::string outputFilename;
+	std::string indexFilename;
+	std::string analogueModelFilename;
 	int threads;
 };
 
-Arguments parseDetectionArguments( int argc, char** argv ){
+Arguments parseBuildArguments( int argc, char** argv ){
 
 	if( argc < 2 ){
 
-		std::cout << "Exiting with error.  Insufficient arguments passed to Osiris train." << std::endl << help << std::endl;
+		std::cout << "Exiting with error.  Insufficient arguments passed to Osiris build." << std::endl << help << std::endl;
 		exit(EXIT_FAILURE);
 	}
 
@@ -57,45 +63,56 @@ Arguments parseDetectionArguments( int argc, char** argv ){
 		exit(EXIT_FAILURE);
 	}
 
-	Arguments trainArgs;
+	Arguments args;
 
 	/*defaults - we'll override these if the option was specified by the user */
-	trainArgs.threads = 1;
+	args.threads = 1;
 
 	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
 
 		std::string flag( argv[ i ] );
 
-		if ( flag == "-m" or flag == "--analogue-model" ){
+		if ( flag == "-b" or flag == "--bam" ){
 
 			std::string strArg( argv[ i + 1 ] );
-			trainArgs.analogueModelFilename = strArg;
+			args.bamFilename = strArg;
 			i+=2;
 		}
-		else if ( flag == "-o" or flag == "--output" ){
+		else if ( flag == "-r" or flag == "--reference" ){
 
 			std::string strArg( argv[ i + 1 ] );
-			trainArgs.outputFilename = strArg;
+			args.referenceFilename = strArg;
 			i+=2;
 		}
 		else if ( flag == "-t" or flag == "--threads" ){
 
 			std::string strArg( argv[ i + 1 ] );
-			trainArgs.threads = std::stoi( strArg.c_str() );
+			args.threads = std::stoi( strArg.c_str() );
 			i+=2;
 		}
-		else if ( flag == "-d" or flag == "--data" ){
+		else if ( flag == "-i" or flag == "--index" ){
 
 			std::string strArg( argv[ i + 1 ] );
-			trainArgs.dataFilename = strArg;
+			args.indexFilename = strArg;
+			i+=2;
+		}
+		else if ( flag == "-o" or flag == "--output" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			args.outputFilename = strArg;
+			i+=2;
+		}
+		else if ( flag == "-m" or flag == "--analogue-model" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			args.analogueModelFilename = strArg;
 			i+=2;
 		}
 		else throw InvalidOption( flag );
 	}
-	return trainArgs;
+	return args;
 }
-
 
 double seqProbability( std::string &sequence, std::vector<double> &events, std::map< std::string, std::pair< double, double > > &analogueModel, int BrdU_idx, bool isBrdU ){
 
@@ -121,11 +138,11 @@ double seqProbability( std::string &sequence, std::vector<double> &events, std::
 
 		if (i == BrdU_idx and isBrdU){
 
-			nd.push_back( NormalDistribution( analogueModel[sixMer].first, analogueModel[sixMer].second ) );
+			nd.push_back( NormalDistribution( analogueModel.at(sixMer).first, analogueModel.at(sixMer).second ) );
 		}
 		else {
 
-			nd.push_back( NormalDistribution( SixMer_model[sixMer].first, SixMer_model[sixMer].second ) );
+			nd.push_back( NormalDistribution( SixMer_model.at(sixMer).first, SixMer_model.at(sixMer).second ) );
 		}
 	}
 
@@ -195,152 +212,323 @@ double seqProbability( std::string &sequence, std::vector<double> &events, std::
 }
 
 
+
+// from scrappie
+float fast5_read_float_attribute(hid_t group, const char *attribute) {
+    float val = NAN;
+    if (group < 0) {
+#ifdef DEBUG_FAST5_IO
+        fprintf(stderr, "Invalid group passed to %s:%d.", __FILE__, __LINE__);
+#endif
+        return val;
+    }
+
+    hid_t attr = H5Aopen(group, attribute, H5P_DEFAULT);
+    if (attr < 0) {
+#ifdef DEBUG_FAST5_IO
+        fprintf(stderr, "Failed to open attribute '%s' for reading.", attribute);
+#endif
+        return val;
+    }
+
+    H5Aread(attr, H5T_NATIVE_FLOAT, &val);
+    H5Aclose(attr);
+
+    return val;
+}
+//end scrappie
+
+
+void parseCigar(bam1_t *record, std::map< int, int > &ref2query, int &refStart, int &refEnd ){
+
+	//initialise reference and query coordinates for the first match
+	refStart = record -> core.pos;
+	int queryPosition = 0;
+	int refPosition = 0;
+
+	const uint32_t *cigar = bam_get_cigar(record);
+	for ( int i = 0; i < record -> core.n_cigar; ++i){
+
+		const int op = bam_cigar_op(cigar[i]); //cigar operation
+		const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
+
+		//for a match, advance both reference and query together
+		if (op == BAM_CMATCH or op == BAM_CEQUAL or op == BAM_CDIFF){
+
+			for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+				ref2query[j] = queryPosition;
+				queryPosition++;
+			}
+			refPosition += ol;
+		}
+		//for a deletion, advance only the reference position
+		else if (op == BAM_CDEL or op == BAM_CREF_SKIP){
+
+			for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+				ref2query[j] = queryPosition;
+			}
+			refPosition += ol;
+		}
+		//for insertions or soft clipping, advance only the query position
+		else if (op == BAM_CSOFT_CLIP or op == BAM_CINS){
+
+			for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+				ref2query[j] = queryPosition;
+				queryPosition++;
+			}
+		}
+		//N.B. hard clipping advances neither refernce nor query, so ignore it
+	}
+	refEnd = refStart + refPosition;
+}
+
+
+void parseIndex( std::string indexFilename, std::map< std::string, std::string > &readID2path ){
+
+	std::ifstream indexFile( indexFilename );
+	if ( not indexFile.is_open() ) throw IOerror( indexFilename );
+
+	std::string line;
+	while ( std::getline( indexFile, line) ){
+
+		std::string readID = line.substr(0, line.find('\t'));
+		std::string path = line.substr(line.find('\t')+1);
+		readID2path[readID] = path;
+	}
+}
+
+
+std::string getQuerySequence( bam1_t *record ){ 
+	
+	std::string seq;
+	uint8_t *a_seq = bam_get_seq(record);
+	for ( int i = 0; i < record -> core.l_qseq; i++){
+		int seqInBase = bam_seqi(a_seq,i);
+
+		switch (seqInBase) {
+
+			case 1: seq += "A"; break;
+			case 2: seq += "C"; break;
+			case 4: seq += "G"; break;
+			case 8: seq += "T"; break;
+			case 15: seq += "N"; break;
+			default: throw ParsingError();
+		}
+	}
+	return seq;
+}
+
+void getEvents( std::string fast5Filename, std::vector<double> &raw ){
+
+	//open the file
+	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+
+	//get the channel parameters
+	const char *scaling_path = "/UniqueGlobalKey/channel_id";
+	hid_t scaling_group = H5Gopen(hdf5_file, scaling_path, H5P_DEFAULT);
+	float digitisation = fast5_read_float_attribute(scaling_group, "digitisation");
+	float offset = fast5_read_float_attribute(scaling_group, "offset");
+	float range = fast5_read_float_attribute(scaling_group, "range");
+	float sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
+
+	//get the raw signal
+	hid_t space;
+	hsize_t nsample;
+	herr_t status;
+	float raw_unit;
+	float *rawptr = NULL;
+
+	ssize_t size = H5Lget_name_by_idx(hdf5_file, "/Raw/Reads/", H5_INDEX_NAME, H5_ITER_INC, 0, NULL, 0, H5P_DEFAULT);
+	char* name = (char*)calloc(1 + size, sizeof(char));
+	H5Lget_name_by_idx(hdf5_file, "/Raw/Reads/", H5_INDEX_NAME, H5_ITER_INC, 0, name, 1 + size, H5P_DEFAULT);
+	std::string readName(name);
+	free(name);
+	std::string signal_path = "/Raw/Reads/" + readName + "/Signal";
+
+	hid_t dset = H5Dopen(hdf5_file, signal_path.c_str(), H5P_DEFAULT);
+	if (dset < 0 ) throw BadFast5Field(); 
+	space = H5Dget_space(dset);
+	if (space < 0 ) throw BadFast5Field(); 
+	H5Sget_simple_extent_dims(space, &nsample, NULL);
+   	rawptr = (float*)calloc(nsample, sizeof(float));
+    	status = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, rawptr);
+	
+	raw_unit = range / digitisation;
+	for ( size_t i = 0; i < nsample; i++ ){
+
+		raw.push_back( (rawptr[i] + offset) * raw_unit );
+	}
+
+	H5Fclose(hdf5_file);
+}
+
+
+int countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &numOfRecords, double &avgRecordLength ){
+
+	hts_itr_t* itr = sam_itr_querys(bam_idx,bam_hdr,".");
+	int result;
+	int recordLengths = 0;
+	do {
+
+		bam1_t *record = bam_init1();
+		result = sam_itr_next(bam_fh, itr, record);
+		numOfRecords++;
+		recordLengths += record -> core.l_qseq;
+	} while (result > 0);
+	avgRecordLength = (double)recordLengths / (double)numOfRecords;
+}
+
+
+std::vector< unsigned int > getPOIs( std::string &refSeq, std::map< std::string, std::pair< double, double > > &analogueModel, int windowLength ){
+
+	std::vector< unsigned int > POIs;
+
+	for ( unsigned int i = windowLength; i < refSeq.length() - 2*windowLength; i++ ){
+
+		if ( analogueModel.count( refSeq.substr(i, 6) ) > 0 ) POIs.push_back(i);
+	}
+	return POIs;
+}
+
+
 int detect_main( int argc, char** argv ){
 
-	Arguments trainArgs = parseDetectionArguments( argc, argv );
+	Arguments args = parseBuildArguments( argc, argv );
+
+	//load osiris index
+	std::map< std::string, std::string > readID2path;
+	parseIndex( args.indexFilename, readID2path );
+
+	//import fasta reference
+	std::map< std::string, std::string > reference = import_reference( args.referenceFilename );
 
 	/*import the analogue pore model that we specified on the command line */
-	std::map< std::string, std::pair< double, double > > analogueModel =  import_poreModel( trainArgs.analogueModelFilename );
+	std::map< std::string, std::pair< double, double > > analogueModel =  import_poreModel( args.analogueModelFilename );
 
-	/*get a filestream to the foh file - we'll load training data dynamically */
-	std::ifstream fohFile( trainArgs.dataFilename );
-	if ( not fohFile.is_open() ) throw IOerror( trainArgs.dataFilename );
+	std::ofstream outFile( args.outputFilename );
+	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
-	/*read the foh header - total count */
-	std::string line;
-	std::getline( fohFile, line );
-	int detectionTotal = atoi(line.c_str());
+	htsFile* bam_fh;
+	hts_idx_t* bam_idx;
+	bam_hdr_t* bam_hdr;
+	hts_itr_t* itr;
+
+	//load the bam
+	bam_fh = sam_open((args.bamFilename).c_str(), "r");
+	if (bam_fh == NULL) throw IOerror(args.bamFilename);
+
+	//load the index
+	bam_idx = sam_index_load(bam_fh, (args.bamFilename).c_str());
+	if (bam_idx == NULL) throw IOerror("index for "+args.bamFilename);
+
+	//load the header
+	bam_hdr = sam_hdr_read(bam_fh);
 
 	/*initialise progress */
-	progressBar pb_align( detectionTotal );
-	int prog = 0, offloadCount = 0, failed = 0;
+	int numOfRecords = 0, prog = 0, failed = 0;
+	double avgRecordLength;
+	countRecords( bam_fh, bam_idx, bam_hdr, numOfRecords, avgRecordLength );
+	progressBar pb(numOfRecords);
 
-	/*buffer */
-	std::vector< read > buffer;
+	//build an iterator for all reads in the bam file
+	const char *allReads = ".";
+	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	/*open output file */
-	std::ofstream outFile( trainArgs.outputFilename );
-	if ( not outFile.is_open() ) throw IOerror( trainArgs.outputFilename );
+	int windowLength = 20;
+	int result;
+	do {
 
-	unsigned int windowLength = 20;
+		read r;
 
-	/*align the training data */
-	std::cout << "Detecting BrdU..." << std::endl;
-	while ( std::getline( fohFile, line) ){
+		//initialise the record and get the record from the file iterator
+		bam1_t *record = bam_init1();
+		result = sam_itr_next(bam_fh, itr, record);
+
+		//skip reverse complements
+		if ( bam_is_rev(record) ) continue;
 		
-		/*get data for a read from foh */
-		read currentRead;
+		//iterate on the cigar string to fill up the reference-to-query coordinate map
+		int refStart, refEnd;
+		parseCigar(record, r.refToQuery, refStart, refEnd);
 
-		/*subsequence of the reference that the read mapped to */
-		currentRead.mappedRefSubseq = line;
+		//fetch the basecall from the bam file
+		r.basecall = getQuerySequence(record);
 
-		/*the basecalled sequence */
-		std::getline( fohFile, line );
-		currentRead.basecall = line;
+		//get the read name (which will be the ONT readID from Albacore basecall)
+		const char *queryName = bam_get_qname(record);
+		std::string s_queryName(queryName);
+		r.readID = s_queryName;
 
-		/*the raw signal line */
-		std::getline( fohFile, line );
-		std::vector< double > rawSignals;
-		std::istringstream ss( line );
-		std::string event;
-		while ( std::getline( ss, event, ' ' ) ){
+		//get the name of the reference mapped to
+		std::string mappedTo(bam_hdr -> target_name[record -> core.tid]);
+		r.referenceMappedTo = mappedTo;
 
-			rawSignals.push_back( atof( event.c_str() ) );
-		}
-		currentRead.raw = rawSignals;
-
-		/*aligned pairs */
-		std::getline( fohFile, line );
-		std::istringstream sspairs( line );
-		std::string qIndex, rIndex;
-		while ( std::getline( sspairs, qIndex, ' ' ) ){
-
-			std::getline( sspairs, rIndex, ' ' );
-
-			currentRead.refToQuery[ atoi( rIndex.c_str() )] = atoi( qIndex.c_str() );
-		}
-
-		/*push it to the buffer or run Viterbi if the buffer is full */
-		buffer.push_back( currentRead );
-		if ( (buffer.size() < trainArgs.threads)  ) continue;
-
-		/*HMM BrdU detection using the forward algorithm */
-		#pragma omp parallel for schedule(dynamic) shared(failed,pb_align,buffer,trainArgs,detectionTotal,prog,SixMer_model,analogueModel) num_threads(trainArgs.threads)
-		for ( auto r = buffer.begin(); r < buffer.end(); r++ ){
-
-			/*normalise for shift and scale */
-			eventDataForRead eventData = normaliseEvents( *r );
-
-			//std::cout << eventData.qualityScore << std::endl;
-			/*disregard this event if the quality score is too low */
-			if ( fabs(eventData.qualityScore) > 2 ){
-
-				failed++;
-				prog++;
-				continue;
-			}
-
-			/*get the subsequence of the reference this read mapped to and build an HMM from it */
-			std::string refSeqMapped = (*r).mappedRefSubseq;
+		//open fast5 and normalise events to pA
+		r.filename = readID2path[s_queryName];
+		try{
 			
-			/*push the filename for this read to the output */
-			std::stringstream ss;
-			ss << ">" << r -> filename << std::endl;
-
-			int readHead = (r -> refToQuery)[0];
-
-			/*exclude the starts and ends of the read, as the alignment tends to be worse there */
-			for ( unsigned int i = windowLength; i < refSeqMapped.length() - 2*windowLength; i++ ){
+			getEvents( r.filename, r.raw );
+		}
+		catch ( BadFast5Field &bf5 ){
 			
-				/*for each T we find in the read, calculate the log likelihood that it's an analogue */
-				if ( analogueModel.count( refSeqMapped.substr(i, 6) ) > 0 ){
-
-					int posOnQuery = (r -> refToQuery)[i];
-
-					std::string readSnippet = refSeqMapped.substr(i - windowLength, 2*windowLength);
-					std::vector< double > eventSnippet;
-
-					/*get the events that correspond to the read snippet */
-					for ( unsigned int j = readHead; j < (eventData.eventAlignment).size(); j++ ){
-
-						/*move the readhead so that we can navigate through events efficiently */
-						if ( (eventData.eventAlignment)[j].second == (r -> refToQuery)[i - windowLength] ) readHead = j;
-
-						/*if an event has been aligned to a position in the window, add it */
-						if ( (eventData.eventAlignment)[j].second >= (r -> refToQuery)[i - windowLength] and (eventData.eventAlignment)[j].second <= (r -> refToQuery)[i + windowLength] ){
-
-							eventSnippet.push_back( (eventData.normalisedEvents)[j] );
-						}
-
-						/*stop once we get to the end of the window */
-						if ( (eventData.eventAlignment)[j].second > (r -> refToQuery)[i + windowLength] ) break;
-					}
-					double logProbThymidine = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, false);
-					double logProbAnalogue = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, true);
-					double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
-
-					ss << i << "\t" << logLikelihoodRatio << "\t" << refSeqMapped.substr(i, 6) << "\t" << (r->basecall).substr(posOnQuery, 6) << std::endl;
-				}
-			}
-			#pragma omp atomic 
+			failed++;
 			prog++;
+			continue;
+		}
+		normaliseEvents(r);
 
-			#pragma omp critical
-			{	/*write the log probabilities for this file to the output file */
-				outFile << ss.rdbuf();
-				displayProgress( prog, detectionTotal );
-			}
+		/*disregard this event if the quality score is too low */
+		if ( fabs(r.qualityScore) > 2 ){
+
+			failed++;
+			prog++;
+			continue;
 		}
 
-		/*empty the buffer */
-		buffer.clear();
-		if ( fohFile.eof() ) break;
-	}
-	displayProgress( detectionTotal, detectionTotal );
-	std::cout << "\nDone." << std::endl;
+		/*get the subsequence of the reference this read mapped to and build an HMM from it */
+		std::string refSeqMapped = reference[r.referenceMappedTo].substr(refStart, refEnd-refStart);
+			
+		/*push the filename for this read to the output */
+		std::stringstream ss;
+		ss << ">" << r.readID << " " << r.referenceMappedTo << ":" << refStart << "-" << refEnd << std::endl;
 
-	outFile.close();
-	fohFile.close();
+		std::vector< unsigned int > POIs = getPOIs( refSeqMapped, analogueModel, windowLength );
+		#pragma omp parallel for ordered schedule(static) shared(ss,POIs,failed,pb,prog,SixMer_model,analogueModel) num_threads(args.threads)
+		for ( unsigned int i = 0; i < POIs.size(); i++ ){
+
+			int BrdULoc = POIs[i];
+			int posOnQuery = (r.refToQuery).at(BrdULoc);
+
+			std::string readSnippet = refSeqMapped.substr(BrdULoc - windowLength, 2*windowLength);
+			std::vector< double > eventSnippet;
+
+			/*get the events that correspond to the read snippet */
+			for ( unsigned int j = 0; j < (r.eventAlignment).size(); j++ ){
+
+				/*if an event has been aligned to a position in the window, add it */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[BrdULoc - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[BrdULoc + windowLength] ){
+
+					eventSnippet.push_back( (r.normalisedEvents)[j] );
+				}
+
+				/*stop once we get to the end of the window */
+				if ( (r.eventAlignment)[j].second > (r.refToQuery)[BrdULoc + windowLength] ) break;
+			}
+			double logProbThymidine = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, false);
+			double logProbAnalogue = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, true);
+			double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
+
+			#pragma omp ordered
+			ss << BrdULoc + refStart << "\t" << logLikelihoodRatio << "\t" << refSeqMapped.substr(BrdULoc, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
+		}
+		outFile << ss.rdbuf();
+		prog++;
+		pb.displayProgress( prog, failed );
+	
+	} while (result > 0);
 
 	return 0;
 }

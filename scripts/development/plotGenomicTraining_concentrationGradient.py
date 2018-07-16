@@ -188,11 +188,11 @@ for i, key in enumerate(sixmer2eventsBrdU_60):
 		densityBrdU = stats.kde.gaussian_kde( sixmer2eventsBrdU_0[key] )
 		plt.plot(x, densityBrdU(x), label='0% BrdU Density')
 		densityBrdU = stats.kde.gaussian_kde( sixmer2eventsBrdU_60[key] )
-		plt.plot(x, densityBrdU(x), label='60% BrdU Density')
+		plt.plot(x, densityBrdU(x), label='30% BrdU Density')
 		densityBrdU = stats.kde.gaussian_kde( sixmer2eventsBrdU_80[key] )
-		plt.plot(x, densityBrdU(x), label='80% BrdU Density')
+		plt.plot(x, densityBrdU(x), label='50% BrdU Density')
 		densityBrdU = stats.kde.gaussian_kde( sixmer2eventsBrdU_100[key] )
-		plt.plot(x, densityBrdU(x), label='100% BrdU Density')
+		plt.plot(x, densityBrdU(x), label='80% BrdU Density')
 		
 		#pore model
 		yModel = mlab.normpdf( x, model[key][0], model[key][1] )
