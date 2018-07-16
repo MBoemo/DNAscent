@@ -4,7 +4,7 @@
 
 [submodule "fast5"]
 	path = fast5
-	url = https://github.com/mateidavid/fast5
+	url = https://github.com/mateidavid/fast5.git
 
 [submodule "htslib"]
 	path = htslib

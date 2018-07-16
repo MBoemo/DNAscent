@@ -15,5 +15,3 @@ examples/
 #libraries
 hdf5-1.8.14/
 hdf5-1.8.14.tar.gz
-fast5/
-htslib-1.8/
