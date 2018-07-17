@@ -7,6 +7,7 @@
 //----------------------------------------------------------
 
 #include <iterator>
+#include <algorithm>
 #include <math.h>
 #include "error_handling.h"
 #include "event_handling.h"
@@ -174,6 +175,84 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 }
 
 
+std::vector< std::pair< unsigned int, unsigned int > > matchWarping_band( std::vector< double > &raw, std::vector< double > &raw_stdv, std::string &basecall ){
+/*use dynamic time warping to calculate an alignment between the raw signal and the basecall */
+
+	int numOfRaw = raw.size();
+	int numOf5mers = basecall.size() - 5;
+	int bandWidth = 100;
+
+	std::vector< std::pair< unsigned int, unsigned int > > eventSeqLocPairs;
+
+	/*allocate the dynamic time warping lattice */
+	std::vector< std::vector< double > > dtw( numOfRaw, std::vector< double >( numOf5mers, std::numeric_limits< double >::max() ) );
+
+	/*INITIALISATION */
+	dtw[0][0] = 0.0;
+	dtw[1][1] = 0.0;
+	double mu = SixMer_model[basecall.substr(1,6)].first;
+	double stdv = SixMer_model[basecall.substr(1,6)].second;
+	dtw[1][1] = manhattanMetric( mu, stdv, raw[1], raw_stdv[1] );
+
+	/*RECURSION: fill in the dynamic time warping lattice */
+	for ( unsigned int col = 2; col < numOf5mers; col++ ){//basecall
+
+		int bandLower = col*numOfRaw/numOf5mers - bandWidth;
+		int bandUpper = col*numOfRaw/numOf5mers + bandWidth;
+
+		bandLower = std::max(1, bandLower);
+		bandUpper = std::min(numOfRaw, bandUpper);
+		
+		for ( unsigned int row = bandLower; row < bandUpper; row++ ){//raw
+
+			mu = SixMer_model[basecall.substr(col, 6)].first;
+			stdv = SixMer_model[basecall.substr(col, 6)].second;
+			dtw[row][col] =  manhattanMetric( mu, stdv, raw[row], raw_stdv[row] ) + std::min( dtw[row - 1][col], std::min(dtw[row - 1][col - 1], dtw[row - 1][col - 2] ) );	
+		}
+	}
+
+	/*TRACEBACK: calculate the optimal warping path */
+	int col = numOf5mers - 1;
+	int row = numOfRaw - 1;
+	eventSeqLocPairs.push_back( std::make_pair( row, col ) );
+
+	while ( row > 0 and col > 0 ){
+
+		std::vector< double > mCand;
+
+		if (col == 1){
+			mCand = { dtw[row - 1][col], dtw[row - 1][col - 1] };
+		}
+		else {
+			mCand = { dtw[row - 1][col], dtw[row - 1][col - 1], dtw[row - 1][col - 2] };
+		}
+
+		int m = std::min_element( mCand.begin(), mCand.end() ) - mCand.begin();
+
+		if ( m == 0 ){
+			row--;
+		}
+		else if ( m == 1 ){
+			row--;
+			col--;
+		}
+		else if ( m == 2 ){
+			row--;
+			col-=2;
+		}
+		else{
+			std::cout << "Exiting with error.  Out of bounds error in dynmaic time warping." << std::endl;
+			exit(EXIT_FAILURE);
+		}
+
+		eventSeqLocPairs.push_back( std::make_pair( row, col ) );
+	}
+	std::reverse( eventSeqLocPairs.begin(), eventSeqLocPairs.end() );
+
+	return eventSeqLocPairs;
+}
+
+
 std::vector< double > roughRescale( std::vector< double > means, std::string &basecall ){
 
 	unsigned int numOfSixMers = basecall.size() - 5;
@@ -246,7 +325,7 @@ void normaliseEvents( read &r ){
 	r.normalisedEvents = rough_mu;
 
 	/*align 5mers to events using the basecall */
-	r.eventAlignment = matchWarping( rough_mu, events_stdv, r.basecall );
+	r.eventAlignment = matchWarping_band( rough_mu, events_stdv, r.basecall );
 
 	#if false
 	/*calculate shift and scale */

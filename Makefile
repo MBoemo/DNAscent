@@ -2,7 +2,7 @@ OBJS = event_detection.o event_handling.o common.o data_IO.o Osiris_detect.o Osi
 CC = gcc
 CXX = g++
 DEBUG = -g
-LIBFLAGS = -L Penthus/ -l Penthus -L htslib/ -l hts -L hdf5-1.8.14/hdf5/lib/ -l hdf5 -fopenmp
+LIBFLAGS = -pg -L Penthus/ -l Penthus -L htslib/ -l hts -L hdf5-1.8.14/hdf5/lib/ -l hdf5 -fopenmp
 CXXFLAGS = -Wall -c -O2 -std=c++11 $(DEBUG)
 CFLAGS = -Wall -c -std=c99 -O2 $(DEBUG)
 LFLAGS = -Wall -O2 $(DEBUG)
@@ -24,13 +24,13 @@ PENTHUS_LIB=./Penthus/libPenthus.a
 all: $(MAIN_EXECUTABLE)
 
 $(HTS_LIB):
-	#cd htslib && make || exit 255
+	cd htslib && make || exit 255
 	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./htslib && export LD_LIBRARY_PATH
 
 $(HDF5_LIB):
-	#if [ ! -e hdf5-1.8.14.tar.gz ]; then wget https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8/hdf5-1.8.14/src/hdf5-1.8.14.tar.gz; fi
-	#tar -xzf hdf5-1.8.14.tar.gz || exit 255
-	#cd hdf5-1.8.14 && ./configure --enable-threadsafe && make && make install
+	if [ ! -e hdf5-1.8.14.tar.gz ]; then wget https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8/hdf5-1.8.14/src/hdf5-1.8.14.tar.gz; fi
+	tar -xzf hdf5-1.8.14.tar.gz || exit 255
+	cd hdf5-1.8.14 && ./configure --enable-threadsafe && make && make install
 	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./hdf5-1.8.14/hdf5/lib && export LD_LIBRARY_PATH
 
 $(PENTHUS_LIB):

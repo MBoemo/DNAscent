@@ -449,6 +449,12 @@ int detect_main( int argc, char** argv ){
 
 		//skip reverse complements
 		if ( bam_is_rev(record) ) continue;
+
+		//get the read name (which will be the ONT readID from Albacore basecall)
+		const char *queryName = bam_get_qname(record);
+		if (queryName == NULL) continue;
+		std::string s_queryName(queryName);
+		r.readID = s_queryName;
 		
 		//iterate on the cigar string to fill up the reference-to-query coordinate map
 		int refStart, refEnd;
@@ -456,11 +462,6 @@ int detect_main( int argc, char** argv ){
 
 		//fetch the basecall from the bam file
 		r.basecall = getQuerySequence(record);
-
-		//get the read name (which will be the ONT readID from Albacore basecall)
-		const char *queryName = bam_get_qname(record);
-		std::string s_queryName(queryName);
-		r.readID = s_queryName;
 
 		//get the name of the reference mapped to
 		std::string mappedTo(bam_hdr -> target_name[record -> core.tid]);
