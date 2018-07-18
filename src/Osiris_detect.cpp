@@ -333,6 +333,7 @@ void getEvents( std::string fast5Filename, std::vector<double> &raw ){
 	float offset = fast5_read_float_attribute(scaling_group, "offset");
 	float range = fast5_read_float_attribute(scaling_group, "range");
 	float sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
+	H5Gclose(scaling_group);
 
 	//get the raw signal
 	hid_t space;
@@ -355,6 +356,7 @@ void getEvents( std::string fast5Filename, std::vector<double> &raw ){
 	H5Sget_simple_extent_dims(space, &nsample, NULL);
    	rawptr = (float*)calloc(nsample, sizeof(float));
     	status = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, rawptr);
+	H5Dclose(dset);
 	
 	raw_unit = range / digitisation;
 	for ( size_t i = 0; i < nsample; i++ ){
@@ -581,7 +583,7 @@ int detect_main( int argc, char** argv ){
 				{
 					outFile << ss.rdbuf();
 					prog++;
-					pb.displayProgress( prog, failed, buffer_shortReads.size()-i, args.threads );
+					pb.displayProgress( prog, failed, buffer_shortReads.size(), args.threads );
 				}
 			}
 			buffer_shortReads.clear();
