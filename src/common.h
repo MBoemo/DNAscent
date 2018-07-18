@@ -38,7 +38,9 @@ class progressBar{
 			_digits = std::to_string( maxNumber).length() + 1;
 			_startTime = std::chrono::steady_clock::now();
 		}
-		void displayProgress( unsigned int currentNumber, unsigned int failed ){
+		void displayProgress( unsigned int currentNumber, unsigned int failed, unsigned int bufferConents, unsigned int bufferSize ){
+
+			int bufLength = std::to_string(bufferSize).length() + 1;
 
 			_currentTime = std::chrono::steady_clock::now();
 			 std::chrono::duration<double> elapsedTime = _currentTime - _startTime;
@@ -65,9 +67,9 @@ class progressBar{
 				unsigned int secs = (estTimeLeft % 3600) % 60;
 
 				std::cout << std::right << std::setw(2) << hours << "hr" << std::setw(2) << mins << "min" << std::setw(2) << secs << "sec  ";
+				std::cout << std::right << std::setw(bufLength) << bufferConents << "/" << bufferSize << "  ";
 				std::cout << "f: " << std::right << std::setw(_digits) << failed << std::setw(3) << "\r";
 				std::cout.flush();
-
 			}
 		} 
 };

@@ -16,11 +16,12 @@
 
 struct read{
 
-	std::string basecall, referenceMappedTo, filename, readID;
+	std::string basecall, referenceSeqMappedTo, referenceMappedTo, filename, readID;
 	std::vector< double > raw, normalisedEvents;
 	std::map< int, int > refToQuery;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
 	double qualityScore;
+	int refStart, refEnd;
 };
 
 
