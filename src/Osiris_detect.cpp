@@ -418,7 +418,7 @@ std::stringstream long_llAcrossRead( read &r, int windowLength, std::map< std::s
 			/*if an event has been aligned to a position in the window, add it */
 			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[BrdULoc - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[BrdULoc + windowLength] ){
 
-				eventSnippet.push_back( (r.normalisedEvents)[j] );
+				eventSnippet.push_back( (r.normalisedEvents)[(r.eventAlignment)[j].first] );
 			}
 
 			/*stop once we get to the end of the window */
@@ -456,7 +456,7 @@ std::stringstream short_llAcrossRead( read &r, int windowLength, std::map< std::
 			/*if an event has been aligned to a position in the window, add it */
 			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[BrdULoc - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[BrdULoc + windowLength] ){
 
-				eventSnippet.push_back( (r.normalisedEvents)[j] );
+				eventSnippet.push_back( (r.normalisedEvents)[(r.eventAlignment)[j].first] );
 			}
 
 			/*stop once we get to the end of the window */
@@ -560,15 +560,17 @@ int detect_main( int argc, char** argv ){
 		//fetch the basecall from the bam file
 		r.basecall = getQuerySequence(record);
 
-		/*push short reads onto the buffer, or compute regions of the read in parallel now if it's long */
-		if ( (r.basecall).length() < 6000 ) buffer_shortReads.push_back(r);
+		buffer_shortReads.push_back(r);
+
+		/*push short reads onto the buffer, or compute regions of the read in parallel now if it's long 
+		if ( (r.basecall).length() < 1000000 ) buffer_shortReads.push_back(r);
 		else {
 			normaliseEvents(r);
 			std::stringstream ss = long_llAcrossRead( r, windowLength, analogueModel, args.threads );
 			outFile << ss.rdbuf();
 			prog++;
 			pb.displayProgress( prog, failed, buffer_shortReads.size(), args.threads );
-		}
+		}*/
 
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer_shortReads.size() >= args.threads){
