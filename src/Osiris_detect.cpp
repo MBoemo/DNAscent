@@ -21,11 +21,11 @@
 
 
 static const char *help=
-"build: Osiris executable that builds detection data for later processing by Osiris detect.\n"
-"To run Osiris build, do:\n"
-"  ./Osiris build [arguments]\n"
+"build: Osiris executable that detects BrdU in Oxford Nanopore reads.\n"
+"To run Osiris detect, do:\n"
+"  ./Osiris detect [arguments]\n"
 "Example:\n"
-"  ./Osiris build -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.index -o /path/to/output.out -t 20\n"
+"  ./Osiris detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.index -o /path/to/output.out -t 20\n"
 "Required arguments are:\n"
 "  -b,--bam                  path to alignment BAM file,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
@@ -44,7 +44,7 @@ struct Arguments {
 	int threads;
 };
 
-Arguments parseBuildArguments( int argc, char** argv ){
+Arguments parseDetectArguments( int argc, char** argv ){
 
 	if( argc < 2 ){
 
@@ -377,6 +377,7 @@ int countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &
 
 		bam1_t *record = bam_init1();
 		result = sam_itr_next(bam_fh, itr, record);
+		if ( bam_is_rev(record) ) continue;
 		numOfRecords++;
 		recordLengths += record -> core.l_qseq;
 	} while (result > 0);
@@ -396,46 +397,7 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, std::map< std::string,
 }
 
 
-std::stringstream long_llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel, int threads ){
-
-	/*push the filename for this read to the output */
-	std::stringstream ss;
-	ss << ">" << r.readID << " " << r.referenceMappedTo << ":" << r.refStart << "-" << r.refEnd << std::endl;
-
-	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
-	#pragma omp parallel for ordered schedule(static) shared(ss,POIs,SixMer_model,analogueModel) num_threads(threads)
-	for ( unsigned int i = 0; i < POIs.size(); i++ ){
-
-		int BrdULoc = POIs[i];
-		int posOnQuery = (r.refToQuery).at(BrdULoc);
-
-		std::string readSnippet = (r.referenceSeqMappedTo).substr(BrdULoc - windowLength, 2*windowLength);
-		std::vector< double > eventSnippet;
-
-		/*get the events that correspond to the read snippet */
-		for ( unsigned int j = 0; j < (r.eventAlignment).size(); j++ ){
-
-			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[BrdULoc - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[BrdULoc + windowLength] ){
-
-				eventSnippet.push_back( (r.normalisedEvents)[(r.eventAlignment)[j].first] );
-			}
-
-			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[BrdULoc + windowLength] ) break;
-		}
-		double logProbThymidine = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, false);
-		double logProbAnalogue = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, true);
-		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
-
-		#pragma omp ordered
-		ss << BrdULoc + r.refStart << "\t" << logLikelihoodRatio << "\t" << (r.referenceSeqMappedTo).substr(BrdULoc, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
-	}
-	return ss;
-}
-
-
-std::stringstream short_llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel ){
+std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel ){
 
 	/*push the filename for this read to the output */
 	std::stringstream ss;
@@ -466,7 +428,7 @@ std::stringstream short_llAcrossRead( read &r, int windowLength, std::map< std::
 		double logProbAnalogue = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, true);
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
-		ss << BrdULoc + r.refStart << "\t" << logLikelihoodRatio << "\t" << (r.referenceSeqMappedTo).substr(BrdULoc, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
+		ss << BrdULoc + r.refStart << "\t" << logLikelihoodRatio << "\t" << logProbThymidine << "\t" << logProbAnalogue << "\t" <<  (r.referenceSeqMappedTo).substr(BrdULoc, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
 	}
 	return ss;
 }
@@ -474,7 +436,7 @@ std::stringstream short_llAcrossRead( read &r, int windowLength, std::map< std::
 
 int detect_main( int argc, char** argv ){
 
-	Arguments args = parseBuildArguments( argc, argv );
+	Arguments args = parseDetectArguments( argc, argv );
 
 	//load osiris index
 	std::map< std::string, std::string > readID2path;
@@ -562,24 +524,23 @@ int detect_main( int argc, char** argv ){
 
 		buffer_shortReads.push_back(r);
 
-		/*push short reads onto the buffer, or compute regions of the read in parallel now if it's long 
-		if ( (r.basecall).length() < 1000000 ) buffer_shortReads.push_back(r);
-		else {
-			normaliseEvents(r);
-			std::stringstream ss = long_llAcrossRead( r, windowLength, analogueModel, args.threads );
-			outFile << ss.rdbuf();
-			prog++;
-			pb.displayProgress( prog, failed, buffer_shortReads.size(), args.threads );
-		}*/
-
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer_shortReads.size() >= args.threads){
 
-			#pragma omp parallel for schedule(dynamic) shared(windowLength,buffer_shortReads,SixMer_model,analogueModel,args) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(windowLength,buffer_shortReads,SixMer_model,analogueModel,args,prog,failed) num_threads(args.threads)
 			for (int i = 0; i < buffer_shortReads.size(); i++){
 
 				normaliseEvents(buffer_shortReads[i]);
-				std::stringstream ss = short_llAcrossRead(buffer_shortReads[i], windowLength, analogueModel);
+
+				//catch reads with rough event alignments that fail the QC
+				if ( buffer_shortReads[i].eventAlignment.size() == 0 ){
+
+					failed++;
+					prog++;
+					continue;
+				}
+
+				std::stringstream ss = llAcrossRead(buffer_shortReads[i], windowLength, analogueModel);
 
 				#pragma omp critical
 				{
@@ -597,7 +558,7 @@ int detect_main( int argc, char** argv ){
 	#pragma omp parallel for schedule(dynamic) shared(windowLength,buffer_shortReads,SixMer_model,analogueModel) num_threads(args.threads)
 	for (int i = 0; i < buffer_shortReads.size(); i++){
 
-		std::stringstream ss = short_llAcrossRead(buffer_shortReads[i], windowLength, analogueModel);
+		std::stringstream ss = llAcrossRead(buffer_shortReads[i], windowLength, analogueModel);
 
 		#pragma omp critical
 		{

@@ -513,10 +513,11 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
 	bool failed = false;
 	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold) {
 		failed = true;
+		
 		eventSeqLocPairs.clear();
 	}
 
-    //fprintf(stderr, "ada\t%s\t%s\t%.2lf\t%zu\t%.2lf\t%d\t%d\t%d\n", read.read_name.substr(0, 6).c_str(), failed ? "FAILED" : "OK", events_per_kmer, sequence.size(), avg_log_emission, curr_event_idx, max_gap, fills);
+    	//fprintf(stderr, "ada\t\t%s\t%.2lf\t%zu\t%.2lf\t%d\t%d\t%d\n", failed ? "FAILED" : "OK", events_per_kmer, sequence.size(), avg_log_emission, curr_event_idx, max_gap, fills);
 	return eventSeqLocPairs;
 }
 //end:from nanopolish
@@ -594,41 +595,7 @@ void normaliseEvents( read &r ){
 	r.normalisedEvents = rough_mu;
 
 	/*align 5mers to events using the basecall */
-	//r.eventAlignment = matchWarping_band( rough_mu, events_stdv, r.basecall );
 	r.eventAlignment = adaptive_banded_simple_event_align(rough_mu, r.basecall);
-
-	#if false
-	/*calculate shift and scale */
-	std::vector< std::vector< double > > A( 2, std::vector< double >( 2, 0.0 ) );
-	std::vector< double > b( 2, 0.0 );
-
-	for ( auto event = (r.eventAlignment).begin(); event < (r.eventAlignment).end(); event++ ){
-
-		double event_mean = events_mu[ event -> first ];
-		std::string sixMer = (r.basecall).substr(event -> second, 5);
-		double model_mean = SixMer_model[sixMer].first;
-		double model_stdv = SixMer_model[sixMer].second;
-
-		A[0][0] += 1.0/pow( model_stdv, 2 );
-		A[0][1] += 1.0/pow( model_stdv, 2 ) * model_mean;
-		A[1][1] += 1.0/pow( model_stdv, 2 ) * pow( model_mean, 2 );
-
-		b[0] += 1.0/pow( model_stdv, 2 ) * event_mean;
-		b[1] += 1.0/pow( model_stdv, 2 ) * event_mean * model_mean;
-	}
-
-	/*use the symmetry of A */
-	A[1][0] = A[0][1];
-
-	/*solve the linear system and pull out values for shift and scale */
-	std::vector< double > solution = solveLinearSystem( A, b );
-
-	double shift = solution[0];
-	double scale = solution[1];
-
-	/*normalise event means for shift and scale */
-	(r.normalisedEvents).reserve( (r.eventAlignment).size() );
-	#endif
 
 	double normalisedEventMean;
 	double alignmentScore = 0.0;
@@ -642,7 +609,6 @@ void normaliseEvents( read &r ){
 		positionAlignedTo = (r.eventAlignment)[i].second;
 		sixMerAlignedTo = (r.basecall).substr(positionAlignedTo, 6);
 
-		//(r.normalisedEvents).push_back( normalisedEventMean );
 		alignmentScore += normalisedEventMean - SixMer_model[sixMerAlignedTo].first;
 		numEventsAdded++;
 

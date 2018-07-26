@@ -1,4 +1,4 @@
-OBJS = event_detection.o event_handling.o common.o data_IO.o Osiris_detect.o Osiris.o
+OBJS = event_detection.o event_handling.o common.o data_IO.o Osiris_detect.o Osiris_regions.o Osiris.o
 CC = gcc
 CXX = g++
 DEBUG = -g
@@ -51,7 +51,10 @@ data_IO.o : src/error_handling.h src/data_IO.h src/data_IO.cpp
 Osiris_detect.o : src/poreSpecificParameters.h src/common.h src/build_model.h src/data_IO.h src/error_handling.h src/event_handling.h src/event_handling.cpp src/poreModels.h src/Osiris_detect.h src/Osiris_detect.cpp $(HTS_LIB) $(HDF5_LIB) $(PENTHUS_LIB)
 	$(CXX) $(CXXFLAGS) $(HTS_INCLUDE) $(HDF5_INCLUDE) $(FAST5_INCLUDE) src/Osiris_detect.cpp $(LIBFLAGS)
 
-Osiris.o : src/Osiris.cpp src/Osiris_detect.h src/data_IO.h src/build_model.h src/event_handling.h src/event_handling.cpp
+Osiris_regions.o : src/error_handling.h src/Osiris_regions.h src/Osiris_regions.cpp
+	$(CXX) $(CXXFLAGS) src/Osiris_regions.cpp $(LIBFLAGS)
+
+Osiris.o : src/Osiris.cpp src/Osiris_detect.h src/Osiris_regions.h src/data_IO.h src/build_model.h src/event_handling.h src/event_handling.cpp
 	$(CXX) $(CXXFLAGS) src/Osiris.cpp $(LIBFLAGS)
 
 $(MAIN_EXECUTABLE) : $(OBJS) $(HTS_LIB) $(HDF5_LIB) $(PENTHUS_LIB)
