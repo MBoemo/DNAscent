@@ -165,7 +165,7 @@ print_split_reference(referenceDict)
 
 #open an output file for each reference sequence
 out_files = list()
-sam_file = pysam.Samfile('alignments.sorted.bam')
+sam_file = pysam.Samfile('alignments.minimap2.sorted.bam')
 for x in sam_file.references:
 	print x
 	out_files.append(pysam.Samfile(x + ".bam", "wb", template=sam_file))
@@ -174,7 +174,7 @@ for x in sam_file.references:
 for record in sam_file:
 
 	#catch bad alignment
-	if record.aend is None or record.query_alignment_length is None or record.reference_name is None:
+	if record.aend is None or record.query_alignment_length is None or record.reference_name is None or record.query_length == 0:
 		continue
 
 	query_cover = float(record.query_alignment_length) / float(record.query_length) #fraction of the read that aligns to the reference
@@ -182,9 +182,7 @@ for record in sam_file:
 	overflow = float(record.query_length) / float( sam_file.lengths[record.reference_id] )
 
 	#only keep reads that have the analogue ROI mapped, reads where at least 90% aligns to the reference, and reads that aren't the reverse complement
-	#if query_cover > 0.9 and reference_cover > 0.9 and overflow < 1.2 and (record.is_reverse == False):
-
-	if record.is_reverse == False:
+	if query_cover > 0.9 and reference_cover > 0.9 and overflow < 1.2 and (record.is_reverse == False):
 		out_files[record.reference_id].write(record)	
 
 #index the new BAM files

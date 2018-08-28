@@ -363,7 +363,7 @@ void getEvents( std::string fast5Filename, std::vector<double> &raw ){
 
 		raw.push_back( (rawptr[i] + offset) * raw_unit );
 	}
-
+	free(rawptr);
 	H5Fclose(hdf5_file);
 }
 

@@ -112,8 +112,8 @@ void callRegions( readDetection &rd ){
 	hmm.add_state(BrdUregion);
 	hmm.add_state(Thymregion);
 
-	double toEnd = 1.0 / (double)rd.BrdUProb.size();
-	double expectedRegionLen = 24.0 / 5000.0;
+	double toEnd = 1.0/10000;//1.0 / (double)rd.BrdUProb.size();
+	double expectedRegionLen = 1.0/10000;//24.0 / 5000.0;
 
 	/*from start */
 	hmm.add_transition( hmm.start, BrdUregion, toEnd );
@@ -161,11 +161,11 @@ void callRegions( readDetection &rd ){
 
 				end = rd.positions[i-1];
 				Track tr;
-				//if ( end - start > 1000){
+				if ( end - start > 1000){
 				tr.lowerBound = start;
 				tr.upperBound = end;
 				rd.tracks.push_back(tr);
-				//}
+				}
 			}
 		}
 	}
@@ -240,7 +240,7 @@ int regions_main( int argc, char** argv ){
 
 				for ( int i = 0; i < buffer.size(); i++ ){
 
-					callRegions( buffer[i] );
+					//callRegions( buffer[i] );
 					writePSL( buffer[i], reference );
 				}
 				buffer.clear();
@@ -265,18 +265,30 @@ int regions_main( int argc, char** argv ){
 
 					buffer.back().positions.push_back(std::stoi(column));
 				}
-				else if (cIndex == 2){
+				/*else if (cIndex == 2){
 
 					T = std::stof(column);
 				}
 				else if (cIndex == 3){
 
 					B = std::stof(column);
+				}*/
+				else if ( cIndex == 1 ){
+
+					double ll = std::stof(column);
+					if ( ll > 2.0 ){
+
+						Track t;
+						t.lowerBound = buffer.back().positions.back();
+						t.upperBound = t.lowerBound + 1;
+						buffer.back().tracks.push_back(t);
+					}
+
 				}
 				cIndex++;
 			}
-			double normalisedProb = lnQuot(B, lnSum(B, T));
-			buffer.back().BrdUProb.push_back( eexp(normalisedProb) );
+			//double normalisedProb = lnQuot(B, lnSum(B, T));
+			//buffer.back().BrdUProb.push_back( eexp(normalisedProb) );
 		}
 	}
 
