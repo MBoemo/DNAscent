@@ -101,44 +101,34 @@ void callRegions( readDetection &rd ){
 	HiddenMarkovModel hmm = HiddenMarkovModel( 2, 3 );
 
 	SilentDistribution sd( 0.0, 0.0 );
-	UniformCDF distForB( 0, 1 );
-	Inv_UniformCDF distForT( 0, 1 );
+	BernoulliDistribution distForB( 0.25, 0 );
+	BernoulliDistribution distForT( 0.01, 0 );
 
-	State BrdUskip( &distForT, "skip", "", "", 1.0);
 	State BrdUregion( &distForB, "BrdU", "", "", 1.0);
 	State Thymregion( &distForT, "Thym", "", "", 1.0);
 
-	hmm.add_state(BrdUskip);
 	hmm.add_state(BrdUregion);
 	hmm.add_state(Thymregion);
 
-	double toEnd = 1.0/10000;//1.0 / (double)rd.BrdUProb.size();
-	double expectedRegionLen = 1.0/10000;//24.0 / 5000.0;
-
 	/*from start */
-	hmm.add_transition( hmm.start, BrdUregion, toEnd );
-	hmm.add_transition( hmm.start, Thymregion, 1 - toEnd );
+	hmm.add_transition( hmm.start, BrdUregion, 0.5 );
+	hmm.add_transition( hmm.start, Thymregion, 0.5 );
 
 	/*from BrdU */
-	hmm.add_transition( BrdUregion, BrdUskip, 0.5 );
-	hmm.add_transition( BrdUregion, BrdUregion, 0.5 - expectedRegionLen - toEnd  );
-	hmm.add_transition( BrdUregion, Thymregion, expectedRegionLen );
-	hmm.add_transition( BrdUregion, hmm.end, toEnd );
-
-	/*from BrdUskip */
-	hmm.add_transition( BrdUskip, BrdUskip, 0.5 );
-	hmm.add_transition( BrdUskip, BrdUregion, 0.5 - toEnd );
-	hmm.add_transition( BrdUskip, hmm.end, toEnd );
+	hmm.add_transition( BrdUregion, BrdUregion, 1.0 - 2.0/100.0 );
+	hmm.add_transition( BrdUregion, Thymregion, 1.0/100.0 );
+	hmm.add_transition( BrdUregion, hmm.end, 1.0/100.0 );
 
 	/*from Thym */
-	hmm.add_transition( Thymregion, Thymregion, 1.0 - 2.0*toEnd );
-	hmm.add_transition( Thymregion, BrdUregion, toEnd );
-	hmm.add_transition( Thymregion, hmm.end, toEnd );
+	hmm.add_transition( Thymregion, Thymregion, 1.0 - 2.0/100.0 );
+	hmm.add_transition( Thymregion, BrdUregion, 1.0/100.0 );
+	hmm.add_transition( Thymregion, hmm.end, 1.0/100.0 );
 
 	hmm.finalise();
 
 	std::pair< double, std::vector< std::string > > path = hmm.viterbi( rd.BrdUProb );
 
+	//print out path for debugging
 	//for ( int i = 0; i < path.second.size(); i++ ){
 
 	//	std::cout << path.second[i] << " ";
@@ -148,7 +138,7 @@ void callRegions( readDetection &rd ){
 	int start, end;
 	for ( int i = 1; i < path.second.size() - 1; i++ ){
 
-		if ( path.second[i] == "skip" or path.second[i] == "BrdU" ){
+		if ( path.second[i] == "BrdU" ){
 
 			if (path.second[i-1] == "START" or path.second[i-1] == "Thym"){
 
@@ -157,15 +147,15 @@ void callRegions( readDetection &rd ){
 		}
 		else{
 
-			if (path.second[i-1] == "skip" or path.second[i-1] == "BrdU"){
+			if (path.second[i-1] == "BrdU"){
 
 				end = rd.positions[i-1];
 				Track tr;
-				if ( end - start > 1000){
+				//if ( end - start > 1000){
 				tr.lowerBound = start;
 				tr.upperBound = end;
 				rd.tracks.push_back(tr);
-				}
+				//}
 			}
 		}
 	}
@@ -240,8 +230,11 @@ int regions_main( int argc, char** argv ){
 
 				for ( int i = 0; i < buffer.size(); i++ ){
 
-					//callRegions( buffer[i] );
-					writePSL( buffer[i], reference );
+					if ( buffer[i].BrdUProb.size() > 0 ){
+
+						callRegions( buffer[i] );
+						writePSL( buffer[i], reference );
+					}
 				}
 				buffer.clear();
 			}
@@ -258,37 +251,18 @@ int regions_main( int argc, char** argv ){
 			std::string column;
 			std::stringstream ssLine(line);
 			int position, cIndex = 0;
-			double B, T;
 			while( std::getline( ssLine, column, '\t' ) ){
 
 				if (cIndex == 0){
 
 					buffer.back().positions.push_back(std::stoi(column));
 				}
-				/*else if (cIndex == 2){
+				else if (cIndex == 1){
 
-					T = std::stof(column);
-				}
-				else if (cIndex == 3){
-
-					B = std::stof(column);
-				}*/
-				else if ( cIndex == 1 ){
-
-					double ll = std::stof(column);
-					if ( ll > 2.0 ){
-
-						Track t;
-						t.lowerBound = buffer.back().positions.back();
-						t.upperBound = t.lowerBound + 1;
-						buffer.back().tracks.push_back(t);
-					}
-
+					buffer.back().BrdUProb.push_back( std::stoi( column ) );
 				}
 				cIndex++;
 			}
-			//double normalisedProb = lnQuot(B, lnSum(B, T));
-			//buffer.back().BrdUProb.push_back( eexp(normalisedProb) );
 		}
 	}
 

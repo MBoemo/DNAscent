@@ -12,12 +12,13 @@ from sklearn.cluster import DBSCAN
 from sklearn import mixture
 
 f = open(sys.argv[1],'r')
+f_out = open(sys.argv[1] + '.dbscanFiltered','w')
 output = []
-
-target = 'dbscan_ligation_25percentBrdU'
+lineHolder = []
+idx = 0
+indices = []
 
 first = True
-turnOn = True
 for line in f:
 
 	splitLine = line.split('\t')
@@ -28,48 +29,40 @@ for line in f:
 		splitLine_colon = splitLine_space[1].split(':')
 		thisChromosome = splitLine_colon[0]
 
-		#if thisChromosome == target:
-		#	turnOn = True
-		#else:
-		#	turnOn = False
-
-
 		if not first and len(positions) > 0:
 		
 			ar = np.array(positions)
-			db = DBSCAN( eps = 100, min_samples = 4 ).fit(ar.reshape(-1,1))
-			singularities_filtered = []
+			db = DBSCAN( eps = 100, min_samples = 2 ).fit(ar.reshape(-1,1))
 			for j, label in enumerate(db.labels_):
 				if label == -1:
-					continue
-				else:
-					output.append(positions[j])
-#					singularities_filtered.append(positions[j])
+					lineHolder[indices[j]] = (lineHolder[indices[j]][0], 0, 'f')
+				#else:
+				#	f_out.write(lineHolder[j])
 
-#			if len(singularities_filtered)>0:
-#				ar = np.array(singularities_filtered)
-#				db = DBSCAN( eps = 1000, min_samples = 25 ).fit(ar.reshape(-1,1))
-#				singularities_filtered = []
-#				for j, label in enumerate(db.labels_):
-#					if label == -1:
-#						continue
-#					else: 
-#						output.append(positions[j])
-
-			
-
+			for t in lineHolder:
+				f_out.write(str(t[0]) + '\t' + str(t[1]) + '\t' + str(t[2]) + '\n')
 
 		positions = []
+		lineHolder = []
+		indices = []
+		idx = 0
 		first = False
+		f_out.write(line)
 
-	elif turnOn:
+	else:
 
 		if float(splitLine[1]) > 2.5:
-			positions.append(int(splitLine[0]))
 
-plt.hist(output,400,alpha=0.5,linewidth=0)
-plt.title('Ligation Substrate - 25% BrdU')
-plt.xlabel('Position on Chromosome (bp)')
-plt.ylabel('BrdU Call Count')
-plt.savefig(target+'.pdf')
+			positions.append(int(splitLine[0]))
+			indices.append(idx)
+
+		if float(splitLine[1]) > 2.5:
+			call = 1
+		else:
+			call = 0
+		
+		lineHolder.append( (splitLine[0], call, '') )
+		idx += 1
+
+f_out.close()
 f.close()
