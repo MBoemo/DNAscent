@@ -29,6 +29,9 @@ p = 0.2
 resolution = 2000
 first = True
 regionThreshold = -1.5
+printThisOne = False
+
+count = 1
 
 for line in f:
 
@@ -36,11 +39,15 @@ for line in f:
 
 	if line[0] == '>':
 
+
 		if not first:
 			
-			if len(regionBuffer) > 2:
-				print readID
-				print " ".join(regionBuffer[0])
+			if len(regionBuffer) > 15 and printThisOne:
+
+				f = open(str(count) + '.bedgraph','w')
+
+				f.write( 'track type=bedGraph name="'+readID+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20'+'\n')
+				f.write( " ".join(regionBuffer[0])+'\n' )
 
 				for i, bufEntry in enumerate(regionBuffer[1:-1]):
 
@@ -59,8 +66,10 @@ for line in f:
 						else:
 							ThymScores.append(float(bufEntry[3]))
 
-					print " ".join(bufEntry)
-				print " ".join(regionBuffer[-1:][0])
+					f.write( " ".join(bufEntry)+'\n')
+				f.write( " ".join(regionBuffer[-1:][0]) +'\n')
+				f.close()
+				count += 1
 
 		splitLine_space = line.split(' ')
 		splitLine_colon = splitLine_space[1].split(':')
@@ -72,6 +81,7 @@ for line in f:
 		calls = 0
 		regionBuffer = []
 		first = False
+		printThisOne = False
 
 	else:
 
@@ -91,6 +101,7 @@ for line in f:
 			tempCall = "Thym"
 			if zScore >= regionThreshold:
 				tempCall = "BrdU"
+				printThisOne = True
 
 			regionBuffer.append( [thisChromosome, str(startingPos), splitLine[0], str(zScore), tempCall] )
 			startingPos = -1

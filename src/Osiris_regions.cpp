@@ -222,6 +222,7 @@ int regions_main( int argc, char** argv ){
 
 	std::string line;
 	std::vector< readDetection > buffer;
+	int maxDistance = 500, starting = -1, gap = 0;
 	while ( std::getline( inFile, line ) ){
 
 		if ( line.substr(0,1) == ">" ){
@@ -246,6 +247,12 @@ int regions_main( int argc, char** argv ){
 			rd.mappingUpper = std::stoi(line.substr(line.rfind('-')+1));
 			buffer.push_back(rd);
 		}
+		else if ( distance > maxDistance ){
+
+
+
+
+		}
 		else{
 
 			std::string column;
@@ -255,9 +262,21 @@ int regions_main( int argc, char** argv ){
 
 				if (cIndex == 0){
 
-					buffer.back().positions.push_back(std::stoi(column));
+					if ( starting == -1 ){
+
+						starting = std::stoi(column);
+					}
+					else{
+
+						gap += std::stoi(column) - starting;
+					}
 				}
 				else if (cIndex == 1){
+
+					if ( std::stof(column) > 2.5 ) calls += 1;
+					attempts += 1;
+
+
 
 					buffer.back().BrdUProb.push_back( std::stoi( column ) );
 				}
