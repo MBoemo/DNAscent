@@ -512,8 +512,8 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
     
 	bool failed = false;
 	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold) {
-		failed = true;
 		
+		failed = true;		
 		eventSeqLocPairs.clear();
 	}
 

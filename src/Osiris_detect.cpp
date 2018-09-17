@@ -239,6 +239,27 @@ float fast5_read_float_attribute(hid_t group, const char *attribute) {
 //end scrappie
 
 
+std::string getQuerySequence( bam1_t *record ){ 
+	
+	std::string seq;
+	uint8_t *a_seq = bam_get_seq(record);
+	for ( int i = 0; i < record -> core.l_qseq; i++){
+		int seqInBase = bam_seqi(a_seq,i);
+
+		switch (seqInBase) {
+
+			case 1: seq += "A"; break;
+			case 2: seq += "C"; break;
+			case 4: seq += "G"; break;
+			case 8: seq += "T"; break;
+			case 15: seq += "N"; break;
+			default: throw ParsingError();
+		}
+	}
+	return seq;
+}
+
+
 void parseCigar(bam1_t *record, std::map< int, int > &ref2query, int &refStart, int &refEnd ){
 
 	//initialise reference and query coordinates for the first match
@@ -283,6 +304,19 @@ void parseCigar(bam1_t *record, std::map< int, int > &ref2query, int &refStart, 
 		//N.B. hard clipping advances neither refernce nor query, so ignore it
 	}
 	refEnd = refStart + refPosition;
+
+	//correct for reverse complements
+	if ( bam_is_rev(record) ){
+
+		std::map<int, int> cigar_rc;
+		std::string basecall = getQuerySequence(record);
+		int basecallLen = basecall.length();
+		for ( auto e = ref2query.begin(); e!= ref2query.end(); e++ ){
+
+			cigar_rc[refEnd - refStart - (e -> first)] = basecallLen - (e -> second);
+		}
+		ref2query = cigar_rc;
+	}
 }
 
 
@@ -300,26 +334,6 @@ void parseIndex( std::string indexFilename, std::map< std::string, std::string >
 	}
 }
 
-
-std::string getQuerySequence( bam1_t *record ){ 
-	
-	std::string seq;
-	uint8_t *a_seq = bam_get_seq(record);
-	for ( int i = 0; i < record -> core.l_qseq; i++){
-		int seqInBase = bam_seqi(a_seq,i);
-
-		switch (seqInBase) {
-
-			case 1: seq += "A"; break;
-			case 2: seq += "C"; break;
-			case 4: seq += "G"; break;
-			case 8: seq += "T"; break;
-			case 15: seq += "N"; break;
-			default: throw ParsingError();
-		}
-	}
-	return seq;
-}
 
 void getEvents( std::string fast5Filename, std::vector<double> &raw ){
 
@@ -368,20 +382,16 @@ void getEvents( std::string fast5Filename, std::vector<double> &raw ){
 }
 
 
-int countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &numOfRecords, double &avgRecordLength ){
+void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &numOfRecords ){
 
 	hts_itr_t* itr = sam_itr_querys(bam_idx,bam_hdr,".");
 	int result;
-	int recordLengths = 0;
 	do {
 
 		bam1_t *record = bam_init1();
 		result = sam_itr_next(bam_fh, itr, record);
-		if ( bam_is_rev(record) ) continue;
 		numOfRecords++;
-		recordLengths += record -> core.l_qseq;
 	} while (result > 0);
-	avgRecordLength = (double)recordLengths / (double)numOfRecords;
 }
 
 
@@ -406,29 +416,29 @@ std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 
-		int BrdULoc = POIs[i];
-		int posOnQuery = (r.refToQuery).at(BrdULoc);
+		int posOnRef = POIs[i];
+		int posOnQuery = (r.refToQuery).at(posOnRef);
 
-		std::string readSnippet = (r.referenceSeqMappedTo).substr(BrdULoc - windowLength, 2*windowLength);
+		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength);
 		std::vector< double > eventSnippet;
 
 		/*get the events that correspond to the read snippet */
 		for ( unsigned int j = 0; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[BrdULoc - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[BrdULoc + windowLength] ){
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef + windowLength] ){
 
 				eventSnippet.push_back( (r.normalisedEvents)[(r.eventAlignment)[j].first] );
 			}
 
 			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[BrdULoc + windowLength] ) break;
+			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef + windowLength] ) break;
 		}
 		double logProbThymidine = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, false);
 		double logProbAnalogue = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, true);
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
-		ss << BrdULoc + r.refStart << "\t" << logLikelihoodRatio << "\t" << logProbThymidine << "\t" << logProbAnalogue << "\t" <<  (r.referenceSeqMappedTo).substr(BrdULoc, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
+		ss << posOnRef + r.refStart << "\t" << logLikelihoodRatio << "\t" << logProbThymidine << "\t" << logProbAnalogue << "\t" <<  (r.referenceSeqMappedTo).substr(posOnRef, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
 	}
 	return ss;
 }
@@ -469,8 +479,7 @@ int detect_main( int argc, char** argv ){
 
 	/*initialise progress */
 	int numOfRecords = 0, prog = 0, failed = 0;
-	double avgRecordLength;
-	countRecords( bam_fh, bam_idx, bam_hdr, numOfRecords, avgRecordLength );
+	countRecords( bam_fh, bam_idx, bam_hdr, numOfRecords );
 	progressBar pb(numOfRecords);
 
 	//build an iterator for all reads in the bam file
@@ -486,9 +495,6 @@ int detect_main( int argc, char** argv ){
 		//initialise the record and get the record from the file iterator
 		bam1_t *record = bam_init1();
 		result = sam_itr_next(bam_fh, itr, record);
-
-		//skip reverse complements
-		if ( bam_is_rev(record) ) continue;
 
 		//get the read name (which will be the ONT readID from Albacore basecall)
 		const char *queryName = bam_get_qname(record);
@@ -516,11 +522,18 @@ int detect_main( int argc, char** argv ){
 			continue;
 		}
 
-		/*get the subsequence of the reference this read mapped to and build an HMM from it */
+		/*get the subsequence of the reference this read mapped to */
 		r.referenceSeqMappedTo = reference[r.referenceMappedTo].substr(r.refStart, r.refEnd - r.refStart);
 
 		//fetch the basecall from the bam file
 		r.basecall = getQuerySequence(record);
+
+		//account for reverse complements
+		if ( bam_is_rev(record) ){
+
+			r.basecall = reverseComplement( r.basecall );
+			r.referenceSeqMappedTo = reverseComplement( r.referenceSeqMappedTo );
+		}
 
 		buffer_shortReads.push_back(r);
 
@@ -546,12 +559,12 @@ int detect_main( int argc, char** argv ){
 				{
 					outFile << ss.rdbuf();
 					prog++;
-					pb.displayProgress( prog, failed, buffer_shortReads.size(), args.threads );
+					pb.displayProgress( prog, failed );
 				}
 			}
 			buffer_shortReads.clear();
 		}
-		pb.displayProgress( prog, failed, buffer_shortReads.size(), args.threads );	
+		pb.displayProgress( prog, failed );	
 	} while (result > 0);
 
 	/*empty the short read buffer in case there are reads still in it */
@@ -566,7 +579,7 @@ int detect_main( int argc, char** argv ){
 			prog++;
 		}
 	}
-	pb.displayProgress( prog, failed, buffer_shortReads.size(), args.threads );
+	pb.displayProgress( prog, failed );
 
 	return 0;
 }

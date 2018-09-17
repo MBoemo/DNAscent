@@ -38,9 +38,7 @@ class progressBar{
 			_digits = std::to_string( maxNumber).length() + 1;
 			_startTime = std::chrono::steady_clock::now();
 		}
-		void displayProgress( unsigned int currentNumber, unsigned int failed, unsigned int bufferConents, unsigned int bufferSize ){
-
-			int bufLength = std::to_string(bufferSize).length() + 1;
+		void displayProgress( unsigned int currentNumber, unsigned int failed ){
 
 			_currentTime = std::chrono::steady_clock::now();
 			 std::chrono::duration<double> elapsedTime = _currentTime - _startTime;
@@ -67,7 +65,6 @@ class progressBar{
 				unsigned int secs = (estTimeLeft % 3600) % 60;
 
 				std::cout << std::right << std::setw(2) << hours << "hr" << std::setw(2) << mins << "min" << std::setw(2) << secs << "sec  ";
-				std::cout << std::right << std::setw(bufLength) << bufferConents << "/" << bufferSize << "  ";
 				std::cout << "f: " << std::right << std::setw(_digits) << failed << std::setw(3) << "\r";
 				std::cout.flush();
 			}
@@ -101,6 +98,34 @@ inline std::string reverseComplement( std::string DNAseq ){
 		}
 	}
 	return revComp;
+}
+
+
+inline std::string complement( std::string DNAseq ){
+
+	std::string comp;
+
+	for ( std::string::iterator i = DNAseq.begin(); i < DNAseq.end(); i++ ){
+	
+		switch( *i ){
+			case 'A' :
+				comp += 'T';
+				break;
+			case 'T' :
+				comp += 'A';
+				break;
+			case 'G' :
+				comp += 'C';
+				break;
+			case 'C' :
+				comp += 'G';
+				break;
+			default:
+				std::cout << "Exiting with error.  Invalid character passed to reverse complement function.  Must be A, T, G, or C." << std::endl;
+				exit( EXIT_FAILURE );
+		}
+	}
+	return comp;
 }
 
 
