@@ -37,7 +37,7 @@ htslib/libhts.a:
 Penthus/lPenthus.a:
 	cd Penthus && make || exit 255
 
-lib/libhdf5.a:
+hdf5-1.8.14/hdf5/lib/libhdf5.a:
 	if [ ! -e hdf5-1.8.14.tar.gz ] || [ ! -e hdf5-1.8.14/hdf5/lib/libhdf5.a ]; then \
 		wget https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8/hdf5-1.8.14/src/hdf5-1.8.14.tar.gz; \
 		tar -xzf hdf5-1.8.14.tar.gz || exit 255
