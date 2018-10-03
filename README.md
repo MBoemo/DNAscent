@@ -1,11 +1,43 @@
 # Osiris
-Software for detecting base analogues in Oxford Nanopore reads.  The two general uses are:
-- determining the characteristic current produced by a 6mer that contains a single base analogue,
-- determining where base analogues are incorporated in individual Oxford Nanopore reads.  
+Software for detecting contiguous regions of base analogues incorporated in Oxford Nanopore reads.
 
-It relies on Penthus (https://github.com/MBoemo/Penthus) for its hidden Markov functionality.  Development was done using gcc 5.4.0 on an Ubuntu 16.04 platform.
+## Downloading and Compiling Osiris
+Clone the Osiris repository with the recursive flag so that the dependencies as well.
+```shell
+git clone --recursive https://github.com/MBoemo/Osiris.git
+```
+The Osiris directory will appear in your current directory.  Compile the software by running:
+```shell
+cd Osiris
+make
+```
+This will put the Osiris executable into the Osiris/bin directory.
+
+## Sample Workflow
+We assume the following:
+- you have a directory of 1D R9.5 450bp/s Oxford Nanopore fast5 reads (which may be in subdirectories) that you want to use for detection,
+- these reads have been basecalled to fastq format using Albacore (version > 2.0),
+- you have a reference/genome file for your reads in fasta format,
+- you have aligned the reads fastq to a reference using an appropriate aligner and have an indexed BAM file.
+
+Before running detection, the fast5 reads need to be indexed.  Run,
+```shell
+python Osiris/scripts/index.py -d path/to/fast5/reads
+```
+This will produce a file `index.osiris` which will be needed as input to the `Osiris detect` executable.
+
+You can run `Osiris detect` (on 10 threads, for example) by running:
+```shell
+bin/Osiris detect -b /path/to/alignment.bam -r path/to/reference.fasta -m pore_models/BrdU_threshold2.0.model -i index.osiris -o output.detect -t 10
+```
+This will put a file called `output.detect` in your current directory.  Each read is given a header starting with a `>` character, followed by the read's ONT read ID, the chromosome this read aligned to, and the alignment's start and end on that chromosome.  The first column gives a position on the reference where a call was attempted, and the second column gives the log likelihood that the 6mer at this position contained a BrdU.  The third and fourth columns show the 6mer on the reference and the aligned 6mer on the basecalled read, respectively.  (Note that when high concentrations of analogues are present, this usually causes a significant disruption to Albacore's basecalling accuracy.)
+
+
+
+
 
 ## Dependencies
+It relies on Penthus (https://github.com/MBoemo/Penthus) for its hidden Markov model functionality.  Development was done using gcc 5.4.0 on an Ubuntu 16.04 platform.
 We have tried to keep dependencies to a bare minimum and only use standard software when dependencies were absolutely required.  The following are required for the scripts that prepare data for Osiris:
 - Python 2.7 (https://www.python.org/downloads/),
 - pysam (https://github.com/pysam-developers/pysam/releases),
@@ -13,24 +45,6 @@ We have tried to keep dependencies to a bare minimum and only use standard softw
 - samtools (https://github.com/samtools/samtools/releases),
 - GraphMap (https://github.com/isovic/graphmap/releases).
 
-## Getting and Compiling Osiris
-Clone the Osiris repository with the recursive flag so that you get Penthus as well.
-```shell
-git clone --recursive https://github.com/MBoemo/Osiris.git
-```
-The Osiris directory will appear in your current directory.  Navigate to the Penthus subdirectory of Osiris and compile Penthus by running:
-```shell
-make
-```
-Navigate one level up to the Osiris directory and compile the software by running:
-```shell
-make
-```
-This will put the Osiris executable into Osiris/bin.  Optionally, you can add the Osiris executable to your path with:
-```shell
-PATH=$PATH:/path/to/bin
-export PATH
-```
 
 ## Tutorial Using Example Data
 We have provided example data to be used in the following tutorial.  [Complete this later]
@@ -107,4 +121,3 @@ The header following the > character shows the 7mer for this bin (the values of 
 ### Detection
 
 [Complete this later]
-

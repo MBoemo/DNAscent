@@ -13,7 +13,7 @@ LIBFLAGS += -L Penthus/ -lPenthus
 #hdf5
 H5_LIB = ./hdf5-1.8.14/hdf5/lib/libhdf5.a
 H5_INCLUDE = -I./hdf5-1.8.14/hdf5/include
-LIBFLAGS += -Wl,-rpath,hdf5-1.8.14/hdf5/lib -L hdf5-1.8.14/hdf5/lib -lhdf5
+LIBFLAGS += -Wl,-rpath,$(dir $(abspath $(lastword $(MAKEFILE_LIST))))hdf5-1.8.14/hdf5/lib -L hdf5-1.8.14/hdf5/lib -lhdf5
 
 #hts
 HTS_LIB = ./htslib/libhts.a
