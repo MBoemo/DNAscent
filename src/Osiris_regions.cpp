@@ -5,6 +5,7 @@
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
+
  #include <fstream>
 #include "Osiris_regions.h"
 #include "data_IO.h"
@@ -35,7 +36,7 @@
 	std::string outputFilename;
 };
 
- Arguments parseRegionsArguments( int argc, char** argv ){
+Arguments parseRegionsArguments( int argc, char** argv ){
 
  	if( argc < 2 ){
  		std::cout << "Exiting with error.  Insufficient arguments passed to Osiris regions." << std::endl << help << std::endl;
@@ -97,7 +98,74 @@ struct region{
 	std::string call;
 	int start, end;
 	double score;
+	std::string forkDir;
 };
+
+
+void callOrigins( std::vector< region > &regions, double threshold ){
+
+	//do an initial moving average pass through the scores
+	std::vector< double > out;
+	for ( int i = 1; i < regions.size() - 1; i++ ){
+
+		out.push_back( ( regions[i-1].score + regions[i].score + regions[i+1].score ) / 3.0 );
+	}
+
+	for ( int i = 0; i < out.size(); i++ ){
+
+		regions[i+1].score = out[i];
+	}
+
+
+	std::vector< double > derivatives;
+
+	//get the forward derivative at the first region
+	derivatives.push_back( (regions[1].score - regions[0].score)/2.0 );
+	
+	//get the central derivative for all the middle regions
+	for ( int i = 1; i < regions.size() - 1; i++ ){
+
+		double former = regions[i-1].score;
+		double next = regions[i+1].score;
+
+		derivatives.push_back( ( next - former ) / 2.0 );
+	}
+
+	//backward derivative for the last region
+	derivatives.push_back( (regions[regions.size()-1].score - regions[regions.size()-2].score)/2.0 );
+
+	//error correct for derivatives that are sandwiched between two of the opposite sign
+	for ( int i = 1; i < derivatives.size() - 1; i++ ){
+
+		if ( derivatives[i-1] < 0 and derivatives[i+1] < 0 and derivatives[i] > 0 ) derivatives[i] = ( derivatives[i-1] + derivatives[i+1] ) / 2.0;
+		if ( derivatives[i-1] > 0 and derivatives[i+1] > 0 and derivatives[i] < 0 ) derivatives[i] = ( derivatives[i-1] + derivatives[i+1] ) / 2.0;
+	}
+
+	//error correct on BrdU calls for the middle
+	for ( int i = 1; i < regions.size() - 1; i++ ){
+
+		if ( regions[i-1].call == "BrdU" and regions[i+1].call == "BrdU" and regions[i].call == "Thym" ) regions[i].call = "BrdU";
+		if ( regions[i-1].call == "Thym" and regions[i+1].call == "Thym" and regions[i].call == "BrdU" ) regions[i].call = "Thym";
+
+	}
+
+	//error correct on BrdU calls at the ends
+	if ( regions.size() > 2 ){
+	
+		if ( regions[0].call == "BrdU" and regions[1].call == "Thym" and regions[2].call == "Thym" ) regions[0].call = "Thym";
+		if ( regions[0].call == "Thym" and regions[1].call == "BrdU" and regions[2].call == "BrdU" ) regions[0].call = "BrdU";
+
+		if ( regions[regions.size()-1].call == "BrdU" and regions[regions.size()-2].call == "Thym" and regions[regions.size()-3].call == "Thym" ) regions[0].call = "Thym";
+		if ( regions[regions.size()-1].call == "Thym" and regions[regions.size()-2].call == "BrdU" and regions[regions.size()-3].call == "BrdU" ) regions[0].call = "BrdU";
+	}
+
+	//set the fork direction
+	for ( int i = 0; i < regions.size(); i++ ){
+
+		if ( regions[i].call == "BrdU" and derivatives[i] < 0 ) regions[i].forkDir = "+";
+		if ( regions[i].call == "BrdU" and derivatives[i] > 0 ) regions[i].forkDir = "-";
+	}
+}
 
 
 int regions_main( int argc, char** argv ){
@@ -120,10 +188,12 @@ int regions_main( int argc, char** argv ){
 			if ( buffer.size() > 0 ){
 
 				outFile << header << std::endl;
+			
+				callOrigins(buffer,args.threshold);
 				
 				for ( auto r = buffer.begin(); r < buffer.end(); r++ ){
 
-					outFile << r -> start << "\t" << r -> end << "\t" << r -> score << "\t" << r -> call <<  std::endl;
+					outFile << r -> start << "\t" << r -> end << "\t" << r -> score << "\t" << r -> call << "\t" << r -> forkDir <<  std::endl;
 				}
 			}
 			header = line;

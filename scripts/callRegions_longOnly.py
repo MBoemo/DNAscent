@@ -27,6 +27,7 @@ resolution = 2000
 first = True
 regionThreshold = -2
 printThisOne = False
+count = 0
 
 for line in f:
 
@@ -37,9 +38,9 @@ for line in f:
 
 		if not first:
 			
-			if len(regionBuffer) >= 10 and printThisOne:
+			if len(regionBuffer) >= 20 and printThisOne:
 
-				f = open(readID[1:] + '.bedgraph','w')
+				f = open(str(count) + '_'+readID[1:] + '.bedgraph','w')
 
 				f.write( 'track type=bedGraph name="'+readID+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20'+'\n')
 				f.write( " ".join(regionBuffer[0][0:4])+'\n' )
@@ -71,6 +72,7 @@ for line in f:
 		regionBuffer = []
 		first = False
 		printThisOne = False
+		count += 1
 
 	else:
 
