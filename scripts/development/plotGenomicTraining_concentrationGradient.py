@@ -203,5 +203,5 @@ for i, key in enumerate(sixmer2eventsBrdU_60):
 		plt.ylabel('Count')
 		plt.title( key )
 		plt.legend(loc='upper right')
-		plt.savefig( key + '.png' )
+		plt.savefig( key + '.pdf' )
 		plt.close()

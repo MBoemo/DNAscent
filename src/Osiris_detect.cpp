@@ -9,16 +9,17 @@
 #include <fstream>
 #include "Osiris_detect.h"
 #include "common.h"
-#include "build_model.h"
 #include "data_IO.h"
 #include "error_handling.h"
 #include "event_handling.h"
 #include "poreModels.h"
 #include "poreSpecificParameters.h"
+#include "../Penthus/src/hmm.h"
+#include "../Penthus/src/probability.h"
+#include "../Penthus/src/states.h"
 #include "../htslib/htslib/hts.h"
 #include "../htslib/htslib/sam.h"
 #include "../fast5/include/fast5.hpp"
-
 
 static const char *help=
 "build: Osiris executable that detects BrdU in Oxford Nanopore reads.\n"
@@ -116,6 +117,7 @@ Arguments parseDetectArguments( int argc, char** argv ){
 
 double seqProbability( std::string &sequence, std::vector<double> &events, std::map< std::string, std::pair< double, double > > &analogueModel, int BrdU_idx, bool isBrdU ){
 
+	extern std::map< std::string, std::pair< double, double > > SixMer_model;
 
 	HiddenMarkovModel hmm = HiddenMarkovModel( 3*sequence.length(), 3*sequence.length() + 2 );
 
@@ -438,7 +440,7 @@ std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string
 		double logProbAnalogue = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, true);
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
-		ss << posOnRef + r.refStart << "\t" << logLikelihoodRatio << "\t" << logProbThymidine << "\t" << logProbAnalogue << "\t" <<  (r.referenceSeqMappedTo).substr(posOnRef, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
+		ss << posOnRef + r.refStart << "\t" << logLikelihoodRatio << "\t" <<  (r.referenceSeqMappedTo).substr(posOnRef, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
 	}
 	return ss;
 }
@@ -540,20 +542,22 @@ int detect_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer_shortReads.size() >= args.threads){
 
-			#pragma omp parallel for schedule(dynamic) shared(windowLength,buffer_shortReads,SixMer_model,analogueModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(static) shared(buffer_shortReads,windowLength,analogueModel,args,prog,failed) num_threads(args.threads)
 			for (int i = 0; i < buffer_shortReads.size(); i++){
 
-				normaliseEvents(buffer_shortReads[i]);
+				read readForDetect = buffer_shortReads[i];
+
+				normaliseEvents(readForDetect);
 
 				//catch reads with rough event alignments that fail the QC
-				if ( buffer_shortReads[i].eventAlignment.size() == 0 ){
+				if ( readForDetect.eventAlignment.size() == 0 ){
 
 					failed++;
 					prog++;
 					continue;
 				}
 
-				std::stringstream ss = llAcrossRead(buffer_shortReads[i], windowLength, analogueModel);
+				std::stringstream ss = llAcrossRead(readForDetect, windowLength, analogueModel);
 
 				#pragma omp critical
 				{
@@ -568,7 +572,7 @@ int detect_main( int argc, char** argv ){
 	} while (result > 0);
 
 	/*empty the short read buffer in case there are reads still in it */
-	#pragma omp parallel for schedule(dynamic) shared(windowLength,buffer_shortReads,SixMer_model,analogueModel) num_threads(args.threads)
+	#pragma omp parallel for schedule(dynamic) shared(windowLength,buffer_shortReads,analogueModel) num_threads(args.threads)
 	for (int i = 0; i < buffer_shortReads.size(); i++){
 
 		std::stringstream ss = llAcrossRead(buffer_shortReads[i], windowLength, analogueModel);

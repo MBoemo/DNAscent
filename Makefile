@@ -1,64 +1,79 @@
-OBJS = event_detection.o event_handling.o common.o data_IO.o Osiris_detect.o Osiris.o
 CC = gcc
 CXX = g++
 DEBUG = -g
-LIBFLAGS = -L Penthus/ -l Penthus -L htslib/ -l hts -L hdf5-1.8.14/hdf5/lib/ -l hdf5 -fopenmp
-CXXFLAGS = -Wall -c -O2 -std=c++11 $(DEBUG)
-CFLAGS = -Wall -c -std=c99 -O2 $(DEBUG)
-LFLAGS = -Wall -O2 $(DEBUG)
+LIBFLAGS =
+CXXFLAGS = -Wall -O2 -fopenmp -std=c++11 $(DEBUG)
+CFLAGS = -Wall -std=c99 -O2 $(DEBUG)
+
+#Penthus
+PENTHUS_LIB = ./Penthus/libPenthus.a
+PENTHUS_INCLUDE = -I./Penthus
+LIBFLAGS += -L Penthus/ -lPenthus
+
+#hdf5
+H5_LIB = ./hdf5-1.8.14/hdf5/lib/libhdf5.a
+H5_INCLUDE = -I./hdf5-1.8.14/hdf5/include
+LIBFLAGS += -Wl,-rpath,hdf5-1.8.14/hdf5/lib -L hdf5-1.8.14/hdf5/lib -lhdf5
+
+#hts
+HTS_LIB = ./htslib/libhts.a
+HTS_INCLUDE = -I./htslib
+LIBFLAGS += -L htslib/ -lhts
+
+#fast5
+FAST5_INCLUDE = -I./fast5/include
+
+#add include flags for each library dependency
+CXXFLAGS += $(H5_INCLUDE) $(HTS_INCLUDE) $(FAST5_INCLUDE) $(PENTHUS_INCLUDE)
 
 MAIN_EXECUTABLE = bin/Osiris
 
-#libraries
-HTS_LIB=./htslib/libhts.a
-HTS_INCLUDE=-I./htslib
+all: depend $(MAIN_EXECUTABLE)
 
-HDF5_LIB=-./hdf5-1.8.14/hdf5/lib/libhdf5.a
-HDF5_INCLUDE=-I./hdf5-1.8.14/hdf5/include
+htslib/libhts.a:
+	cd htslib && make || exit 255
 
-FAST5_INCLUDE=-I./fast5/include
-
-PENTHUS_LIB=./Penthus/libPenthus.a
-
-
-all: $(MAIN_EXECUTABLE)
-
-$(HTS_LIB):
-	#cd htslib && make || exit 255
-	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./htslib && export LD_LIBRARY_PATH
-
-$(HDF5_LIB):
-	#if [ ! -e hdf5-1.8.14.tar.gz ]; then wget https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8/hdf5-1.8.14/src/hdf5-1.8.14.tar.gz; fi
-	#tar -xzf hdf5-1.8.14.tar.gz || exit 255
-	#cd hdf5-1.8.14 && ./configure --enable-threadsafe && make && make install
-	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./hdf5-1.8.14/hdf5/lib && export LD_LIBRARY_PATH
-
-$(PENTHUS_LIB):
+Penthus/lPenthus.a:
 	cd Penthus && make || exit 255
 
-event_detection.o : src/scrappie/event_detection.h src/scrappie/event_detection.c
-	$(CC) $(CFLAGS) src/scrappie/event_detection.c
+#
+# If this library is a dependency the user wants HDF5 to be downloaded and built.
+#
+lib/libhdf5.a:
+#	if [ ! -e hdf5-1.8.14.tar.gz ]; then \
+#		wget https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8/hdf5-1.8.14/src/hdf5-1.8.14.tar.gz; \
+#	fi
+#	tar -xzf hdf5-1.8.14.tar.gz || exit 255
+#	cd hdf5-1.8.14 && \
+#		./configure --enable-threadsafe --prefix=`pwd`/.. && \
+#		make && make install
 
-event_handling.o : src/scrappie/event_detection.h src/common.h src/poreModels.h src/data_IO.h src/event_handling.h src/event_handling.cpp
-	$(CXX) $(CXXFLAGS) src/event_handling.cpp
+SUBDIRS = src src/scrappie
+CPP_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.cpp))
+C_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.c))
+EXE_SRC = src/Osiris.cpp
 
-common.o : src/error_handling.h src/common.h src/common.cpp
-	$(CXX) $(CXXFLAGS) src/common.cpp
+# Automatically generated object names
+CPP_OBJ = $(CPP_SRC:.cpp=.o)
+C_OBJ = $(C_SRC:.c=.o)
 
-data_IO.o : src/error_handling.h src/data_IO.h src/data_IO.cpp
-	$(CXX) $(CXXFLAGS) src/data_IO.cpp
+depend: .depend
 
-Osiris_detect.o : src/poreSpecificParameters.h src/common.h src/build_model.h src/data_IO.h src/error_handling.h src/event_handling.h src/event_handling.cpp src/poreModels.h src/Osiris_detect.h src/Osiris_detect.cpp $(HTS_LIB) $(HDF5_LIB) $(PENTHUS_LIB)
-	$(CXX) $(CXXFLAGS) $(HTS_INCLUDE) $(HDF5_INCLUDE) $(FAST5_INCLUDE) src/Osiris_detect.cpp $(LIBFLAGS)
+.depend: $(CPP_SRC) $(C_SRC) $(EXE_SRC) $(H5_LIB)
+	rm -f ./.depend
+	$(CXX) $(CXXFLAGS) -MM $(CPP_SRC) $(C_SRC) > ./.depend;
 
-#Osiris_regions.o : src/error_handling.h src/Osiris_regions.h src/Osiris_regions.cpp
-#	$(CXX) $(CXXFLAGS) src/Osiris_regions.cpp $(LIBFLAGS)
+# Compile objects
+.cpp.o:
+	$(CXX) -o $@ -c $(CXXFLAGS) -fPIC $<
 
-Osiris.o : src/Osiris.cpp src/Osiris_detect.h src/Osiris_regions.h src/data_IO.h src/build_model.h src/event_handling.h src/event_handling.cpp
-	$(CXX) $(CXXFLAGS) $(HTS_INCLUDE) $(HDF5_INCLUDE) $(FAST5_INCLUDE) src/Osiris.cpp $(LIBFLAGS)
+.c.o:
+	$(CC) -o $@ -c $(CFLAGS) $(H5_INCLUDE) -fPIC $<
 
-$(MAIN_EXECUTABLE) : $(OBJS) $(HTS_LIB) $(HDF5_LIB) $(PENTHUS_LIB)
-	$(CXX) $(LFLAGS) $(HTS_INCLUDE) $(HDF5_INCLUDE) $(FAST5_INCLUDE) $(OBJS) -o bin/Osiris $(LIBFLAGS)
+# Link main executable
+$(MAIN_EXECUTABLE): src/Osiris.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(PENTHUS_LIB)
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC $(CPP_OBJ) $(C_OBJ) $(LIBFLAGS)
 
+#$(HTS_LIB) $(H5_LIB) $(PENTHUS_LIB)
 clean:
-	rm $(OBJS) $(MAIN_EXECUTABLE)
+	rm -f $(MAIN_EXECUTABLE) $(CPP_OBJ) $(C_OBJ) src/Osiris.o

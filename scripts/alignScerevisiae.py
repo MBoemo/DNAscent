@@ -66,10 +66,13 @@ def parseArguments(args):
 args = sys.argv
 a = parseArguments(args)
 
+#do the alignment with minimap2
+#os.system('/data/software_local/minimap2-2.10/minimap2 -ax map-ont -t ' + str(a.threads) + ' ' + a.reference + ' ' + a.reads + ' | samtools view -Sb - | samtools sort - alignments.minimap2.sorted') 
+
 #do the alignment with graphmap
-os.system('/data/software_local/minimap2-2.10/minimap2 -ax map-ont -t ' + str(a.threads) + ' ' + a.reference + ' ' + a.reads + ' | samtools view -Sb - | samtools sort - alignments.minimap2.sorted') 
 #os.system('graphmap align -t '+str(a.threads)+' -x sensitive -r '+a.reference+' -d ' + a.reads + ' | samtools view -Sb - | samtools sort - alignments.minimap2.sorted') 
-os.system('samtools index alignments.minimap2.sorted.bam')
+
+#os.system('samtools index alignments.minimap2.sorted.bam')
 
 #open the sorted bam file and output bam file
 out_files = list()
@@ -82,15 +85,14 @@ mDNATally = 0
 rDNATally = 0
 mapQTally = 0
 lengthTally = 0
+unmappedTally = 0
+numOfReads = 0
 for record in sam_file:
+
+	numOfReads += 1
 
 	#if this read mapped
 	if record.reference_id != -1:
-
-		#skip reverse complements and unmapped reads
-		#if record.is_reverse:
-		#	reverseTally += 1
-		#	continue
 	
 		#skip mitochondrial DNA
 		if record.reference_name == 'chrM':
@@ -107,25 +109,24 @@ for record in sam_file:
 			mapQTally += 1
 			continue
 
-		#exclude any read that's shorter than 200bp
-		#elif len(record.query_sequence) < 1000 or len(record.query_sequence) > 4000:
-		#elif len(record.query_sequence) > 15000:
-		#	lengthTally += 1
-		#	continue
+		#exclude any read that's mapped to a subsequence of the reference shorter than a certain threshold
+		elif record.reference_length < 20000:
+			lengthTally += 1
+			continue
 
 		else:
 			filtered_file.write( record )
+
+	else:
+		unmappedTally += 1
 
 sam_file.close()
 filtered_file.close()
 
 os.system('samtools index filteredOut.minimap2.bam')
 
-sam_file = pysam.Samfile('alignments.minimap2.sorted.bam')
-numOfReads = sam_file.count()
-sam_file.close()
-
 print "Total reads: ", numOfReads
+print "Excluded for unmapped: ", unmappedTally, float(unmappedTally)/float(numOfReads)
 print "Excluded for reverse complement: ", reverseTally, float(reverseTally)/float(numOfReads)
 print "Excluded for mDNA: ", mDNATally, float(mDNATally)/float(numOfReads)
 print "Excluded for rDNA: ", rDNATally, float(rDNATally)/float(numOfReads)

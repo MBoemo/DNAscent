@@ -7,11 +7,11 @@
 //----------------------------------------------------------
 
 #include <string>
+#include <iostream>
 #include <map>
 #include <functional>
 #include "Osiris_detect.h"
-//#include "Osiris_regions.h"
-#include "error_handling.h"
+#include "Osiris_regions.h"
 
 
 /*prototype */
@@ -20,7 +20,7 @@ int show_options( int, char** );
 /*map from name of the Osiris function passed as argument on the command line to the function that it should call */
 static std::map< std::string, std::function< int( int, char** ) > > executables = {
 	{"detect", 	detect_main},
-//	{"regions", 	regions_main},
+	{"regions", 	regions_main},
 	{"--help",	show_options},
 	{"-h",	show_options}
 };

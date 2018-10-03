@@ -16,7 +16,7 @@ totalReads = 10000
 #--------------------------------------------------------------------------------------------------------------------------------------
 def KLdivergence( mu1, sigma1, mu2, sigma2 ):
 
-	out = math.log(sigma2 / sigma1) + (sigma1**2 + (mu1 - mu2)**2)/(2.0*sigma_2**2) - 0.5
+	out = math.log(sigma2 / sigma1) + (sigma1**2 + (mu1 - mu2)**2)/(2.0*sigma2**2) - 0.5
 
 
 
@@ -93,7 +93,7 @@ for line in f:
 		continue
 	
 	splitLine = line.rstrip().split('\t')
-	mixture_dict[splitLine[0]] = [ float(splitLine[4]), float(splitLine[5]), float(splitLine[7]), float(splitLine[8]) ]#, float(splitLine[10]), float(splitLine[11]) ]
+	mixture_dict[splitLine[0]] = [ float(splitLine[4]), float(splitLine[5]), float(splitLine[7]), float(splitLine[8]) ]
 f.close()
 
 for i, key in enumerate(sixmer2eventsBrdU):
@@ -129,9 +129,9 @@ for i, key in enumerate(sixmer2eventsBrdU):
 			plt.plot( x, yMix, label='Fit Distribution (2)')
 
 			if abs(model[key][0] - out.means_[0]) < abs(model[key][0] - out.means_[1]):
-				print key + '\t' + str(out.means_[1][0]) + '\t' + str(math.sqrt(out.covars_[1])) '\t' + str(out.means_[0][0]) + '\t' + str(math.sqrt(out.covars_[0])) + '\t' + KLdivergence( out.means_[1][0], math.sqrt(out.covars_[1]), out.means_[0][0], math.sqrt(out.covars_[0]) )
+				print key + '\t' + str(out.means_[1][0]) + '\t' + str(math.sqrt(out.covars_[1])) + '\t' + str(out.means_[0][0]) + '\t' + str(math.sqrt(out.covars_[0])) + '\t' + str(KLdivergence( out.means_[1][0], math.sqrt(out.covars_[1]), out.means_[0][0], math.sqrt(out.covars_[0]) ))
 			else:
-				print key + '\t' + str(out.means_[0][0]) + '\t' + str(math.sqrt(out.covars_[0])) '\t' + str(out.means_[1][0]) + '\t' + str(math.sqrt(out.covars_[1])) + '\t' + KLdivergence( out.means_[0][0], math.sqrt(out.covars_[0]), out.means_[1][0], math.sqrt(out.covars_[1]) )
+				print key + '\t' + str(out.means_[0][0]) + '\t' + str(math.sqrt(out.covars_[0])) + '\t' + str(out.means_[1][0]) + '\t' + str(math.sqrt(out.covars_[1])) + '\t' + str(KLdivergence( out.means_[0][0], math.sqrt(out.covars_[0]), out.means_[1][0], math.sqrt(out.covars_[1]) ))
 
 		#density
 		densityBrdU = stats.kde.gaussian_kde( sixmer2eventsBrdU[key] )
@@ -141,19 +141,10 @@ for i, key in enumerate(sixmer2eventsBrdU):
 		yModel = mlab.normpdf( x, model[key][0], model[key][1] )
 		plt.plot(x, yModel, label='6mer Pore Model')
 
-		#trimodal
-		#if key in mixture_dict:
-		#	yMix = mlab.normpdf( x, mixture_dict[key][0], mixture_dict[key][1] )
-		#	plt.plot( x, yMix, label='Fit Distribution (1)')
-		#	yMix = mlab.normpdf( x, mixture_dict[key][2], mixture_dict[key][3] )
-		#	plt.plot( x, yMix, label='Fit Distribution (2)')
-			#yMix = mlab.normpdf( x, mixture_dict[key][4], mixture_dict[key][5] )
-			#plt.plot( x, yMix, label='Fit Distribution (3)')
-
 		#plotting stuff
 		plt.xlabel('pA')
 		plt.ylabel('Count')
 		plt.title( key + '  N=' + str(len(sixmer2eventsBrdU[key])) )
 		plt.legend(loc='upper right', framealpha=0.5)
-		plt.savefig( key + '.png' )
+		plt.savefig( key + '.pdf' )
 		plt.close()

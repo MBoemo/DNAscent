@@ -50,7 +50,6 @@ def import_poreModel(filename,c1,c2):
 
 
 #MAIN--------------------------------------------------------------------------------------------------------------------------------------
-
 plt.figure()
 
 model = import_poreModel( sys.argv[1], 4, 5 )
@@ -60,7 +59,7 @@ for key in model:
 	diffs.append( divergence(mu1,sig1,mu2,sig2) )
 
 plt.subplot(2,1,1)
-plt.hist(diffs,50)
+plt.hist(diffs,50,linewidth=0)
 plt.tick_params(axis='both', which='major', labelsize=8)
 plt.tick_params(axis='both', which='minor', labelsize=8)
 plt.ylabel('Count')
@@ -75,7 +74,7 @@ for key in model:
 	diffs.append( divergence(mu1,sig1,mu2,sig2) )
 
 plt.subplot(2,1,2)
-plt.hist(diffs,50)
+plt.hist(diffs,50,linewidth=0)
 plt.tick_params(axis='both', which='major', labelsize=8)
 plt.tick_params(axis='both', which='minor', labelsize=8)
 plt.xlabel('Expected Log Likelihood')

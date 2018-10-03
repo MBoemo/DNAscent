@@ -15,6 +15,8 @@
 
 #define _USE_MATH_DEFINES
 
+extern std::map< std::string, std::pair< double, double > > BrdU_model_full, SixMer_model;
+
 std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A, std::vector< double > b ){
 /*crude but functional algorithm that solves the linear system A*x = b by building an augmented matrix and transforming to reduced row echelon form */
 	
@@ -258,12 +260,27 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping_band( std::v
 
 inline float logProbabilityMatch(std::string sixMer, double x){
 
-	double mu = SixMer_model.at(sixMer).first;
-	double sigma = SixMer_model.at(sixMer).second;
+	if (sixMer.find('T') != std::string::npos and BrdU_model_full.count(sixMer) > 0){
 
-	double prob = ( 1.0/sqrt( 2.0*pow( sigma, 2.0 )*M_PI ) )*exp( -pow( x - mu , 2.0 )/( 2.0*pow( sigma, 2.0 ) ) );
+		double mu = SixMer_model.at(sixMer).first;
+		double sigma = SixMer_model.at(sixMer).second;
+		double thymProb = ( 1.0/sqrt( 2.0*pow( sigma, 2.0 )*M_PI ) )*exp( -pow( x - mu , 2.0 )/( 2.0*pow( sigma, 2.0 ) ) );
 
-	return eln(prob);
+		mu = BrdU_model_full.at(sixMer).first;
+		sigma = BrdU_model_full.at(sixMer).second;
+		double brduProb = ( 1.0/sqrt( 2.0*pow( sigma, 2.0 )*M_PI ) )*exp( -pow( x - mu , 2.0 )/( 2.0*pow( sigma, 2.0 ) ) );
+
+		if ( thymProb > brduProb ) return eln(thymProb);
+		else return eln(brduProb);
+	}
+	else{
+		double mu = SixMer_model.at(sixMer).first;
+		double sigma = SixMer_model.at(sixMer).second;
+
+		double prob = ( 1.0/sqrt( 2.0*pow( sigma, 2.0 )*M_PI ) )*exp( -pow( x - mu , 2.0 )/( 2.0*pow( sigma, 2.0 ) ) );
+
+		return eln(prob);
+	}
 }
 
 #define event_kmer_to_band(ei, ki) (ei + 1) + (ki + 1)
@@ -275,7 +292,8 @@ inline float logProbabilityMatch(std::string sixMer, double x){
 #define move_down(curr_band) { curr_band.event_idx + 1, curr_band.kmer_idx }
 #define move_right(curr_band) { curr_band.event_idx, curr_band.kmer_idx + 1 }
 
-std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_event_align(std::vector< double > &raw, const std::string &sequence){
+std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_event_align( std::vector< double > &raw, const std::string &sequence ){
+
 	size_t strand_idx = 0;
 	size_t k = 6;
 	//const Alphabet* alphabet = pore_model.pmalphabet;
@@ -288,11 +306,23 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
 	const uint8_t FROM_L = 2;
  
 	// qc
-	double min_average_log_emission = -5.0;
+	double min_average_log_emission = -10;//-5.0;
 	int max_gap_threshold = 50;
 
 	// banding
-	int bandwidth = 100;
+	//int bandwidth = 100;
+	//scale bandwidth with sequence length
+	int bandwidth;
+	if ( sequence.length() < 10000 ){
+	
+		bandwidth = 100;
+	}
+	else {
+
+		bandwidth = (int) sequence.length() / 100;
+		if (bandwidth % 2 == 1) bandwidth++;//make it even
+	}
+
 	int half_bandwidth = bandwidth / 2;
  
 	// transition penalties
@@ -449,6 +479,7 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
 	// Backtrack to compute alignment
 	//
 	double sum_emission = 0;
+	double eventDiffs = 0.0;
 	double n_aligned_events = 0;
 	//std::vector<AlignedPair> out;
 	std::vector< std::pair< unsigned int, unsigned int > > eventSeqLocPairs;
@@ -483,6 +514,7 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
 		//sum_emission += log_probability_match_r9(read, pore_model, kmer_rank, curr_event_idx, strand_idx);
 		std::string sixMer = sequence.substr(curr_kmer_idx, k);
 		sum_emission += logProbabilityMatch(sixMer, raw[curr_event_idx]);
+		eventDiffs += SixMer_model.at(sixMer).first - raw[curr_event_idx];
 
 		n_aligned_events += 1;
 
@@ -490,7 +522,7 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
 		int offset = band_event_to_offset(band_idx, curr_event_idx);
 		assert(band_kmer_to_offset(band_idx, curr_kmer_idx) == offset);
 
-		uint8_t from = trace[band_idx][offset];
+		uint8_t from = trace[band_idx][offset];  //PROBLEM HERE
 		if(from == FROM_D) {
 			curr_kmer_idx -= 1;
 			curr_event_idx -= 1;
@@ -508,6 +540,7 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
     
 	// QC results
 	double avg_log_emission = sum_emission / n_aligned_events;
+	double avg_eventDiffs = eventDiffs / n_aligned_events;
 	bool spanned = eventSeqLocPairs.front().second == 0 && eventSeqLocPairs.back().second == n_kmers - 1;
     
 	bool failed = false;
@@ -515,9 +548,10 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
 		
 		failed = true;		
 		eventSeqLocPairs.clear();
+    		//fprintf(stderr, "ada\t\t%s\t%s\t%.2lf\t%zu\t%.2lf\t%.2lf\t%d\t%d\t%d\n", failed ? "FAILED" : "OK",spanned ? "SPAN" : "NOTS", events_per_kmer, sequence.size(), avg_log_emission, avg_eventDiffs, curr_event_idx, max_gap, fills);
 	}
 
-    	//fprintf(stderr, "ada\t\t%s\t%.2lf\t%zu\t%.2lf\t%d\t%d\t%d\n", failed ? "FAILED" : "OK", events_per_kmer, sequence.size(), avg_log_emission, curr_event_idx, max_gap, fills);
+
 	return eventSeqLocPairs;
 }
 //end:from nanopolish

@@ -14,10 +14,7 @@ from sklearn import mixture
 
 f = open(sys.argv[1],'r')
 
-ThymScores = []
-BrdUScores = []
-BtoTScores = []
-TtoBScores = []
+allScores = []
 
 startingPos = -1
 gap = 0
@@ -25,13 +22,11 @@ attempts = 0
 calls = 0
 regionBuffer = []
 
-p = 0.2
+p = 0.2 #0.3
 resolution = 2000
 first = True
-regionThreshold = -1.5
+regionThreshold = -2
 printThisOne = False
-
-count = 1
 
 for line in f:
 
@@ -42,34 +37,28 @@ for line in f:
 
 		if not first:
 			
-			if len(regionBuffer) > 15 and printThisOne:
+			if len(regionBuffer) >= 10 and printThisOne:
 
-				f = open(str(count) + '.bedgraph','w')
+				f = open(readID[1:] + '.bedgraph','w')
 
 				f.write( 'track type=bedGraph name="'+readID+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20'+'\n')
-				f.write( " ".join(regionBuffer[0])+'\n' )
+				f.write( " ".join(regionBuffer[0][0:4])+'\n' )
 
 				for i, bufEntry in enumerate(regionBuffer[1:-1]):
 
 					if bufEntry[4] == "BrdU" and regionBuffer[i][4] == "Thym" and regionBuffer[i+2][4] == "Thym":
 
 						bufEntry[4] = "Thym"
-						BtoTScores.append(float(bufEntry[3]))
 
 					elif bufEntry[4] == 'Thym' and regionBuffer[i][4] == 'BrdU' and regionBuffer[i+2][4] == 'BrdU':
 
 						bufEntry[4] = 'BrdU'
-						TtoBScores.append(float(bufEntry[3]))
-					else:
-						if bufEntry[4] == "BrdU":
-							BrdUScores.append(float(bufEntry[3]))
-						else:
-							ThymScores.append(float(bufEntry[3]))
 
-					f.write( " ".join(bufEntry)+'\n')
-				f.write( " ".join(regionBuffer[-1:][0]) +'\n')
+					allScores.append(float(bufEntry[3]))
+
+					f.write( " ".join(bufEntry[0:4])+'\n')
+				f.write( " ".join(regionBuffer[-1:][0][0:4]) +'\n')
 				f.close()
-				count += 1
 
 		splitLine_space = line.split(' ')
 		splitLine_colon = splitLine_space[1].split(':')
@@ -103,7 +92,7 @@ for line in f:
 				tempCall = "BrdU"
 				printThisOne = True
 
-			regionBuffer.append( [thisChromosome, str(startingPos), splitLine[0], str(zScore), tempCall] )
+			regionBuffer.append( [thisChromosome, str(startingPos), splitLine[0], str(zScore+abs(regionThreshold)), tempCall] )
 			startingPos = -1
 			gap = 0
 			attempts = 0
@@ -112,10 +101,7 @@ for line in f:
 f.close()
 
 plt.figure(1)
-plt.hist(ThymScores, 50, alpha=0.3, label='Thymidine', linewidth=0)
-plt.hist(BrdUScores, 50, alpha=0.3, label='BrdU', linewidth=0)
-plt.hist(TtoBScores, 50, alpha=0.3, label='Thym to BrdU', linewidth=0)
-plt.hist(BtoTScores, 50, alpha=0.3, label='BrdU to Thym', linewidth=0)
+plt.hist(allScores, 35, linewidth=0)
 plt.legend(framealpha=0.5)
 plt.xlim(-10, 10)
 plt.xlabel('Z-Score (Absolute Value)')
