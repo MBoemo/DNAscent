@@ -44,7 +44,7 @@ hdf5-1.8.14/hdf5/lib/libhdf5.a:
 		cd hdf5-1.8.14 && \
 			./configure --enable-threadsafe --prefix=`pwd`/.. && \
 			make && make install
-	elif 
+	fi 
 	
 SUBDIRS = src src/scrappie
 CPP_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.cpp))
