@@ -3,13 +3,16 @@ event_handling.o: src/event_handling.cpp src/../Penthus/src/probability.h \
  src/../Penthus/src/error_handling.h src/error_handling.h \
  src/scrappie/event_detection.h src/poreModels.h src/common.h \
  src/data_IO.h src/event_handling.h
-data_IO.o: src/data_IO.cpp src/data_IO.h src/error_handling.h \
- src/scrappie/event_detection.h src/poreModels.h src/common.h
-Osiris_regions.o: src/Osiris_regions.cpp src/Osiris_regions.h \
+Osiris_psl.o: src/Osiris_psl.cpp src/Osiris_psl.h \
  src/../Penthus/src/probability.h src/../Penthus/src/error_handling.h \
  src/../Penthus/src/hmm.h src/../Penthus/src/states.h \
  src/../Penthus/src/probability.h src/common.h src/data_IO.h \
  src/error_handling.h src/scrappie/event_detection.h src/poreModels.h
+data_IO.o: src/data_IO.cpp src/data_IO.h src/error_handling.h \
+ src/scrappie/event_detection.h src/poreModels.h src/common.h
+Osiris_regions.o: src/Osiris_regions.cpp src/Osiris_regions.h \
+ src/data_IO.h src/error_handling.h src/scrappie/event_detection.h \
+ src/poreModels.h src/common.h
 common.o: src/common.cpp src/common.h src/error_handling.h \
  src/scrappie/event_detection.h src/poreModels.h src/data_IO.h
 Osiris_detect.o: src/Osiris_detect.cpp src/Osiris_detect.h src/common.h \
@@ -61,7 +64,8 @@ Osiris_detect.o: src/Osiris_detect.cpp src/Osiris_detect.h src/common.h \
  src/../fast5/include/fast5/cwmap.fast5_ev_rel_skip_1.inl \
  src/../fast5/include/fast5/cwmap.fast5_ev_move_1.inl \
  src/../fast5/include/fast5/Bit_Packer.hpp
-Osiris.o: src/Osiris.cpp src/Osiris_detect.h src/Osiris_regions.h
+Osiris.o: src/Osiris.cpp src/Osiris_detect.h src/Osiris_regions.h \
+ src/Osiris_psl.h
 event_detection.o: src/scrappie/event_detection.c \
  src/scrappie/event_detection.h
 scrappie_common.o: src/scrappie/scrappie_common.c \

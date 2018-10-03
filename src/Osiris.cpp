@@ -12,6 +12,7 @@
 #include <functional>
 #include "Osiris_detect.h"
 #include "Osiris_regions.h"
+#include "Osiris_psl.h"
 
 
 /*prototype */
@@ -20,6 +21,7 @@ int show_options( int, char** );
 /*map from name of the Osiris function passed as argument on the command line to the function that it should call */
 static std::map< std::string, std::function< int( int, char** ) > > executables = {
 	{"detect", 	detect_main},
+	{"psl", 	psl_main},
 	{"regions", 	regions_main},
 	{"--help",	show_options},
 	{"-h",	show_options}
@@ -28,7 +30,7 @@ static std::map< std::string, std::function< int( int, char** ) > > executables 
 
 int show_options( int, char** ){
 
-	std::cout << "Osiris is a software tool for detecting base analogues in Oxford Nanopore reads.  To run Osiris, do: " \
+	std::cout << "Osiris is a software tool for detecting regions of base analogue incorporation in Oxford Nanopore reads.\nTo run Osiris, do: " \
 	<< std::endl \
 	<< "  ./Osiris [executable] [arguments]" \
 	<< std::endl \

@@ -12,6 +12,7 @@
 
 #include <string>
 #include <map>
+#include <vector>
 
 
 struct read{

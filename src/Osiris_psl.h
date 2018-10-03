@@ -6,10 +6,27 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
-#ifndef OSIRIS_REGIONS_H
-#define OSIRIS_REGIONS_H
+#ifndef OSIRIS_PSL_H
+#define OSIRIS_PSL_H
+
+#include <vector>
+
+struct Track{
+
+	int lowerBound, upperBound;
+};
+
+struct readDetection{
+
+	std::vector< int > positions;
+	std::vector< double > BrdUProb;
+	std::string readID, chromosome;
+	int mappingLower, mappingUpper;
+	std::vector< Track > tracks;
+};
+
 
 /*function prototypes */
-int regions_main( int argc, char** argv );
+int psl_main( int argc, char** argv );
 
 #endif
