@@ -19,7 +19,7 @@
 "To run Osiris regions, do:\n"
 "  ./Osiris regions [arguments]\n"
 "Example:\n"
-"  ./Osiris regions -d /path/to/osiris_detect_output.out -r path/to/reference.fasta -o /path/to/output_prefix -t 20\n"
+"  ./Osiris regions -d /path/to/osiris_detect_output.out -p 0.2 -o /path/to/output_prefix\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from Osiris detect,\n"
 "  -p,--probability          probability that a thymidine 6mer contains a BrdU,\n"

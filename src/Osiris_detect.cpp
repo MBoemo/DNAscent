@@ -26,7 +26,7 @@ static const char *help=
 "To run Osiris detect, do:\n"
 "  ./Osiris detect [arguments]\n"
 "Example:\n"
-"  ./Osiris detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.index -o /path/to/output.out -t 20\n"
+"  ./Osiris detect -b /path/to/alignment.bam -r /path/to/reference.fasta -m /path/to/BrdU.model -i /path/to/index.index -o /path/to/output.out -t 20\n"
 "Required arguments are:\n"
 "  -b,--bam                  path to alignment BAM file,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
