@@ -415,7 +415,9 @@ std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string
 	std::stringstream ss;
 	ss << ">" << r.readID << " " << r.referenceMappedTo << ":" << r.refStart << "-" << r.refEnd << std::endl;
 
+	//get the positions on the reference subsequence where we could attempt to make a call
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
+
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 
 		int posOnRef = POIs[i];
@@ -423,6 +425,11 @@ std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength);
 		std::vector< double > eventSnippet;
+
+		//catch spans with lots of insertions or deletions
+		int spanOnQuery = (r.refToQuery)[posOnRef + windowLength] - (r.refToQuery)[posOnRef - windowLength];
+		if ( spanOnQuery > 2.5*windowLength or spanOnQuery < 1.5*windowLength ) continue;
+
 
 		/*get the events that correspond to the read snippet */
 		for ( unsigned int j = 0; j < (r.eventAlignment).size(); j++ ){
@@ -436,6 +443,10 @@ std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string
 			/*stop once we get to the end of the window */
 			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef + windowLength] ) break;
 		}
+
+		//catch abnormally few or many events
+		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < windowLength ) continue;
+
 		double logProbThymidine = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, false);
 		double logProbAnalogue = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, true);
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;

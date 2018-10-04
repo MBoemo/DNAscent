@@ -106,16 +106,15 @@ void callOrigins( std::vector< region > &regions, double threshold ){
 
 	//do an initial moving average pass through the scores
 	std::vector< double > out;
-	for ( int i = 1; i < regions.size() - 1; i++ ){
+	for ( int i = 2; i < regions.size() - 2; i++ ){
 
-		out.push_back( ( regions[i-1].score + regions[i].score + regions[i+1].score ) / 3.0 );
+		out.push_back( ( regions[i-2].score + regions[i-1].score + regions[i].score + regions[i+1].score + regions[i+2].score ) / 5.0 );
 	}
 
 	for ( int i = 0; i < out.size(); i++ ){
 
-		regions[i+1].score = out[i];
+		regions[i+2].score = out[i];
 	}
-
 
 	std::vector< double > derivatives;
 
@@ -185,7 +184,7 @@ int regions_main( int argc, char** argv ){
 
 		if ( line.substr(0,1) == ">" ){
 
-			if ( buffer.size() > 0 ){
+			if ( buffer.size() > 5 ){
 
 				outFile << header << std::endl;
 			
@@ -228,7 +227,7 @@ int regions_main( int argc, char** argv ){
 			gap = position - startingPos;
 			attempts++;
 
-			if ( gap > args.resolution ){
+			if ( gap > args.resolution and attempts >= args.resolution / 30 ){
 
 				region r;
 

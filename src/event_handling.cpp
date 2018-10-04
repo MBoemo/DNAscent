@@ -306,22 +306,11 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
 	const uint8_t FROM_L = 2;
  
 	// qc
-	double min_average_log_emission = -10;//-5.0;
+	double min_average_log_emission = -5.0;
 	int max_gap_threshold = 50;
 
 	// banding
-	//int bandwidth = 100;
-	//scale bandwidth with sequence length
-	int bandwidth;
-	if ( sequence.length() < 10000 ){
-	
-		bandwidth = 100;
-	}
-	else {
-
-		bandwidth = (int) sequence.length() / 100;
-		if (bandwidth % 2 == 1) bandwidth++;//make it even
-	}
+	int bandwidth = 100;
 
 	int half_bandwidth = bandwidth / 2;
  
