@@ -11,7 +11,7 @@ import math
 from sklearn.cluster import DBSCAN
 from sklearn import mixture
 
-totalReads = 10000
+totalReads = 100000
 
 #--------------------------------------------------------------------------------------------------------------------------------------
 def KLdivergence( mu1, sigma1, mu2, sigma2 ):
@@ -84,24 +84,11 @@ for line in f:
 	model[splitLine[0]] = [	float(splitLine[1]), float(splitLine[2]) ]
 f.close()
 
-#mixture model
-mixture_dict = {}
-f = open(sys.argv[3],'r')
-for line in f:
-
-	if line[0] == '6':
-		continue
-	
-	splitLine = line.rstrip().split('\t')
-	mixture_dict[splitLine[0]] = [ float(splitLine[4]), float(splitLine[5]), float(splitLine[7]), float(splitLine[8]) ]
-f.close()
-
 for i, key in enumerate(sixmer2eventsBrdU):
 
 	if key == 'NNNNNN':
 		continue
 	
-	#if key in mixture_dict:
 	if len( sixmer2eventsBrdU[key] ) > 200:
 		x = np.linspace( np.mean(sixmer2eventsBrdU[key])-15, np.mean(sixmer2eventsBrdU[key])+15, 1000 )
 		plt.figure(i)

@@ -65,6 +65,13 @@ struct InsufficientArguments : public std::exception {
 };
 
 
+struct BadStrandDirection : public std::exception {
+	const char * what () const throw () {
+		return "Unrecognised strand direction.";
+	}
+};
+
+
 struct FastaFormatting : public std::exception {
 	const char * what () const throw () {
 		return "Reference file is not in the correct format - fasta format required.";

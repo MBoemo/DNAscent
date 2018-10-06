@@ -11,15 +11,15 @@ scores = np.array([0.0]*repeatLen)
 f = open(sys.argv[1],'r')
 for line in f:
 
-	if line[0] == 't':
+	if line[0] == '>':
 		continue
 
 	else:
-		splitLine = line.rstrip().split(' ')
+		splitLine = line.rstrip().split('\t')
 
-		lower = int(splitLine[1]) % repeatLen
-		upper = int(splitLine[2]) % repeatLen
-		score = float(splitLine[3])
+		lower = int(splitLine[0]) % repeatLen
+		upper = int(splitLine[1]) % repeatLen
+		score = float(splitLine[2])
 
 		if upper < lower:
 			if score > 0:

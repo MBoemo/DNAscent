@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.mlab as mlab
 from scipy import stats
 
-totalReads = 10000
+totalReads = 100000
 
 #--------------------------------------------------------------------------------------------------------------------------------------
 def displayProgress(current, total):

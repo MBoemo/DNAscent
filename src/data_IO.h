@@ -23,6 +23,7 @@ struct read{
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
 	double qualityScore;
 	int refStart, refEnd;
+	bool isReverse = false;
 };
 
 

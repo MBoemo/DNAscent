@@ -81,7 +81,7 @@
 	outFile << 0 << " "; //qBaseInsert 
 	outFile << 0 << " "; //tNumInsert 
 	outFile << 0 << " "; //tBaseInsert 
-	outFile << "+" << " "; //strand
+	outFile << rd.direction << " "; //strand
 	outFile << rd.readID << " "; //queryName
 	outFile << rd.mappingUpper - rd.mappingLower << " "; //qSize
 	outFile << 0 << " "; //qStart
@@ -90,21 +90,27 @@
 	outFile << reference[rd.chromosome].size() << " "; //tSize
 	outFile << rd.mappingLower << " "; //tStart
 	outFile << rd.mappingUpper << " "; //tEnd
-	outFile << rd.positions.size() << " "; //blockCount
+	outFile << rd.positions.size() + 2 << " "; //blockCount
  	//blockSizes
+	outFile << 1 << ","; //extra for start
 	for ( int i = 0; i < rd.positions.size(); i++ ){
  		outFile << 1  << ",";
 	}
+	outFile << 1 << ","; //extra for end
 	outFile << " ";
  	//qStarts
+	outFile << 0 << ","; //extra for start
 	for ( int i = 0; i < rd.positions.size(); i++ ){
  		outFile << rd.positions[i] - rd.mappingLower << ",";
 	}
+	outFile << rd.mappingUpper - rd.mappingLower << ","; //extra for end
 	outFile << " ";
  	//tStarts
+	outFile << rd.mappingLower << ","; //extra for start
 	for ( int i = 0; i < rd.positions.size(); i++ ){
  		outFile << rd.positions[i] << ",";
 	}
+	outFile << rd.mappingUpper << ","; //extra for end
 	outFile << std::endl;
 }
  int psl_main( int argc, char** argv ){
@@ -136,7 +142,11 @@
 			rd.readID = line.substr(1, line.find(' ') - 1);
 			rd.chromosome = line.substr(line.find(' ') + 1, line.find(':') - line.find(' ') - 1);
 			rd.mappingLower = std::stoi(line.substr(line.find(':') + 1, line.rfind('-') - line.find(':') - 1));
-			rd.mappingUpper = std::stoi(line.substr(line.rfind('-')+1));
+			rd.mappingUpper = std::stoi(line.substr(line.rfind('-')+1, line.find('#') - line.rfind('-') - 1 ));
+			std::string strand = line.substr(line.find('#')+1);
+			if (strand == "fwd") rd.direction = "+";
+			else if (strand == "rev") rd.direction = "-";
+			else throw BadStrandDirection();
 			buffer.push_back(rd);
 		}
 		else{

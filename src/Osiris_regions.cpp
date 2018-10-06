@@ -25,6 +25,7 @@
 "  -p,--probability          probability that a thymidine 6mer contains a BrdU,\n"
 "  -o,--output               path to output directory for bedgraph files.\n"
 "Optional arguments are:\n"
+"     --replication          detect fork direction and call origin firing (default: off),\n"
 "  -r,--resolution           minimum length of regions (default is 2kb).\n"
 "  -z,--zScore               zScore threshold for BrdU call (default is -2).\n";
 
@@ -34,6 +35,7 @@
 	double probability, threshold;
 	unsigned int resolution;
 	std::string outputFilename;
+	bool callReplication;
 };
 
 Arguments parseRegionsArguments( int argc, char** argv ){
@@ -56,6 +58,7 @@ Arguments parseRegionsArguments( int argc, char** argv ){
  	/*defaults - we'll override these if the option was specified by the user */
 	args.resolution = 2000;
 	args.threshold = -2;
+	args.callReplication = false;
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -82,6 +85,11 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 			args.threshold = std::stof(strArg.c_str());
 			i+=2;
 		}
+		else if ( flag == "--replication" ){
+
+			args.callReplication = true;
+			i+=1;
+		}
 		else if ( flag == "-r" or flag == "--resolution" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.resolution = std::stoi( strArg.c_str() );
@@ -102,7 +110,7 @@ struct region{
 };
 
 
-void callOrigins( std::vector< region > &regions, double threshold ){
+void callOrigins( std::vector< region > &regions, double threshold, std::string &header, std::ofstream &repFile ){
 
 	//do an initial moving average pass through the scores
 	std::vector< double > out;
@@ -110,10 +118,13 @@ void callOrigins( std::vector< region > &regions, double threshold ){
 
 		out.push_back( ( regions[i-2].score + regions[i-1].score + regions[i].score + regions[i+1].score + regions[i+2].score ) / 5.0 );
 	}
-
 	for ( int i = 0; i < out.size(); i++ ){
 
 		regions[i+2].score = out[i];
+		
+		//re-assess the call with the smoothed scores
+		if ( regions[i+2].score >= 0 ) regions[i+2].call = "BrdU";
+		else regions[i+2].call = "Thym";
 	}
 
 	std::vector< double > derivatives;
@@ -164,6 +175,28 @@ void callOrigins( std::vector< region > &regions, double threshold ){
 		if ( regions[i].call == "BrdU" and derivatives[i] < 0 ) regions[i].forkDir = "+";
 		if ( regions[i].call == "BrdU" and derivatives[i] > 0 ) regions[i].forkDir = "-";
 	}
+
+	//call origin positions
+	//strict
+	std::vector< int > oriPosForRead;
+	for ( int i = 2; i < regions.size()-3; i++ ){
+
+		if ( regions[i-2].forkDir == "-" and regions[i-1].forkDir == "-" and regions[i].forkDir == "-" and regions[i+1].forkDir == "+" and regions[i+2].forkDir == "+" and regions[i+3].forkDir == "+" ){
+
+			oriPosForRead.push_back( (regions[i+1].start + regions[i].end) / 2 );
+		}
+	}
+
+	//write the origins to the output stream
+	if ( oriPosForRead.size() > 0 ){
+
+		repFile << header << std::endl;
+
+		for ( unsigned int i = 0; i < oriPosForRead.size(); i++ ){		
+		
+			repFile << oriPosForRead[i] << std::endl;
+		}
+	}
 }
 
 
@@ -177,6 +210,13 @@ int regions_main( int argc, char** argv ){
  	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
+	std::ofstream repFile;
+	if ( args.callReplication ){
+
+		repFile.open("calledOrigins.osiris");
+	}
+
+
  	std::string line, header;
 	std::vector< region > buffer;
 	int calls = 0, attempts = 0, gap = 0, startingPos = -1;
@@ -188,7 +228,7 @@ int regions_main( int argc, char** argv ){
 
 				outFile << header << std::endl;
 			
-				callOrigins(buffer,args.threshold);
+				if (args.callReplication) callOrigins(buffer,args.threshold, header, repFile);
 				
 				for ( auto r = buffer.begin(); r < buffer.end(); r++ ){
 
@@ -235,6 +275,8 @@ int regions_main( int argc, char** argv ){
 
 				if ( r.score > args.threshold ) r.call = "BrdU";
 				else r.call = "Thym";
+				
+				r.score += fabs(args.threshold);
 
 				r.start = startingPos;
 				r.end = position;
@@ -244,5 +286,10 @@ int regions_main( int argc, char** argv ){
 			}
 		}
 	}
+
+	if ( repFile.is_open() ) repFile.close();
+	inFile.close();
+	outFile.close();
+
 	return 0;
 }

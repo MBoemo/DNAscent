@@ -413,7 +413,12 @@ std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string
 
 	/*push the filename for this read to the output */
 	std::stringstream ss;
-	ss << ">" << r.readID << " " << r.referenceMappedTo << ":" << r.refStart << "-" << r.refEnd << std::endl;
+
+	std::string strand;
+	if ( r.isReverse ) strand = "fwd";
+	else strand = "rev";
+
+	ss << ">" << r.readID << " " << r.referenceMappedTo << ":" << r.refStart << "-" << r.refEnd << "#" << strand << std::endl;
 
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
@@ -546,14 +551,15 @@ int detect_main( int argc, char** argv ){
 
 			r.basecall = reverseComplement( r.basecall );
 			r.referenceSeqMappedTo = reverseComplement( r.referenceSeqMappedTo );
+			r.isReverse = true;
 		}
 
 		buffer_shortReads.push_back(r);
 
 		/*if we've filled up the buffer with short reads, compute them in parallel */
-		if (buffer_shortReads.size() >= args.threads){
+		if (buffer_shortReads.size() >= 4*(args.threads)){
 
-			#pragma omp parallel for schedule(static) shared(buffer_shortReads,windowLength,analogueModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer_shortReads,windowLength,analogueModel,args,prog,failed) num_threads(args.threads)
 			for (int i = 0; i < buffer_shortReads.size(); i++){
 
 				read readForDetect = buffer_shortReads[i];
