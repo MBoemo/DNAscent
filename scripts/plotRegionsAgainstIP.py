@@ -27,6 +27,8 @@ for line in f:
 		xIP.append((float(splitLine[1]) + float(splitLine[2])) / 2.0 )
 		yIP.append(float(splitLine[4]))
 f.close()
+yIP = np.convolve(yIP, np.ones((10,))/10, mode='same')
+
 
 #import detect data
 f = open(sys.argv[2],'r')
@@ -40,27 +42,49 @@ for line in f:
 
 		continue
 
-	splitLine = line.rstrip().split('\t')
+	else:
 
-	if chromosome == target:
+		splitLine = line.rstrip().split('\t')
 
-		coverage[int(splitLine[0]):int(splitLine[1])] += 1
-		if splitLine[3] == "BrdU":
+		if chromosome == target:
 
-			BrdUCalls[int(splitLine[0]):int(splitLine[1])] += 1
+			coverage[int(splitLine[0])] += 1
+			if float(splitLine[1]) > 2.5:
 
-#normalise for coverage
-BrdUCalls = np.divide(BrdUCalls.astype(float), coverage.astype(float), where=coverage != 0)
+				BrdUCalls[int(splitLine[0])] += 1
+
+
+
+xBrdU = []
+yBrdU = []
+for i in range( 0, length, 100 ):
+
+	if float(sum( coverage[i:i+100])) == 0.0:
+		continue
+	else:
+		yBrdU.append(float(sum( BrdUCalls[i:i+100] )) / float(sum( coverage[i:i+100])))
+		xBrdU.append(i+50)
+
+yBrdUSmooth = np.convolve(yBrdU, np.ones((10,))/10, mode='same')
+
+
+f = open('BrdU_data.plot','w')
+for i, v in enumerate(yBrdUSmooth):
+	f.write(str(xBrdU[i]) + ' ' + str(v) + '\n')
+f.close()
+		
 
 #normalise for axes scales
-normFactor = np.mean(yIP) / np.mean(BrdUCalls)
-BrdUCalls = BrdUCalls*normFactor
+yBrdUSmooth = np.array(yBrdUSmooth)
+normFactor = np.mean(yIP) / np.mean(yBrdUSmooth)
+yBrdUSmooth = yBrdUSmooth*normFactor
+
 
 plt.figure(1)
 plt.plot(xIP, yIP, label='IP', alpha=0.5)
-plt.plot(range(0,length), BrdUCalls, label='Nanopore', alpha=0.5)
+plt.plot(xBrdU, yBrdUSmooth, label='Nanopore', alpha=0.5)
 plt.xlim(0,length)
-plt.ylim(0,8)
+#plt.ylim(0,6)
 plt.legend(framealpha=0.5)
 plt.xlabel('Position on Chromosome (bp)')
 plt.ylabel('A.U.')

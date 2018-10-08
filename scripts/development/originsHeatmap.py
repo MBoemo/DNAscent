@@ -4,188 +4,182 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
+import operator
 
-bandwidth = 15000
+heatmapWidth = 15000
+
+def int2RomanNumeral( number ):
+	if number == 1:
+		return "I"
+	elif number == 2:
+		return "II"
+	elif number == 3:
+		return "III"
+	elif number == 4:
+		return "IV"
+	elif number == 5:
+		return "V"
+	elif number == 6:
+		return "VI"
+	elif number == 7:
+		return "VII"
+	elif number == 8:
+		return "VIII"
+	elif number == 9:
+		return "IX"
+	elif number == 10:
+		return "X"
+	elif number == 11:
+		return "XI"
+	elif number == 12:
+		return "XII"
+	elif number == 13:
+		return "XIII"
+	elif number == 14:
+		return "XIV"
+	elif number == 15:
+		return "XV"
+	elif number == 16:
+		return "XVI"
+
 
 #import origin bed
 f = open(sys.argv[1],'r')
-early = {} #maps chromosome name to origin locations
-late = {}
+originLocations = {}
+chrOrigins2efficiency = {}
+chrOrigins2candidiates = {}
+early_chromosome2origins = {}
+late_chromosome2origins = {}
+rowCount = 0
+
+#iterate on the bed file
 for line in f:
+
+	if line[0] == '#':
+		continue
+
 	splitLine = line.rstrip().split('\t')
-	
 	chromosome = splitLine[0]
+	chromosome = 'chr' + str( int2RomanNumeral(int(chromosome[3:])) ) #convert to roman numerals for SacCer3
+
 	start = int(splitLine[1])
 	end = int(splitLine[2])
+	oriLoc = (start + end)/2
+	if chromosome not in originLocations:
+		originLocations[chromosome] = []
+	originLocations[chromosome].append(oriLoc)
 
+	#keep track of early or late
 	if splitLine[4] == "1": #unchecked (early)
 
-		if chromosome in early:
+		if chromosome in early_chromosome2origins:
 
-			early[chromosome].append( (start + end)/2 )
+			early_chromosome2origins[chromosome].append( oriLoc )
 		else:
 		
-			early[chromosome] = [ (start + end)/2 ]
+			early_chromosome2origins[chromosome] = [ oriLoc ]
 
 	elif splitLine[4] == "0": #checked (late)
 
-		if chromosome in late:
+		if chromosome in late_chromosome2origins:
 
-			late[chromosome].append( (start + end)/2 )
+			late_chromosome2origins[chromosome].append( oriLoc )
 		else:
 		
-			late[chromosome] = [ (start + end)/2 ]
+			late_chromosome2origins[chromosome] = [ oriLoc ]
 
 	else:
 		print "indexing issue"
+
+	#keep track of efficiency at each origin
+	efficiency = float(splitLine[5])
+	chrOrigins2efficiency[(chromosome,oriLoc)] = efficiency		
+
+
 f.close()
 
 
-#iterate on the bedgraph files
-contents = os.listdir(sys.argv[2])
-early_chrOrigin_to_scores = {}
-late_chrOrigin_to_scores = {}
-earlyRowCount = 0
-lateRowCount = 0
-lateScoreTot = 0
-earlyScoreTot = 0
-lateScoreCount = 0
-earlyScoreCount = 0
+#sort by efficiency 
+sorted_chrOrigins2efficiency = sorted(chrOrigins2efficiency.items(), key=operator.itemgetter(1))
+sorted_chrOrigins2efficiency = sorted_chrOrigins2efficiency[::-1] #sort from high to low efficiency
 
-for filename in contents:
-	
-	splitOnDot = filename.split('.')
+#iterate on the regions file
+f = open(sys.argv[2],'r')
+first = True
+for line in f:
 
-	if splitOnDot[-1:][0] != "bedgraph":
-		continue
+	if line[0] == '>':
 
-	f = open(sys.argv[2] + '/' + filename,'r')
-	g = f.readlines()
-
-	BrdUCallCount = 0
-	startEndScore = []
-	earlyCandidates = []
-	lateCandidates = []
-	chromosome = ""
-
-	readStart = int(g[1].rstrip().split(' ')[1])
-	readEnd = int(g[-1:][0].rstrip().split(' ')[2])		
-
-	for line in g:
-
-		if line[0:5] == "track":
-			continue
+		if not first:
 		
+			for c in centeredOrigins:
+
+				if (chromosome,c) not in chrOrigins2candidiates:
+
+					chrOrigins2candidiates[(chromosome,c)] = []
+
+				chrOrigins2candidiates[(chromosome,c)].append(startEndScore)
+				rowCount += 1
+				
+			
+
 		splitLine = line.rstrip().split(' ')
-		
-		chromosome = splitLine[0]
-		lower = int(splitLine[1])
-		upper = int(splitLine[2])
-		score = float(splitLine[3])
-		call = splitLine[4]
+		splitLine2 = splitLine[1].split(':')
+		chromosome = splitLine2[0]
+		splitLine3 = splitLine2[1].split('-')
+		readStart = int(splitLine3[0])
+		readEnd = int(splitLine3[1])
+		startEndScore = []
+		centeredOrigins = []
+		first = False
+
+	else:
+
+		splitLine = line.rstrip().split('\t')
+		lower = int(splitLine[0])
+		upper = int(splitLine[1])
+		score = float(splitLine[2])
+		call = splitLine[3]
 
 		startEndScore.append( (lower, upper, score) )
-		if call == "BrdU":
-			BrdUCallCount += 1
 
-		if chromosome in early:
-			earlyOriginLocOnChr = early[chromosome]
-			for oriPos in earlyOriginLocOnChr:
+		for oriPos in originLocations[chromosome]:
 
-				if oriPos > lower and oriPos < upper and call == "BrdU" and abs(readStart - oriPos) > 8000 and abs(readEnd - oriPos) > 8000:
-					earlyScoreTot += score
-					earlyScoreCount += 1
-					earlyCandidates.append(oriPos)
+			#if this entry is a BrdU call that's centered on the origin and the read is of sufficient length, record that origin
+			if oriPos > lower and oriPos < upper and call == "BrdU" and abs(readStart - oriPos) > 8000 and abs(readEnd - oriPos) > 8000:
 
-		if chromosome in late:
-			lateOriginLocOnChr = late[chromosome]
-			for oriPos in lateOriginLocOnChr:
-				if oriPos > lower and oriPos < upper and call == "BrdU" and abs(readStart - oriPos) > 8000 and abs(readEnd - oriPos) > 8000:
-					lateScoreTot += score
-					lateScoreCount += 1
-					lateCandidates.append(oriPos)
-	
-	#read must be at least 10kb in length
-	if len(startEndScore) < 5:
-		continue
+				centeredOrigins.append(oriPos)
 
-
-	for i in earlyCandidates:
-		if BrdUCallCount > 2:
-			earlyRowCount += 1
-			if (chromosome,i) in early_chrOrigin_to_scores:
-				early_chrOrigin_to_scores[(chromosome,i)].append(startEndScore)
-			else:
-				early_chrOrigin_to_scores[(chromosome,i)] = [startEndScore]
-
-	for i in lateCandidates:
-		if BrdUCallCount > 2:
-			lateRowCount += 1
-			if (chromosome,i) in late_chrOrigin_to_scores:
-				late_chrOrigin_to_scores[(chromosome,i)].append(startEndScore)
-			else:
-				late_chrOrigin_to_scores[(chromosome,i)] = [startEndScore]		
-
-	f.close()
-
-print "early: ", float(earlyScoreTot)/float(earlyScoreCount)
-print "late: ", float(lateScoreTot)/float(lateScoreCount)
-
-#plot early
-matrix = np.ones((earlyRowCount, 2*bandwidth+1)) * np.nan
+#plot the heatmap
+matrix = np.ones((rowCount, 2*heatmapWidth+1)) * np.nan
 row = 0
-for key in early_chrOrigin_to_scores:
-	chromosome = key[0]
-	originPos = key[1]
-	
-	for read in early_chrOrigin_to_scores[key]:
-		for startEndScore in read:
-			if (originPos - startEndScore[0]) < bandwidth or (startEndScore[1] - originPos) < bandwidth:
-				lower = startEndScore[0] - originPos + bandwidth
-				higher = startEndScore[1] - originPos + bandwidth
-				matrix[row, lower-100:higher+100] = startEndScore[2]
+for t in sorted_chrOrigins2efficiency:
 
-	row += 1
+	chromOriPair = t[0]
+	efficiency = t[1]
+
+	if chromOriPair in chrOrigins2candidiates:
+		for read in chrOrigins2candidiates[chromOriPair]:
+			originPos = chromOriPair[1]
+
+			for startEndScore in read:
+
+				if (originPos - startEndScore[0]) < heatmapWidth or (startEndScore[1] - originPos) < heatmapWidth:
+					lower = startEndScore[0] - originPos + heatmapWidth
+					higher = startEndScore[1] - originPos + heatmapWidth
+					matrix[row, lower-100:higher+100] = startEndScore[2]
+			row += 1
 	
 plt.figure(1)
-cmap = plt.cm.copper_r
+cmap = plt.cm.jet#plt.cm.copper_r
 cmap.set_bad(color='w')
-plt.imshow(matrix[0:earlyRowCount,:],cmap=cmap,aspect = 'auto',interpolation='none')
+plt.imshow(matrix[0:rowCount,:],cmap=cmap,aspect = 'auto',interpolation='none')
 plt.colorbar()
 plt.clim(-5,3)
 plt.xticks([0, 5000, 10000, 15000, 20000, 25000, 30000],('-15', '-10', '-5', '0', '5', '10', '15'))
 plt.xlabel('Distance from Origin (kb)')
 plt.ylabel('Individual Reads')
-plt.savefig('OriHeatmap_early.pdf')
+plt.savefig('OriHeatmap_efficiencyRanked.pdf')
 plt.clf()
 plt.cla()
 plt.close()
-
-#plot late
-matrix = np.ones((lateRowCount, 2*bandwidth + 1)) * np.nan
-row = 0
-for key in late_chrOrigin_to_scores:
-	chromosome = key[0]
-	originPos = key[1]
-	
-	for read in late_chrOrigin_to_scores[key]:
-		for startEndScore in read:
-			if (originPos - startEndScore[0]) < bandwidth or (startEndScore[1] - originPos) < bandwidth:
-				lower = startEndScore[0] - originPos + bandwidth
-				higher = startEndScore[1] - originPos + bandwidth
-				matrix[row, lower-100:higher+100] = startEndScore[2]
-
-	row += 1
-	
-plt.figure(2)
-cmap = plt.cm.copper_r
-cmap.set_bad(color='w')
-plt.imshow(matrix[0:lateRowCount,:],cmap=cmap,aspect = 'auto',interpolation='none')
-plt.colorbar()
-plt.clim(-5,3)
-plt.xticks([0, 5000, 10000, 15000, 20000, 25000, 30000],('-15', '-10', '-5', '0', '5', '10', '15'))
-plt.xlabel('Distance from Origin (kb)')
-plt.ylabel('Individual Reads')
-plt.savefig('OriHeatmap_late.pdf')
-
-		
