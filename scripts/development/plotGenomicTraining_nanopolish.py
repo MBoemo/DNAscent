@@ -79,24 +79,12 @@ for line in f:
 	model[splitLine[0]] = [	float(splitLine[1]), float(splitLine[2]) ]
 f.close()
 
-#mixture model
-mixture_dict = {}
-f = open(sys.argv[3],'r')
-for line in f:
-
-	if line[0] == '6':
-		continue
-	
-	splitLine = line.rstrip().split('\t')
-	mixture_dict[splitLine[0]] = [ float(splitLine[4]), float(splitLine[5]), float(splitLine[7]), float(splitLine[8]) ]#, float(splitLine[10]), float(splitLine[11]) ]
-f.close()
 
 for i, key in enumerate(sixmer2eventsBrdU):
 
 	if key == 'NNNNNN':
 		continue
 	
-	#if key in mixture_dict:
 	if len( sixmer2eventsBrdU[key] ) > 200:
 		x = np.linspace( np.mean(sixmer2eventsBrdU[key])-15, np.mean(sixmer2eventsBrdU[key])+15, 1000 )
 		plt.figure(i)
@@ -137,15 +125,6 @@ for i, key in enumerate(sixmer2eventsBrdU):
 		#pore model
 		yModel = mlab.normpdf( x, model[key][0], model[key][1] )
 		plt.plot(x, yModel, label='6mer Pore Model')
-
-		#trimodal
-		#if key in mixture_dict:
-		#	yMix = mlab.normpdf( x, mixture_dict[key][0], mixture_dict[key][1] )
-		#	plt.plot( x, yMix, label='Fit Distribution (1)')
-		#	yMix = mlab.normpdf( x, mixture_dict[key][2], mixture_dict[key][3] )
-		#	plt.plot( x, yMix, label='Fit Distribution (2)')
-			#yMix = mlab.normpdf( x, mixture_dict[key][4], mixture_dict[key][5] )
-			#plt.plot( x, yMix, label='Fit Distribution (3)')
 
 		#plotting stuff
 		plt.xlabel('pA')

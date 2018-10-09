@@ -270,55 +270,84 @@ void parseCigar(bam1_t *record, std::map< int, int > &ref2query, int &refStart, 
 	int refPosition = 0;
 
 	const uint32_t *cigar = bam_get_cigar(record);
-	for ( int i = 0; i < record -> core.n_cigar; ++i){
 
-		const int op = bam_cigar_op(cigar[i]); //cigar operation
-		const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
-
-		//for a match, advance both reference and query together
-		if (op == BAM_CMATCH or op == BAM_CEQUAL or op == BAM_CDIFF){
-
-			for ( int j = refPosition; j < refPosition + ol; j++ ){
-
-				ref2query[j] = queryPosition;
-				queryPosition++;
-			}
-			refPosition += ol;
-		}
-		//for a deletion, advance only the reference position
-		else if (op == BAM_CDEL or op == BAM_CREF_SKIP){
-
-			for ( int j = refPosition; j < refPosition + ol; j++ ){
-
-				ref2query[j] = queryPosition;
-			}
-			refPosition += ol;
-		}
-		//for insertions or soft clipping, advance only the query position
-		else if (op == BAM_CSOFT_CLIP or op == BAM_CINS){
-
-			for ( int j = refPosition; j < refPosition + ol; j++ ){
-
-				ref2query[j] = queryPosition;
-				queryPosition++;
-			}
-		}
-		//N.B. hard clipping advances neither refernce nor query, so ignore it
-	}
-	refEnd = refStart + refPosition;
-
-	//correct for reverse complements
 	if ( bam_is_rev(record) ){
 
-		std::map<int, int> cigar_rc;
-		std::string basecall = getQuerySequence(record);
-		int basecallLen = basecall.length();
-		for ( auto e = ref2query.begin(); e!= ref2query.end(); e++ ){
+		for ( int i = record -> core.n_cigar - 1; i >= 0; i--){
 
-			cigar_rc[refEnd - refStart - (e -> first)] = basecallLen - (e -> second);
+			const int op = bam_cigar_op(cigar[i]); //cigar operation
+			const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
+
+			//for a match, advance both reference and query together
+			if (op == BAM_CMATCH or op == BAM_CEQUAL or op == BAM_CDIFF){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					ref2query[j] = queryPosition;
+					queryPosition++;
+				}
+				refPosition += ol;
+			}
+			//for a deletion, advance only the reference position
+			else if (op == BAM_CDEL or op == BAM_CREF_SKIP){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					ref2query[j] = queryPosition;
+				}
+				refPosition += ol;
+			}
+			//for insertions or soft clipping, advance only the query position
+			else if (op == BAM_CSOFT_CLIP or op == BAM_CINS){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					ref2query[j] = queryPosition;
+					queryPosition++;
+				}
+			}
+			//N.B. hard clipping advances neither refernce nor query, so ignore it
 		}
-		ref2query = cigar_rc;
 	}
+	else {
+
+		for ( int i = 0; i < record -> core.n_cigar; ++i){
+
+			const int op = bam_cigar_op(cigar[i]); //cigar operation
+			const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
+
+			//for a match, advance both reference and query together
+			if (op == BAM_CMATCH or op == BAM_CEQUAL or op == BAM_CDIFF){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					ref2query[j] = queryPosition;
+					queryPosition++;
+				}
+				refPosition += ol;
+			}
+			//for a deletion, advance only the reference position
+			else if (op == BAM_CDEL or op == BAM_CREF_SKIP){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					ref2query[j] = queryPosition;
+				}
+				refPosition += ol;
+			}
+			//for insertions or soft clipping, advance only the query position
+			else if (op == BAM_CSOFT_CLIP or op == BAM_CINS){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					ref2query[j] = queryPosition;
+					queryPosition++;
+				}
+			}
+			//N.B. hard clipping advances neither refernce nor query, so ignore it
+		}
+	}
+	refEnd = refStart + refPosition;
 }
 
 
@@ -414,14 +443,18 @@ std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string
 	/*push the filename for this read to the output */
 	std::stringstream ss;
 
-	std::string strand;
-	if ( r.isReverse ) strand = "fwd";
-	else strand = "rev";
-
-	ss << ">" << r.readID << " " << r.referenceMappedTo << ":" << r.refStart << "-" << r.refEnd << "#" << strand << std::endl;
-
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
+
+	std::string strand;
+	if ( r.isReverse ){
+
+		strand = "rev";
+		std::reverse( POIs.begin(), POIs.end() );
+	}
+	else strand = "fwd";
+
+	ss << ">" << r.readID << " " << r.referenceMappedTo << ":" << r.refStart << "-" << r.refEnd << "#" << strand << std::endl;
 
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 
@@ -434,7 +467,6 @@ std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string
 		//catch spans with lots of insertions or deletions
 		int spanOnQuery = (r.refToQuery)[posOnRef + windowLength] - (r.refToQuery)[posOnRef - windowLength];
 		if ( spanOnQuery > 2.5*windowLength or spanOnQuery < 1.5*windowLength ) continue;
-
 
 		/*get the events that correspond to the read snippet */
 		for ( unsigned int j = 0; j < (r.eventAlignment).size(); j++ ){
@@ -456,7 +488,12 @@ std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string
 		double logProbAnalogue = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, true);
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
-		ss << posOnRef + r.refStart << "\t" << logLikelihoodRatio << "\t" <<  (r.referenceSeqMappedTo).substr(posOnRef, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
+		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
+		int globalPosOnRef;
+		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
+		else globalPosOnRef = r.refStart + posOnRef;
+
+		ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" <<  (r.referenceSeqMappedTo).substr(posOnRef, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
 	}
 	return ss;
 }
@@ -534,7 +571,7 @@ int detect_main( int argc, char** argv ){
 			getEvents( r.filename, r.raw );
 		}
 		catch ( BadFast5Field &bf5 ){
-			
+
 			failed++;
 			prog++;
 			continue;
