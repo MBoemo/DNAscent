@@ -6,6 +6,7 @@ import numpy as np
 
 repeatLen = 9136
 coverage = np.array([0]*repeatLen)
+totalCoverage = np.array([0]*repeatLen)
 scores = np.array([0.0]*repeatLen)
 
 f = open(sys.argv[1],'r')
@@ -22,13 +23,21 @@ for line in f:
 		score = float(splitLine[2])
 
 		if upper < lower:
+
+			totalCoverage[lower:repeatLen] += 1
+			totalCoverage[0:upper] += 1
+
 			if score > 0:
+
 				coverage[lower:repeatLen] += 1
 				scores[lower:repeatLen] += score
 				coverage[0:upper] += 1
 				scores[0:upper] += score
 		else:
+			totalCoverage[lower:upper] += 1
+
 			if score > 0:
+
 				coverage[lower:upper] += 1
 				scores[lower:upper] += score
 
@@ -52,5 +61,14 @@ plt.plot(range(0,repeatLen),coverage)
 plt.xlim(0,9136)
 plt.xlabel('Position on rDNA Repeat (bp)')
 plt.ylabel('Coverage')
-plt.savefig('coverage.pdf')
+plt.savefig('rDNA_BrdUcoverage.pdf')
+plt.close()
+
+plt.clf()
+plt.figure()
+plt.plot(range(0,repeatLen),totalCoverage)	
+plt.xlim(0,9136)
+plt.xlabel('Position on rDNA Repeat (bp)')
+plt.ylabel('Coverage')
+plt.savefig('rDNA_totalCoverage.pdf')
 plt.close()

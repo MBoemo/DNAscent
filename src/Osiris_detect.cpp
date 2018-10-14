@@ -49,7 +49,7 @@ Arguments parseDetectArguments( int argc, char** argv ){
 
 	if( argc < 2 ){
 
-		std::cout << "Exiting with error.  Insufficient arguments passed to Osiris build." << std::endl << help << std::endl;
+		std::cout << "Exiting with error.  Insufficient arguments passed to Osiris detect." << std::endl << help << std::endl;
 		exit(EXIT_FAILURE);
 	}
 
@@ -542,8 +542,11 @@ int detect_main( int argc, char** argv ){
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
 	int windowLength = 20;
-	int result;
+	int result, maxBufferSize;
 	std::vector< read > buffer_shortReads;
+	if ( args.threads <=4 ) maxBufferSize = args.threads;
+	else maxBufferSize = 4*(args.threads);
+
 	do {
 		read r;
 
@@ -594,7 +597,7 @@ int detect_main( int argc, char** argv ){
 		buffer_shortReads.push_back(r);
 
 		/*if we've filled up the buffer with short reads, compute them in parallel */
-		if (buffer_shortReads.size() >= 4*(args.threads)){
+		if (buffer_shortReads.size() >= maxBufferSize){
 
 			#pragma omp parallel for schedule(dynamic) shared(buffer_shortReads,windowLength,analogueModel,args,prog,failed) num_threads(args.threads)
 			for (int i = 0; i < buffer_shortReads.size(); i++){

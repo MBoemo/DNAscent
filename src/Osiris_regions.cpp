@@ -112,7 +112,7 @@ struct region{
 
 void callOrigins( std::vector< region > &regions, double threshold, std::string &header, std::ofstream &repFile ){
 
-	//do an initial moving average pass through the scores
+	//10kb moving average filter
 	std::vector< double > out;
 	for ( int i = 2; i < regions.size() - 2; i++ ){
 
@@ -121,16 +121,25 @@ void callOrigins( std::vector< region > &regions, double threshold, std::string 
 	for ( int i = 0; i < out.size(); i++ ){
 
 		regions[i+2].score = out[i];
-		
-		//re-assess the call with the smoothed scores
-		if ( regions[i+2].score >= 0 ) regions[i+2].call = "BrdU";
-		else regions[i+2].call = "Thym";
 	}
 
-	std::vector< double > derivatives;
+	//secondary 6kb moving average filter
+	out.clear();
+	for ( int i = 1; i < regions.size() - 1; i++ ){
 
-	//get the forward derivative at the first region
-	derivatives.push_back( (regions[1].score - regions[0].score)/2.0 );
+		out.push_back( ( regions[i-1].score + regions[i].score + regions[i+1].score ) / 3.0 );
+	}
+	for ( int i = 0; i < out.size(); i++ ){
+
+		regions[i+1].score = out[i];
+		
+		//re-assess the call with the smoothed scores
+		if ( regions[i+1].score >= 0 ) regions[i+1].call = "BrdU";
+		else regions[i+1].call = "Thym";
+	}
+	out.clear();
+
+	std::vector< double > derivatives;
 	
 	//get the central derivative for all the middle regions
 	for ( int i = 1; i < regions.size() - 1; i++ ){
@@ -141,16 +150,23 @@ void callOrigins( std::vector< region > &regions, double threshold, std::string 
 		derivatives.push_back( ( next - former ) / 2.0 );
 	}
 
-	//backward derivative for the last region
-	derivatives.push_back( (regions[regions.size()-1].score - regions[regions.size()-2].score)/2.0 );
-
 	//error correct for derivatives that are sandwiched between two of the opposite sign
-	for ( int i = 1; i < derivatives.size() - 1; i++ ){
+	for ( int i = 2; i < derivatives.size() - 2; i++ ){
 
 		if ( derivatives[i-1] < 0 and derivatives[i+1] < 0 and derivatives[i] > 0 ) derivatives[i] = ( derivatives[i-1] + derivatives[i+1] ) / 2.0;
 		if ( derivatives[i-1] > 0 and derivatives[i+1] > 0 and derivatives[i] < 0 ) derivatives[i] = ( derivatives[i-1] + derivatives[i+1] ) / 2.0;
 	}
 
+	//smooth derivative calls
+	for ( int i = 1; i < derivatives.size() - 1; i++ ){
+
+		out.push_back( ( derivatives[i-1] + derivatives[i] + derivatives[i+1] ) / 3.0 );
+	}
+	for ( int i = 0; i < out.size(); i++ ){
+
+		derivatives[i+1] = out[i];
+	}
+	
 	//error correct on BrdU calls for the middle
 	for ( int i = 1; i < regions.size() - 1; i++ ){
 
@@ -170,20 +186,20 @@ void callOrigins( std::vector< region > &regions, double threshold, std::string 
 	}
 
 	//set the fork direction
-	for ( int i = 0; i < regions.size(); i++ ){
+	for ( int i = 1; i < regions.size() - 1; i++ ){
 
 		if ( regions[i].call == "BrdU" and derivatives[i] < 0 ) regions[i].forkDir = "+";
 		if ( regions[i].call == "BrdU" and derivatives[i] > 0 ) regions[i].forkDir = "-";
 	}
 
 	//call origin positions
-	//strict
 	std::vector< int > oriPosForRead;
-	for ( int i = 2; i < regions.size()-3; i++ ){
+	for ( int i = 1; i < regions.size()-2; i++ ){
 
-		if ( regions[i-2].forkDir == "-" and regions[i-1].forkDir == "-" and regions[i].forkDir == "-" and regions[i+1].forkDir == "+" and regions[i+2].forkDir == "+" and regions[i+3].forkDir == "+" ){
+		if ( regions[i-1].forkDir == "-" and regions[i].forkDir == "-" and regions[i+1].forkDir == "+" and regions[i+2].forkDir == "+" ){
 
-			oriPosForRead.push_back( (regions[i+1].start + regions[i].end) / 2 );
+			if ( regions[i].score > regions[i+1].score ) oriPosForRead.push_back( (regions[i].start + regions[i].end) / 2 );
+			else oriPosForRead.push_back( (regions[i+1].start + regions[i+1].end) / 2 );
 		}
 	}
 
@@ -284,6 +300,19 @@ int regions_main( int argc, char** argv ){
 				buffer.push_back(r);
 				calls = 0, attempts = 0, gap = 0, startingPos = -1;
 			}
+		}
+	}
+
+	//empty the buffer at the end
+	if ( buffer.size() > 5 ){
+
+		outFile << header << std::endl;
+			
+		if (args.callReplication) callOrigins(buffer,args.threshold, header, repFile);
+				
+		for ( auto r = buffer.begin(); r < buffer.end(); r++ ){
+
+			outFile << r -> start << "\t" << r -> end << "\t" << r -> score << "\t" << r -> call << "\t" << r -> forkDir <<  std::endl;
 		}
 	}
 

@@ -17,20 +17,27 @@
 
  static const char *help=
 "build: Osiris executable that builds a PSL file from the output of Osiris detect.\n"
-"To run Osiris regions, do:\n"
+"To run Osiris psl, do:\n"
 "  ./Osiris psl [arguments]\n"
 "Example:\n"
 "  ./Osiris psl -d /path/to/osiris_detect_output.out -r path/to/reference.fasta -o /path/to/output_prefix\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from Osiris detect,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
-"  -o,--output               path to output bed prefix.\n";
+"  -o,--output               path to output bed prefix.\n"
+"Optional arguments are:\n"
+"     --min                  minimum read length to compute (default is 1),\n"
+"     --max                  maximum read length to compute (default is Inf).\n";
 
 
  struct Arguments {
 	std::string detectFilename;
 	std::string outputFilename;
 	std::string referenceFilename;
+	bool cropToMin = false;
+	unsigned int min = 0;
+	bool cropToMax = false;
+	unsigned int max = 0;
 
 };
  Arguments parsePslArguments( int argc, char** argv ){
@@ -59,6 +66,18 @@
 		else if ( flag == "-o" or flag == "--output" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.outputFilename = strArg + ".psl";
+			i+=2;
+		}
+		else if ( flag == "--min" ){
+			args.cropToMin = true;
+ 			std::string strArg( argv[ i + 1 ] );
+			args.min = std::stoi( strArg.c_str() );
+			i+=2;
+		}
+		else if ( flag == "--max" ){
+			args.cropToMax = true;
+ 			std::string strArg( argv[ i + 1 ] );
+			args.max = std::stoi( strArg.c_str() );
 			i+=2;
 		}
 		else if ( flag == "-r" or flag == "--reference" ){
@@ -125,6 +144,7 @@
 
  	std::string line;
 	std::vector< readDetection > buffer;
+	bool recordRead = true;
 
 	while ( std::getline( inFile, line ) ){
 
@@ -143,13 +163,22 @@
 			rd.chromosome = line.substr(line.find(' ') + 1, line.find(':') - line.find(' ') - 1);
 			rd.mappingLower = std::stoi(line.substr(line.find(':') + 1, line.rfind('-') - line.find(':') - 1));
 			rd.mappingUpper = std::stoi(line.substr(line.rfind('-')+1, line.find('#') - line.rfind('-') - 1 ));
+
+			int readLength = rd.mappingUpper - rd.mappingLower;
+			recordRead = true;
+			if ( (args.cropToMin and readLength < args.min) or (args.cropToMax and readLength > args.max) ){
+
+				recordRead = false;
+				continue;
+			}
+
 			std::string strand = line.substr(line.find('#')+1);
 			if (strand == "fwd") rd.direction = "+";
 			else if (strand == "rev") rd.direction = "-";
 			else throw BadStrandDirection();
 			buffer.push_back(rd);
 		}
-		else{
+		else if ( recordRead ){
 
 			std::string column;
 			std::stringstream ssLine(line);

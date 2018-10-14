@@ -25,7 +25,7 @@ for line in f:
 	if thisChromosome == target:
 
 		xIP.append((float(splitLine[1]) + float(splitLine[2])) / 2.0 )
-		yIP.append(float(splitLine[4]))
+		yIP.append(float(splitLine[3]))
 f.close()
 yIP = np.convolve(yIP, np.ones((10,))/10, mode='same')
 
