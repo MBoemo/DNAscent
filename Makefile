@@ -18,7 +18,7 @@ LIBFLAGS += -Wl,-rpath,$(dir $(abspath $(lastword $(MAKEFILE_LIST))))hdf5-1.8.14
 #hts
 HTS_LIB = ./htslib/libhts.a
 HTS_INCLUDE = -I./htslib
-LIBFLAGS += -L htslib/ -lhts
+LIBFLAGS += -Wl,-rpath,$(dir $(abspath $(lastword $(MAKEFILE_LIST))))htslib -L htslib/ -lhts
 
 #fast5
 FAST5_INCLUDE = -I./fast5/include

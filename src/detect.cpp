@@ -438,10 +438,7 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, std::map< std::string,
 }
 
 
-std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel ){
-
-	/*push the filename for this read to the output */
-	std::stringstream ss;
+void llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel, std::stringstream &ss ){
 
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
@@ -495,7 +492,6 @@ std::stringstream llAcrossRead( read &r, int windowLength, std::map< std::string
 
 		ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" <<  (r.referenceSeqMappedTo).substr(posOnRef, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
 	}
-	return ss;
 }
 
 
@@ -614,7 +610,8 @@ int detect_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::stringstream ss = llAcrossRead(readForDetect, windowLength, analogueModel);
+				std::stringstream ss; 
+				llAcrossRead(readForDetect, windowLength, analogueModel, ss);
 
 				#pragma omp critical
 				{
@@ -632,7 +629,8 @@ int detect_main( int argc, char** argv ){
 	#pragma omp parallel for schedule(dynamic) shared(windowLength,buffer_shortReads,analogueModel) num_threads(args.threads)
 	for (int i = 0; i < buffer_shortReads.size(); i++){
 
-		std::stringstream ss = llAcrossRead(buffer_shortReads[i], windowLength, analogueModel);
+		std::stringstream ss;
+		llAcrossRead(buffer_shortReads[i], windowLength, analogueModel, ss);
 
 		#pragma omp critical
 		{

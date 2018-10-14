@@ -1,7 +1,6 @@
 #object files and binaries
-bin/Osiris
+bin/DNAscent
 *.o
-Osiris/*.pyc
 
 #directories we don't want to track
 build/
