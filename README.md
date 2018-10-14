@@ -51,3 +51,4 @@ Cloning the repository recursively (see above) will provide all the required dep
 - fast5 (https://github.com/mateidavid/fast5.git)
 - htslib (https://github.com/samtools/htslib.git)
 - hdf5lib (https://support.hdfgroup.org/HDF5/)
+Note that the high throughput sequencing library requires bzlib and lzma for compression.  If you don't have these, apt-get lzma-dev and libbz2-dev.
