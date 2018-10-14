@@ -24,7 +24,7 @@ Before running detection, the fast5 reads need to be indexed.  Run,
 ```shell
 python DNAscent/scripts/index.py -d path/to/fast5/reads
 ```
-This will produce a file `index.DNAscent` which will be needed as input to the `DNAscent detect` executable.
+(Note that this script requires h5py - see below.)  This will produce a file `index.dnascent` which will be needed as input to the `DNAscent detect` executable.
 
 You can run `DNAscent detect` (on 10 threads, for example) by running:
 ```shell
@@ -46,10 +46,8 @@ where `p` is the probability that there is an analogue in any 6mer.  The file `o
 
 ## Dependencies
 Cloning the repository recursively (see above) will provide all the required dependencies.  The list of dependencies is as follows:
+- h5py(https://github.com/h5py/h5py.git)
 - Penthus (https://github.com/MBoemo/Penthus.git)
 - fast5 (https://github.com/mateidavid/fast5.git)
 - htslib (https://github.com/samtools/htslib.git)
 - hdf5lib (https://support.hdfgroup.org/HDF5/)
-
-
-### Training
