@@ -1,7 +1,7 @@
 #----------------------------------------------------------
 # Copyright 2017 University of Oxford
 # Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
-# This software is licensed under GPL-3.0.  You should have
+# This software is licensed under GPL-2.0.  You should have
 # received a copy of the license with this software.  If
 # not, please Email the author.
 #----------------------------------------------------------
@@ -22,7 +22,7 @@ class arguments:
 
 #--------------------------------------------------------------------------------------------------------------------------------------
 def splashHelp():
-	s = """index.py: Osiris preprocessing script that will create an index of readIDs to fast5 file paths.
+	s = """index.py: DNAscent preprocessing script that will create an index of readIDs to fast5 file paths.
 To run index.py, do:
   python index.py [arguments]
 Example:
@@ -88,7 +88,7 @@ args = sys.argv
 a = parseArguments(args)
 
 #output file to write on
-fout = open('index.osiris','w')
+fout = open('index.dnascent','w')
 
 progress = 0
 #walk down the subdirectories and make a cumulative fasta in parallel

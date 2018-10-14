@@ -26,7 +26,7 @@ FAST5_INCLUDE = -I./fast5/include
 #add include flags for each library
 CXXFLAGS += $(H5_INCLUDE) $(HTS_INCLUDE) $(FAST5_INCLUDE) $(PENTHUS_INCLUDE)
 
-MAIN_EXECUTABLE = bin/Osiris
+MAIN_EXECUTABLE = bin/DNAscent
 
 all: depend $(MAIN_EXECUTABLE)
 
@@ -49,7 +49,7 @@ hdf5-1.8.14/hdf5/lib/libhdf5.a:
 SUBDIRS = src src/scrappie
 CPP_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.cpp))
 C_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.c))
-EXE_SRC = src/Osiris.cpp
+EXE_SRC = src/DNAscent.cpp
 
 #generate object names
 CPP_OBJ = $(CPP_SRC:.cpp=.o)
@@ -69,8 +69,8 @@ depend: .depend
 	$(CC) -o $@ -c $(CFLAGS) $(H5_INCLUDE) -fPIC $<
 
 #compile the main executable
-$(MAIN_EXECUTABLE): src/Osiris.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(PENTHUS_LIB)
+$(MAIN_EXECUTABLE): src/DNAscent.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(PENTHUS_LIB)
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC $(CPP_OBJ) $(C_OBJ) $(LIBFLAGS)
 
 clean:
-	rm -f $(MAIN_EXECUTABLE) $(CPP_OBJ) $(C_OBJ) src/Osiris.o
+	rm -f $(MAIN_EXECUTABLE) $(CPP_OBJ) $(C_OBJ) src/DNAscent.o
