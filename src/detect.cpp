@@ -8,18 +8,15 @@
 
 #include <fstream>
 #include "detect.h"
+#include <stdlib.h>
 #include "common.h"
 #include "data_IO.h"
-#include "error_handling.h"
 #include "event_handling.h"
-#include "poreModels.h"
-#include "poreSpecificParameters.h"
-#include "../Penthus/src/hmm.h"
-#include "../Penthus/src/probability.h"
-#include "../Penthus/src/states.h"
+#include "probability.h"
 #include "../htslib/htslib/hts.h"
 #include "../htslib/htslib/sam.h"
 #include "../fast5/include/fast5.hpp"
+
 
 static const char *help=
 "build: DNAscent executable that detects BrdU in Oxford Nanopore reads.\n"
@@ -115,105 +112,120 @@ Arguments parseDetectArguments( int argc, char** argv ){
 	return args;
 }
 
-double seqProbability( std::string &sequence, std::vector<double> &events, std::map< std::string, std::pair< double, double > > &analogueModel, int BrdU_idx, bool isBrdU ){
+
+//Initial transitions within modules (internal transitions)
+static double internalM12I = 0.001;
+static double internalI2I = 0.001;
+static double internalM12M1 = 0.4;
+
+//Initial transitions between modules (external transitions)
+static double externalD2D = 0.3;
+static double externalD2M1 = 0.7;
+static double externalI2M1 = 0.999;
+static double externalM12D = 0.0025;
+static double externalM12M1 = 0.5965;
+
+double sequenceProbability( std::vector <double> &observations, std::string &sequence, size_t windowSize, bool useBrdU, std::map< std::string, std::pair< double, double > > &analogueModel ){
 
 	extern std::map< std::string, std::pair< double, double > > SixMer_model;
 
-	HiddenMarkovModel hmm = HiddenMarkovModel( 3*sequence.length(), 3*sequence.length() + 2 );
+	std::vector< double > I_curr(2*windowSize-5, NAN), D_curr(2*windowSize-5, NAN), M_curr(2*windowSize-5, NAN), I_prev(2*windowSize-5, NAN), D_prev(2*windowSize-5, NAN), M_prev(2*windowSize-5, NAN);
+	double firstI_curr = NAN, firstI_prev = NAN;
+	double start_curr = NAN, start_prev = 0.0;
 
-	/*STATES - vector (of vectors) to hold the states at each position on the reference - fill with dummy values */
-	std::vector< std::vector< State > > states( 6, std::vector< State >( sequence.length() - 5, State( NULL, "", "", "", 1.0 ) ) );
+	double matchProb, insProb;
 
-	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
-	std::vector< NormalDistribution > nd;
-	nd.reserve( sequence.length() - 5 );
+	/*-----------INITIALISATION----------- */
+	//transitions from the start state
+	D_prev[0] = lnProd( start_prev, eln( 0.25 ) );
 
-	SilentDistribution sd( 0.0, 0.0 );
-	UniformDistribution ud( 50.0, 150.0 );
+	//account for transitions between deletion states before we emit the first observation
+	for ( unsigned int i = 1; i < D_prev.size(); i++ ){
 
-	std::string loc, sixMer;
+		D_prev[i] = lnProd( D_prev[i-1], eln ( externalD2D ) );
+	}
+
+
+	/*-----------RECURSION----------- */
+	/*complexity is O(T*N^2) where T is the number of observations and N is the number of states */
+	for ( unsigned int t = 0; t < observations.size(); t++ ){
+
+		std::fill( I_curr.begin(), I_curr.end(), NAN );
+		std::fill( M_curr.begin(), M_curr.end(), NAN );
+		std::fill( D_curr.begin(), D_curr.end(), NAN );
+		firstI_curr = NAN;
+
+		std::string sixMer = sequence.substr(0, 6);
+		matchProb = eln( normalPDF( SixMer_model.at(sixMer).first, SixMer_model.at(sixMer).second, observations[t] ) );
+		insProb = eln( uniformPDF( 50, 150, observations[t] ) );
+
+		//first insertion
+		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( start_prev, eln( 0.25 ) ), insProb ) ); //start to first I
+		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( firstI_prev, eln( 0.25 ) ), insProb ) ); //first I to first I
+
+		//to the base 1 insertion
+		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ) );  //I to I
+		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ) ); //M to I 
+
+		//to the base 1 match
+		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( firstI_prev, eln( 0.5 ) ), matchProb ) ); //first I to first match
+		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ) );  //M to M
+		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( start_prev, eln( 0.5 ) ), matchProb ) );  //start to M
+
+		//to the base 1 deletion
+		D_curr[0] = lnSum( D_curr[0], lnProd( NAN, eln( 0.25 ) ) );  //start to D
+		D_curr[0] = lnSum( D_curr[0], lnProd( firstI_curr, eln( 0.25 ) ) ); //first I to first deletion
+
+		//the rest of the sequence
+		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
+
+			//get model parameters
+			sixMer = sequence.substr(i, 6);
+			insProb = eln( uniformPDF( 50, 150, observations[t] ) );
+			if ( useBrdU and i == windowSize ){
+
+				matchProb = eln( normalPDF( analogueModel.at(sixMer).first, analogueModel.at(sixMer).second, observations[t] ) );
+			}
+			else{
+
+				matchProb = eln( normalPDF( SixMer_model.at(sixMer).first, SixMer_model.at(sixMer).second, observations[t] ) );
+			}
+
+			//to the insertion
+			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ) );  //I to I
+			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12I ) ), insProb ) ); //M to I 
+
+			//to the match
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( I_prev[i-1], eln( externalI2M1 ) ), matchProb ) );  //external I to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i-1], eln( externalM12M1 ) ), matchProb ) );  //external M to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12M1 ) ), matchProb ) );  //interal M to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( D_prev[i-1], eln( externalD2M1 ) ), matchProb ) );  //external D to M
+		}
+
+		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
+
+			//to the deletion
+			D_curr[i] = lnSum( D_curr[i], lnProd( M_curr[i-1], eln( externalM12D ) ) );  //external M to D
+			D_curr[i] = lnSum( D_curr[i], lnProd( D_curr[i-1], eln( externalD2D ) ) );  //external D to D
+		}
 		
-	/*create make normal distributions for each reference position using the ONT 6mer model */
-	for ( unsigned int i = 0; i < sequence.length() - 6; i++ ){
-
-		sixMer = sequence.substr( i, 6 );
-
-		if (i == BrdU_idx and isBrdU){
-
-			nd.push_back( NormalDistribution( analogueModel.at(sixMer).first, analogueModel.at(sixMer).second ) );
-		}
-		else {
-
-			nd.push_back( NormalDistribution( SixMer_model.at(sixMer).first, SixMer_model.at(sixMer).second ) );
-		}
+		I_prev = I_curr;
+		M_prev = M_curr;
+		D_prev = D_curr;
+		firstI_prev = firstI_curr;
+		start_prev = start_curr;
 	}
 
-	/*the first insertion state after start */
-	State firstI = State( &ud, "-1_I", "", "", 1.0 );
-	hmm.add_state( firstI );
 
-	/*add states to the model, handle internal module transitions */
-	for ( unsigned int i = 0; i < sequence.length() - 6; i++ ){
+	/*-----------TERMINATION----------- */
+	double forwardProb = NAN;
 
-		loc = std::to_string( i );
-		sixMer = sequence.substr( i, 6 );
+	forwardProb = lnSum( forwardProb, lnProd( D_curr.back(), eln( 1.0 ) ) ); //D to end
+	forwardProb = lnSum( forwardProb, lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ) ); //M to end
+	forwardProb = lnSum( forwardProb, lnProd( I_curr.back(), eln( externalI2M1 ) ) ); //I to end
 
-		states[ 0 ][ i ] = State( &sd,		loc + "_D", 	sixMer,	"", 		1.0 );		
-		states[ 1 ][ i ] = State( &ud,		loc + "_I", 	sixMer,	"", 		1.0 );
-		states[ 2 ][ i ] = State( &nd[i], 	loc + "_M1", 	sixMer,	loc + "_match", 1.0 );
-
-		/*add state to the model */
-		for ( unsigned int j = 0; j < 3; j++ ){
-
-			states[ j ][ i ].meta = sixMer;
-			hmm.add_state( states[ j ][ i ] );
-		}
-
-		/*transitions between states, internal to a single base */
-		/*from I */
-		hmm.add_transition( states[1][i], states[1][i], internalI2I );
-
-		/*from M1 */
-		hmm.add_transition( states[2][i], states[2][i], internalM12M1 );
-		hmm.add_transition( states[2][i], states[1][i], internalM12I );
-	}
-
-	/*add transitions between modules (external transitions) */
-	for ( unsigned int i = 0; i < sequence.length() - 7; i++ ){
-
-		/*from D */
-		hmm.add_transition( states[0][i], states[0][i + 1], externalD2D );
-		hmm.add_transition( states[0][i], states[2][i + 1], externalD2M1 );
-
-		/*from I */
-		hmm.add_transition( states[1][i], states[2][i + 1], externalI2M1 );
-
-		/*from M */
-		hmm.add_transition( states[2][i], states[0][i + 1], externalM12D );
-		hmm.add_transition( states[2][i], states[2][i + 1], externalM12M1 );
-	}
-
-	/*handle start states */
-	hmm.add_transition( hmm.start, firstI, 0.25 );
-	hmm.add_transition( hmm.start, states[0][0], 0.25 );
-	hmm.add_transition( hmm.start, states[2][0], 0.5 );
-
-	/*transitions from first insertion */
-	hmm.add_transition( firstI, firstI, 0.25 );
-	hmm.add_transition( firstI, states[0][0], 0.25 );
-	hmm.add_transition( firstI, states[2][0], 0.5 );
-
-	/*handle end states */
-	hmm.add_transition( states[0][sequence.length() - 7], hmm.end, 1.0 );
-	hmm.add_transition( states[1][sequence.length() - 7], hmm.end, externalI2M1 );
-	hmm.add_transition( states[2][sequence.length() - 7], hmm.end, externalM12M1 + externalM12D );
-
-	hmm.finalise();
-
-	return hmm.sequenceProbability( events );
+	return forwardProb;
 }
-
-
 
 // from scrappie
 float fast5_read_float_attribute(hid_t group, const char *attribute) {
@@ -481,8 +493,8 @@ void llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< 
 		//catch abnormally few or many events
 		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < windowLength ) continue;
 
-		double logProbThymidine = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, false);
-		double logProbAnalogue = seqProbability(readSnippet, eventSnippet, analogueModel, windowLength, true);
+		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel );
+		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel );
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome

@@ -1,13 +1,12 @@
-common.o: src/common.cpp src/common.h src/error_handling.h \
- src/scrappie/event_detection.h src/poreModels.h src/data_IO.h
+poreModels.o: src/poreModels.cpp
 data_IO.o: src/data_IO.cpp src/data_IO.h src/error_handling.h \
  src/scrappie/event_detection.h src/poreModels.h src/common.h
-detect.o: src/detect.cpp src/detect.h src/common.h src/data_IO.h \
+regions.o: src/regions.cpp src/regions.h src/data_IO.h \
  src/error_handling.h src/scrappie/event_detection.h src/poreModels.h \
- src/event_handling.h src/poreSpecificParameters.h \
- src/../Penthus/src/hmm.h src/../Penthus/src/states.h \
- src/../Penthus/src/probability.h src/../Penthus/src/error_handling.h \
- src/../Penthus/src/probability.h src/../Penthus/src/states.h \
+ src/common.h
+detect.o: src/detect.cpp src/detect.h src/common.h src/data_IO.h \
+ src/event_handling.h src/probability.h src/poreModels.h \
+ src/error_handling.h src/scrappie/event_detection.h \
  src/../htslib/htslib/hts.h src/../htslib/htslib/hts_defs.h \
  src/../htslib/htslib/hts_log.h src/../htslib/htslib/sam.h \
  src/../htslib/htslib/hts.h src/../fast5/include/fast5.hpp \
@@ -51,20 +50,18 @@ detect.o: src/detect.cpp src/detect.h src/common.h src/data_IO.h \
  src/../fast5/include/fast5/cwmap.fast5_ev_rel_skip_1.inl \
  src/../fast5/include/fast5/cwmap.fast5_ev_move_1.inl \
  src/../fast5/include/fast5/Bit_Packer.hpp
-DNAscent.o: src/DNAscent.cpp src/detect.h src/regions.h src/psl.h
 event_handling.o: src/event_handling.cpp src/../Penthus/src/probability.h \
  src/../Penthus/src/error_handling.h src/error_handling.h \
  src/scrappie/event_detection.h src/poreModels.h src/common.h \
  src/data_IO.h src/event_handling.h
-poreModels.o: src/poreModels.cpp
 psl.o: src/psl.cpp src/psl.h src/../Penthus/src/probability.h \
  src/../Penthus/src/error_handling.h src/../Penthus/src/hmm.h \
  src/../Penthus/src/states.h src/../Penthus/src/probability.h \
  src/common.h src/data_IO.h src/error_handling.h \
  src/scrappie/event_detection.h src/poreModels.h
-regions.o: src/regions.cpp src/regions.h src/data_IO.h \
- src/error_handling.h src/scrappie/event_detection.h src/poreModels.h \
- src/common.h
+DNAscent.o: src/DNAscent.cpp src/detect.h src/regions.h src/psl.h
+common.o: src/common.cpp src/common.h src/error_handling.h \
+ src/scrappie/event_detection.h src/poreModels.h src/data_IO.h
 event_detection.o: src/scrappie/event_detection.c \
  src/scrappie/event_detection.h
 scrappie_common.o: src/scrappie/scrappie_common.c \

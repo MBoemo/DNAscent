@@ -5,11 +5,6 @@ LIBFLAGS =
 CXXFLAGS = -Wall -O2 -fopenmp -std=c++11 $(DEBUG)
 CFLAGS = -Wall -std=c99 -O2 $(DEBUG)
 
-#Penthus
-PENTHUS_LIB = ./Penthus/libPenthus.a
-PENTHUS_INCLUDE = -I./Penthus
-LIBFLAGS += -L Penthus/ -lPenthus
-
 #hdf5
 H5_LIB = ./hdf5-1.8.14/hdf5/lib/libhdf5.a
 H5_INCLUDE = -I./hdf5-1.8.14/hdf5/include
@@ -24,7 +19,7 @@ LIBFLAGS += -Wl,-rpath,$(dir $(abspath $(lastword $(MAKEFILE_LIST))))htslib -L h
 FAST5_INCLUDE = -I./fast5/include
 
 #add include flags for each library
-CXXFLAGS += $(H5_INCLUDE) $(HTS_INCLUDE) $(FAST5_INCLUDE) $(PENTHUS_INCLUDE)
+CXXFLAGS += $(H5_INCLUDE) $(HTS_INCLUDE) $(FAST5_INCLUDE)
 
 MAIN_EXECUTABLE = bin/DNAscent
 
@@ -33,9 +28,6 @@ all: depend $(MAIN_EXECUTABLE)
 #all each library if they're not already built
 htslib/libhts.a:
 	cd htslib && make && cd .. || exit 255
-
-Penthus/libPenthus.a:
-	cd Penthus && make && cd .. || exit 255
 
 hdf5-1.8.14/hdf5/lib/libhdf5.a:
 	if [ ! -e hdf5-1.8.14/hdf5/lib/libhdf5.a ]; then \
@@ -69,7 +61,7 @@ depend: .depend
 	$(CC) -o $@ -c $(CFLAGS) $(H5_INCLUDE) -fPIC $<
 
 #compile the main executable
-$(MAIN_EXECUTABLE): src/DNAscent.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(PENTHUS_LIB)
+$(MAIN_EXECUTABLE): src/DNAscent.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB)
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC $(CPP_OBJ) $(C_OBJ) $(LIBFLAGS)
 
 clean:

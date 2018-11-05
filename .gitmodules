@@ -1,7 +1,3 @@
-[submodule "Penthus"]
-	path = Penthus
-	url = https://github.com/MBoemo/Penthus.git
-
 [submodule "fast5"]
 	path = fast5
 	url = https://github.com/mateidavid/fast5.git
