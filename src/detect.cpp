@@ -551,71 +551,71 @@ int detect_main( int argc, char** argv ){
 
 	int windowLength = 20;
 	int result, maxBufferSize;
-	std::vector< read > buffer_shortReads;
+	std::vector< bam1_t * > buffer;
 	if ( args.threads <=4 ) maxBufferSize = args.threads;
 	else maxBufferSize = 4*(args.threads);
 
 	do {
-		read r;
 
 		//initialise the record and get the record from the file iterator
 		bam1_t *record = bam_init1();
 		result = sam_itr_next(bam_fh, itr, record);
 
-		//get the read name (which will be the ONT readID from Albacore basecall)
-		const char *queryName = bam_get_qname(record);
-		if (queryName == NULL) continue;
-		std::string s_queryName(queryName);
-		r.readID = s_queryName;
-		
-		//iterate on the cigar string to fill up the reference-to-query coordinate map
-		parseCigar(record, r.refToQuery, r.refStart, r.refEnd);
-
-		//get the name of the reference mapped to
-		std::string mappedTo(bam_hdr -> target_name[record -> core.tid]);
-		r.referenceMappedTo = mappedTo;
-
-		//open fast5 and normalise events to pA
-		r.filename = readID2path[s_queryName];
-		try{
-			
-			getEvents( r.filename, r.raw );
-		}
-		catch ( BadFast5Field &bf5 ){
-
-			failed++;
-			prog++;
-			continue;
-		}
-
-		/*get the subsequence of the reference this read mapped to */
-		r.referenceSeqMappedTo = reference[r.referenceMappedTo].substr(r.refStart, r.refEnd - r.refStart);
-
-		//fetch the basecall from the bam file
-		r.basecall = getQuerySequence(record);
-
-		//account for reverse complements
-		if ( bam_is_rev(record) ){
-
-			r.basecall = reverseComplement( r.basecall );
-			r.referenceSeqMappedTo = reverseComplement( r.referenceSeqMappedTo );
-			r.isReverse = true;
-		}
-
-		buffer_shortReads.push_back(r);
+		buffer.push_back( record );
 
 		/*if we've filled up the buffer with short reads, compute them in parallel */
-		if (buffer_shortReads.size() >= maxBufferSize){
+		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == 0 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer_shortReads,windowLength,analogueModel,args,prog,failed) num_threads(args.threads)
-			for (int i = 0; i < buffer_shortReads.size(); i++){
+			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,args,prog,failed) num_threads(args.threads)
+			for (int i = 0; i < buffer.size(); i++){
 
-				read readForDetect = buffer_shortReads[i];
+				read r; 
+				bam1_t *bamRecord = buffer[i];
 
-				normaliseEvents(readForDetect);
+				//get the read name (which will be the ONT readID from Albacore basecall)
+				const char *queryName = bam_get_qname(bamRecord);
+				if (queryName == NULL) continue;
+				std::string s_queryName(queryName);
+				r.readID = s_queryName;
+		
+				//iterate on the cigar string to fill up the reference-to-query coordinate map
+				parseCigar(bamRecord, r.refToQuery, r.refStart, r.refEnd);
+
+				//get the name of the reference mapped to
+				std::string mappedTo(bam_hdr -> target_name[bamRecord -> core.tid]);
+				r.referenceMappedTo = mappedTo;
+
+				//open fast5 and normalise events to pA
+				r.filename = readID2path[s_queryName];
+				try{
+			
+					getEvents( r.filename, r.raw );
+				}
+				catch ( BadFast5Field &bf5 ){
+
+					failed++;
+					prog++;
+					continue;
+				}
+
+				/*get the subsequence of the reference this read mapped to */
+				r.referenceSeqMappedTo = reference[r.referenceMappedTo].substr(r.refStart, r.refEnd - r.refStart);
+
+				//fetch the basecall from the bam file
+				r.basecall = getQuerySequence(bamRecord);
+
+				//account for reverse complements
+				if ( bam_is_rev(bamRecord) ){
+
+					r.basecall = reverseComplement( r.basecall );
+					r.referenceSeqMappedTo = reverseComplement( r.referenceSeqMappedTo );
+					r.isReverse = true;
+				}
+
+				normaliseEvents(r);
 
 				//catch reads with rough event alignments that fail the QC
-				if ( readForDetect.eventAlignment.size() == 0 ){
+				if ( r.eventAlignment.size() == 0 ){
 
 					failed++;
 					prog++;
@@ -623,7 +623,7 @@ int detect_main( int argc, char** argv ){
 				}
 
 				std::stringstream ss; 
-				llAcrossRead(readForDetect, windowLength, analogueModel, ss);
+				llAcrossRead(r, windowLength, analogueModel, ss);
 
 				#pragma omp critical
 				{
@@ -632,25 +632,10 @@ int detect_main( int argc, char** argv ){
 					pb.displayProgress( prog, failed );
 				}
 			}
-			buffer_shortReads.clear();
+			buffer.clear();
 		}
 		pb.displayProgress( prog, failed );	
 	} while (result > 0);
-
-	/*empty the short read buffer in case there are reads still in it */
-	#pragma omp parallel for schedule(dynamic) shared(windowLength,buffer_shortReads,analogueModel) num_threads(args.threads)
-	for (int i = 0; i < buffer_shortReads.size(); i++){
-
-		std::stringstream ss;
-		llAcrossRead(buffer_shortReads[i], windowLength, analogueModel, ss);
-
-		#pragma omp critical
-		{
-			outFile << ss.rdbuf();
-			prog++;
-		}
-	}
-	pb.displayProgress( prog, failed );
 
 	return 0;
 }

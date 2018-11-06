@@ -9,7 +9,7 @@
 #include <iterator>
 #include <algorithm>
 #include <math.h>
-#include "../Penthus/src/probability.h"
+#include "probability.h"
 #include "error_handling.h"
 #include "event_handling.h"
 

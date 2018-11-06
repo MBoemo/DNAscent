@@ -50,15 +50,11 @@ detect.o: src/detect.cpp src/detect.h src/common.h src/data_IO.h \
  src/../fast5/include/fast5/cwmap.fast5_ev_rel_skip_1.inl \
  src/../fast5/include/fast5/cwmap.fast5_ev_move_1.inl \
  src/../fast5/include/fast5/Bit_Packer.hpp
-event_handling.o: src/event_handling.cpp src/../Penthus/src/probability.h \
- src/../Penthus/src/error_handling.h src/error_handling.h \
- src/scrappie/event_detection.h src/poreModels.h src/common.h \
- src/data_IO.h src/event_handling.h
-psl.o: src/psl.cpp src/psl.h src/../Penthus/src/probability.h \
- src/../Penthus/src/error_handling.h src/../Penthus/src/hmm.h \
- src/../Penthus/src/states.h src/../Penthus/src/probability.h \
- src/common.h src/data_IO.h src/error_handling.h \
- src/scrappie/event_detection.h src/poreModels.h
+event_handling.o: src/event_handling.cpp src/probability.h \
+ src/poreModels.h src/error_handling.h src/scrappie/event_detection.h \
+ src/common.h src/data_IO.h src/event_handling.h
+psl.o: src/psl.cpp src/psl.h src/common.h src/data_IO.h \
+ src/error_handling.h src/scrappie/event_detection.h src/poreModels.h
 DNAscent.o: src/DNAscent.cpp src/detect.h src/regions.h src/psl.h
 common.o: src/common.cpp src/common.h src/error_handling.h \
  src/scrappie/event_detection.h src/poreModels.h src/data_IO.h

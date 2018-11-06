@@ -7,8 +7,6 @@
 //----------------------------------------------------------
  #include <fstream>
 #include "psl.h"
-#include "../Penthus/src/probability.h"
-#include "../Penthus/src/hmm.h"
 #include "common.h"
 #include "data_IO.h"
 #include "error_handling.h"
