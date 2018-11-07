@@ -9,6 +9,7 @@
 #include <fstream>
 #include "detect.h"
 #include <stdlib.h>
+#include <limits>
 #include "common.h"
 #include "data_IO.h"
 #include "event_handling.h"
@@ -32,7 +33,8 @@ static const char *help=
 "  -o,--output               path to output file that will be generated.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread)\n"
-"  -q,--quality              minimum mapping quality (default is 20).\n";
+"  -q,--quality              minimum mapping quality (default is 20).\n"
+"  -l,--length               minimum read length in bp (default is 100).\n";
 
 struct Arguments {
 	std::string bamFilename;
@@ -41,6 +43,7 @@ struct Arguments {
 	std::string indexFilename;
 	std::string analogueModelFilename;
 	unsigned int minQ;
+	unsigned int minL;
 	unsigned int threads;
 };
 
@@ -68,6 +71,7 @@ Arguments parseDetectArguments( int argc, char** argv ){
 	/*defaults - we'll override these if the option was specified by the user */
 	args.threads = 1;
 	args.minQ = 20;
+	args.minL = 100;
 
 	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -96,6 +100,12 @@ Arguments parseDetectArguments( int argc, char** argv ){
 
 			std::string strArg( argv[ i + 1 ] );
 			args.minQ = std::stoi( strArg.c_str() );
+			i+=2;
+		}
+		else if ( flag == "-l" or flag == "--length" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			args.minL = std::stoi( strArg.c_str() );
 			i+=2;
 		}
 		else if ( flag == "-i" or flag == "--index" ){
@@ -434,7 +444,7 @@ void getEvents( std::string fast5Filename, std::vector<double> &raw ){
 }
 
 
-void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &numOfRecords, unsigned int minQ ){
+void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &numOfRecords, unsigned int minQ, unsigned int minL ){
 
 	hts_itr_t* itr = sam_itr_querys(bam_idx,bam_hdr,".");
 	int result;
@@ -442,7 +452,7 @@ void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int 
 
 		bam1_t *record = bam_init1();
 		result = sam_itr_next(bam_fh, itr, record);
-		if ( record -> core.qual >= minQ ) numOfRecords++;
+		if ( (record -> core.qual >= minQ) and (record -> core.l_qseq >= minL) ) numOfRecords++;
 	} while (result > 0);
 }
 
@@ -573,7 +583,7 @@ int detect_main( int argc, char** argv ){
 
 	/*initialise progress */
 	int numOfRecords = 0, prog = 0, failed = 0;
-	countRecords( bam_fh, bam_idx, bam_hdr, numOfRecords, args.minQ );
+	countRecords( bam_fh, bam_idx, bam_hdr, numOfRecords, args.minQ, args.minL );
 	progressBar pb(numOfRecords);
 
 	//build an iterator for all reads in the bam file
@@ -593,7 +603,8 @@ int detect_main( int argc, char** argv ){
 		result = sam_itr_next(bam_fh, itr, record);
 
 		uint32_t mappingQual = record -> core.qual;
-		if ( mappingQual >= args.minQ ) buffer.push_back( record );
+		uint32_t queryLength = record -> core.l_qseq;
+		if ( mappingQual >= args.minQ and queryLength >= args.minL ) buffer.push_back( record );
 		
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == 0 ) ){
