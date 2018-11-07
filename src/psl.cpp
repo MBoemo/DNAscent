@@ -133,7 +133,7 @@
  int psl_main( int argc, char** argv ){
 
  	Arguments args = parsePslArguments( argc, argv );
- 	std::map< std::string, std::string > reference = import_reference(args.referenceFilename);
+ 	std::map< std::string, std::string > reference = import_reference_pfasta(args.referenceFilename);
 
  	std::ifstream inFile( args.detectFilename );
 	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );

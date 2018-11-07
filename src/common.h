@@ -92,8 +92,44 @@ inline std::string reverseComplement( std::string DNAseq ){
 			case 'C' :
 				revComp += 'G';
 				break;
+			case 'U' :
+				revComp += 'A';
+				break;
+			case 'Y' :
+				revComp += 'R';
+				break;
+			case 'R' :
+				revComp += 'Y';
+				break;
+			case 'K' :
+				revComp += 'M';
+				break;
+			case 'M' :
+				revComp += 'K';
+				break;
+			case 'B' :
+				revComp += 'V';
+				break;
+			case 'D' :
+				revComp += 'H';
+				break;
+			case 'H' :
+				revComp += 'D';
+				break;
+			case 'V' :
+				revComp += 'B';
+				break;
+			case 'N' :
+				revComp += 'N';
+				break;
+			case 'W' :
+				revComp += 'W';
+				break;
+			case 'S' :
+				revComp += 'S';
+				break;
 			default:
-				std::cout << "Exiting with error.  Invalid character passed to reverse complement function.  Must be A, T, G, or C." << std::endl;
+				std::cout << "Exiting with error.  Invalid character " << *i << " passed to reverse complement function - must be IUPAC character." << std::endl;
 				exit( EXIT_FAILURE );
 		}
 	}

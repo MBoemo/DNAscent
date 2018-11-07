@@ -471,6 +471,28 @@ void llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< 
 		int posOnQuery = (r.refToQuery).at(posOnRef);
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength);
+		
+		//make sure the read snippet is fully defined as A/T/G/C in reference
+		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
+		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
+	
+			switch( *i ){
+				case 'A' :
+					As++;
+					break;
+				case 'T' :
+					Ts++;
+					break;
+				case 'G' :
+					Gs++;
+					break;
+				case 'C' :
+					Cs++;
+					break;
+			}
+		}
+		if ( readSnippet.length() != (As + Ts + Gs + Cs) ) continue;
+
 		std::vector< double > eventSnippet;
 
 		//catch spans with lots of insertions or deletions
@@ -516,7 +538,7 @@ int detect_main( int argc, char** argv ){
 	parseIndex( args.indexFilename, readID2path );
 
 	//import fasta reference
-	std::map< std::string, std::string > reference = import_reference( args.referenceFilename );
+	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
 
 	/*import the analogue pore model that we specified on the command line */
 	std::map< std::string, std::pair< double, double > > analogueModel =  import_poreModel( args.analogueModelFilename );
@@ -599,7 +621,7 @@ int detect_main( int argc, char** argv ){
 				}
 
 				/*get the subsequence of the reference this read mapped to */
-				r.referenceSeqMappedTo = reference[r.referenceMappedTo].substr(r.refStart, r.refEnd - r.refStart);
+				r.referenceSeqMappedTo = reference.at(r.referenceMappedTo).substr(r.refStart, r.refEnd - r.refStart);
 
 				//fetch the basecall from the bam file
 				r.basecall = getQuerySequence(bamRecord);

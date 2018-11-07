@@ -1,6 +1,7 @@
 poreModels.o: src/poreModels.cpp
 data_IO.o: src/data_IO.cpp src/data_IO.h src/error_handling.h \
- src/scrappie/event_detection.h src/poreModels.h src/common.h
+ src/scrappie/event_detection.h src/poreModels.h src/common.h \
+ src/pfasta/pfasta.h
 regions.o: src/regions.cpp src/regions.h src/data_IO.h \
  src/error_handling.h src/scrappie/event_detection.h src/poreModels.h \
  src/common.h
@@ -63,3 +64,4 @@ event_detection.o: src/scrappie/event_detection.c \
 scrappie_common.o: src/scrappie/scrappie_common.c \
  src/scrappie/scrappie_common.h src/scrappie/util.h
 util.o: src/scrappie/util.c src/scrappie/util.h
+pfasta.o: src/pfasta/pfasta.c src/pfasta/pfasta.h

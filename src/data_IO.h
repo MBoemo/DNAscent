@@ -29,7 +29,7 @@ struct read{
 
 /*function prototypes */
 std::map< std::string, std::string > import_reference( std::string );
+std::map< std::string, std::string > import_reference_pfasta( std::string );
 std::map< std::string, std::pair< double, double > > import_poreModel( std::string );
-std::pair< std::string, std::vector< read > > getTrainingFrom_foh( std::string &);
 
 #endif

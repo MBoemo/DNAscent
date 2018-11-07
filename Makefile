@@ -38,7 +38,7 @@ hdf5-1.8.14/hdf5/lib/libhdf5.a:
 			make && make install; \
 	fi 
 	
-SUBDIRS = src src/scrappie
+SUBDIRS = src src/scrappie src/pfasta
 CPP_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.cpp))
 C_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.c))
 EXE_SRC = src/DNAscent.cpp

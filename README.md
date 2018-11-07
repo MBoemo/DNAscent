@@ -11,7 +11,7 @@ The DNAscent directory will appear in your current directory.  Compile the softw
 cd DNAscent
 make
 ```
-This will put the DNAscent executable into the DNAscent/bin directory.
+This will put the DNAscent executable into the DNAscent/bin directory.  A typical compile time for DNAscent and all of its dependencies is 5-7 minutes.
 
 ## Sample Workflow
 We assume the following:
@@ -44,11 +44,14 @@ bin/DNAscent regions -d output.detect -p 0.5 -o output.regions
 ```
 where `p` is the probability that there is an analogue in any 6mer.  The file `output.regions` will have the same header for each read as in `output.detect`.  The first column specifies where the region started, the second column specifies where the region ended, and the third column gives a z-score specifying how well this region fit the model for analogue incorporation.  Scores near 0 indicate that this region fit the model well and is most likely a region of analogue incorporation.  Negative scores indicate that there were fewer analogue calls than would be expected in an analogue region.
 
+## Runtime
+The runtime of DNAscent is linear with respect to the amount of data (in bases) passed to it.
+
 ## Dependencies
 Cloning the repository recursively (see above) will provide all the required dependencies.  The list of dependencies is as follows:
 - h5py(https://github.com/h5py/h5py.git)
-- Penthus (https://github.com/MBoemo/Penthus.git)
+- pfasta (https://github.com/kloetzl/pfasta)
 - fast5 (https://github.com/mateidavid/fast5.git)
 - htslib (https://github.com/samtools/htslib.git)
 - hdf5lib (https://support.hdfgroup.org/HDF5/)
-Note that the high throughput sequencing library requires bzlib and lzma for compression.  If you don't have these, apt-get lzma-dev and liblzma-dev.
+Note that the high throughput sequencing library requires bzlib and lzma for compression.  If you don't have these, apt-get lzma-dev and liblzma-dev.  In addition, pfasta requires libbsd on Linux.
