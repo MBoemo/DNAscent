@@ -31,7 +31,8 @@ static const char *help=
 "  -i,--index                path to DNAscent index,\n"
 "  -o,--output               path to output file that will be generated.\n"
 "Optional arguments are:\n"
-"  -t,--threads              number of threads (default is 1 thread).\n";
+"  -t,--threads              number of threads (default is 1 thread)\n"
+"  -q,--quality              minimum mapping quality (default is 20).\n";
 
 struct Arguments {
 	std::string bamFilename;
@@ -39,7 +40,8 @@ struct Arguments {
 	std::string outputFilename;
 	std::string indexFilename;
 	std::string analogueModelFilename;
-	int threads;
+	unsigned int minQ;
+	unsigned int threads;
 };
 
 Arguments parseDetectArguments( int argc, char** argv ){
@@ -65,6 +67,7 @@ Arguments parseDetectArguments( int argc, char** argv ){
 
 	/*defaults - we'll override these if the option was specified by the user */
 	args.threads = 1;
+	args.minQ = 20;
 
 	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -87,6 +90,12 @@ Arguments parseDetectArguments( int argc, char** argv ){
 
 			std::string strArg( argv[ i + 1 ] );
 			args.threads = std::stoi( strArg.c_str() );
+			i+=2;
+		}
+		else if ( flag == "-q" or flag == "--quality" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			args.minQ = std::stoi( strArg.c_str() );
 			i+=2;
 		}
 		else if ( flag == "-i" or flag == "--index" ){
@@ -323,7 +332,7 @@ void parseCigar(bam1_t *record, std::map< int, int > &ref2query, int &refStart, 
 	}
 	else {
 
-		for ( int i = 0; i < record -> core.n_cigar; ++i){
+		for ( unsigned int i = 0; i < record -> core.n_cigar; ++i){
 
 			const int op = bam_cigar_op(cigar[i]); //cigar operation
 			const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
@@ -425,7 +434,7 @@ void getEvents( std::string fast5Filename, std::vector<double> &raw ){
 }
 
 
-void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &numOfRecords ){
+void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &numOfRecords, unsigned int minQ ){
 
 	hts_itr_t* itr = sam_itr_querys(bam_idx,bam_hdr,".");
 	int result;
@@ -433,7 +442,7 @@ void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int 
 
 		bam1_t *record = bam_init1();
 		result = sam_itr_next(bam_fh, itr, record);
-		numOfRecords++;
+		if ( record -> core.qual >= minQ ) numOfRecords++;
 	} while (result > 0);
 }
 
@@ -564,7 +573,7 @@ int detect_main( int argc, char** argv ){
 
 	/*initialise progress */
 	int numOfRecords = 0, prog = 0, failed = 0;
-	countRecords( bam_fh, bam_idx, bam_hdr, numOfRecords );
+	countRecords( bam_fh, bam_idx, bam_hdr, numOfRecords, args.minQ );
 	progressBar pb(numOfRecords);
 
 	//build an iterator for all reads in the bam file
@@ -583,8 +592,9 @@ int detect_main( int argc, char** argv ){
 		bam1_t *record = bam_init1();
 		result = sam_itr_next(bam_fh, itr, record);
 
-		buffer.push_back( record );
-
+		uint32_t mappingQual = record -> core.qual;
+		if ( mappingQual >= args.minQ ) buffer.push_back( record );
+		
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == 0 ) ){
 
@@ -658,6 +668,6 @@ int detect_main( int argc, char** argv ){
 		}
 		pb.displayProgress( prog, failed );	
 	} while (result > 0);
-
+	std::cout << std::endl;
 	return 0;
 }
