@@ -101,7 +101,7 @@ for root, dirs, files in os.walk(a.data, topdown=True):
 		fout.write(readID+'\t'+path+'\n')
 	
 	progress += len(out)
-	sys.stdout.write("\rFinished indexing " + str(progress) + ' fast5 files...')
+	sys.stdout.write("\rFinished indexing " + str(progress) + ' fast5 files...\n')
 	sys.stdout.flush()
-
+sys.stdout.write("Done.\n")
 fout.close()
