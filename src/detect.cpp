@@ -490,7 +490,16 @@ void llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< 
 		int posOnQuery = (r.refToQuery).at(posOnRef);
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength);
-		
+
+		//FOR TESTING - print out the read snippet and the event and the ONT model
+		//extern std::map< std::string, std::pair< double, double > > SixMer_model;
+		//std::cout << readSnippet << std::endl;
+		//for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
+		//
+		//	std::cout << readSnippet.substr(pos,6) << "\t" << SixMer_model.at( readSnippet.substr(pos,6) ).first << std::endl;
+		//}
+		//END TESTING
+
 		//make sure the read snippet is fully defined as A/T/G/C in reference
 		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
 		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
@@ -522,9 +531,13 @@ void llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< 
 		for ( unsigned int j = 0; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef + windowLength] ){
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
 
 				eventSnippet.push_back( (r.normalisedEvents)[(r.eventAlignment)[j].first] );
+
+				//FOR TESTING - print the event snippet
+				//std::cout << (r.normalisedEvents)[(r.eventAlignment)[j].first] << std::endl;
+				//END TESTING
 			}
 
 			/*stop once we get to the end of the window */
@@ -593,7 +606,7 @@ int detect_main( int argc, char** argv ){
 	int windowLength = 20;
 	int result, maxBufferSize;
 	std::vector< bam1_t * > buffer;
-	if ( args.threads <=4 ) maxBufferSize = args.threads;
+	if ( args.threads <= 4 ) maxBufferSize = args.threads;
 	else maxBufferSize = 4*(args.threads);
 
 	do {
