@@ -553,10 +553,20 @@ void llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< 
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
-		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
-		else globalPosOnRef = r.refStart + posOnRef;
+		std::string sixMerQuery = (r.basecall).substr(posOnQuery, 6);
+		std::string sixMerRef = (r.referenceSeqMappedTo).substr(posOnRef, 6);
+		if ( r.isReverse ){
 
-		ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" <<  (r.referenceSeqMappedTo).substr(posOnRef, 6) << "\t" << (r.basecall).substr(posOnQuery, 6) << std::endl;
+			globalPosOnRef = r.refEnd - posOnRef - 6;
+			sixMerQuery = reverseComplement( sixMerQuery );
+			sixMerRef = reverseComplement( sixMerRef );
+		}
+		else{
+
+			globalPosOnRef = r.refStart + posOnRef;
+		}
+
+		ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" <<  sixMerRef << "\t" << sixMerQuery << std::endl;
 	}
 }
 
@@ -620,7 +630,7 @@ int detect_main( int argc, char** argv ){
 		if ( mappingQual >= args.minQ and queryLength >= args.minL ) buffer.push_back( record );
 		
 		/*if we've filled up the buffer with short reads, compute them in parallel */
-		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == 0 ) ){
+		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
 			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,args,prog,failed) num_threads(args.threads)
 			for (int i = 0; i < buffer.size(); i++){
