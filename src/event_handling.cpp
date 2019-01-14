@@ -13,6 +13,11 @@
 #include "error_handling.h"
 #include "event_handling.h"
 
+//extern "C" {
+#include "scrappie/event_detection.h"
+#include "scrappie/scrappie_common.h"
+//}
+
 #define _USE_MATH_DEFINES
 
 extern std::map< std::string, std::pair< double, double > > BrdU_model_full, SixMer_model;
@@ -258,30 +263,15 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping_band( std::v
 
 //start: adapted from nanopolish
 
-inline float logProbabilityMatch(std::string sixMer, double x){
+inline float logProbabilityMatch(std::string sixMer, double x, double shift, double scale){
 
-	if (sixMer.find('T') != std::string::npos and BrdU_model_full.count(sixMer) > 0){
+	double mu = scale * SixMer_model.at(sixMer).first + shift;
+	double sigma = SixMer_model.at(sixMer).second;
 
-		double mu = SixMer_model.at(sixMer).first;
-		double sigma = SixMer_model.at(sixMer).second;
-		double thymProb = ( 1.0/sqrt( 2.0*pow( sigma, 2.0 )*M_PI ) )*exp( -pow( x - mu , 2.0 )/( 2.0*pow( sigma, 2.0 ) ) );
-
-		mu = BrdU_model_full.at(sixMer).first;
-		sigma = BrdU_model_full.at(sixMer).second;
-		double brduProb = ( 1.0/sqrt( 2.0*pow( sigma, 2.0 )*M_PI ) )*exp( -pow( x - mu , 2.0 )/( 2.0*pow( sigma, 2.0 ) ) );
-
-		if ( thymProb > brduProb ) return eln(thymProb);
-		else return eln(brduProb);
-	}
-	else{
-		double mu = SixMer_model.at(sixMer).first;
-		double sigma = SixMer_model.at(sixMer).second;
-
-		double prob = ( 1.0/sqrt( 2.0*pow( sigma, 2.0 )*M_PI ) )*exp( -pow( x - mu , 2.0 )/( 2.0*pow( sigma, 2.0 ) ) );
-
-		return eln(prob);
-	}
-}
+	float a = (x - mu) / sigma;
+	static const float log_inv_sqrt_2pi = log(0.3989422804014327);
+    	return log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
+}	
 
 #define event_kmer_to_band(ei, ki) (ei + 1) + (ki + 1)
 #define band_event_to_offset(bi, ei) band_lower_left[bi].event_idx - (ei)
@@ -292,7 +282,14 @@ inline float logProbabilityMatch(std::string sixMer, double x){
 #define move_down(curr_band) { curr_band.event_idx + 1, curr_band.kmer_idx }
 #define move_right(curr_band) { curr_band.event_idx, curr_band.kmer_idx + 1 }
 
-std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_event_align( std::vector< double > &raw, const std::string &sequence ){
+void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, PoreParameters &s ){
+
+	std::string sequence = r.basecall;
+
+	//initialise vectors to solve A*x = b to recompute shift and scale
+	std::vector< std::vector< double > > A(2, std::vector<double>(2,0.0));
+	std::vector< double > b(2,0.0);
+	PoreParameters rescale;
 
 	size_t strand_idx = 0;
 	size_t k = 6;
@@ -306,7 +303,7 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
 	const uint8_t FROM_L = 2;
  
 	// qc
-	double min_average_log_emission = -5.0;
+	double min_average_log_emission = -6.0;//-5.0;
 	int max_gap_threshold = 50;
 
 	// banding
@@ -444,7 +441,7 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
 			float diag = is_offset_valid(offset_diag) ? bands[band_idx - 2][offset_diag] : -INFINITY;
  
 			//float lp_emission = log_probability_match_r9(read, pore_model, kmer_rank, event_idx, strand_idx);
-			float lp_emission = logProbabilityMatch(sixMer, raw[event_idx]);
+			float lp_emission = logProbabilityMatch(sixMer, raw[event_idx],s.shift,s.scale);
 
 			float score_d = diag + lp_step + lp_emission;
 			float score_u = up + lp_stay + lp_emission;
@@ -502,8 +499,15 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
 		//size_t kmer_rank = sixMerRank_nanopolish(sequence.substr(curr_kmer_idx, k).c_str());
 		//sum_emission += log_probability_match_r9(read, pore_model, kmer_rank, curr_event_idx, strand_idx);
 		std::string sixMer = sequence.substr(curr_kmer_idx, k);
-		sum_emission += logProbabilityMatch(sixMer, raw[curr_event_idx]);
+		sum_emission += logProbabilityMatch(sixMer, raw[curr_event_idx], s.shift, s.scale);
 		eventDiffs += SixMer_model.at(sixMer).first - raw[curr_event_idx];
+
+		//update A,b for recomputing shift and scale
+		A[0][0] += 1.0 / pow( SixMer_model.at(sixMer).second, 2.0 );
+		A[0][1] += SixMer_model.at(sixMer).first / pow( SixMer_model.at(sixMer).second, 2.0 );
+		A[1][1] += pow( SixMer_model.at(sixMer).first, 2.0 ) / pow( SixMer_model.at(sixMer).second, 2.0 );
+		b[0] += raw[curr_event_idx] / pow( SixMer_model.at(sixMer).second, 2.0 );
+		b[1] += raw[curr_event_idx] * SixMer_model.at(sixMer).first / pow( SixMer_model.at(sixMer).second, 2.0 );
 
 		n_aligned_events += 1;
 
@@ -539,15 +543,40 @@ std::vector< std::pair< unsigned int, unsigned int > > adaptive_banded_simple_ev
 		eventSeqLocPairs.clear();
     		//fprintf(stderr, "ada\t\t%s\t%s\t%.2lf\t%zu\t%.2lf\t%.2lf\t%d\t%d\t%d\n", failed ? "FAILED" : "OK",spanned ? "SPAN" : "NOTS", events_per_kmer, sequence.size(), avg_log_emission, avg_eventDiffs, curr_event_idx, max_gap, fills);
 	}
+	else{
 
+		//solve the linear system
+		A[1][0] = A[0][1];
+		std::vector< double > x =  solveLinearSystem(A, b);
+		rescale.shift = x[0];
+		rescale.scale = x[1];
 
-	return eventSeqLocPairs;
+		//compute var
+		rescale.var = 0.0;
+		for (unsigned int i = 0; i < eventSeqLocPairs.size(); i++){
+
+			double event = raw[eventSeqLocPairs[i].first];
+			std::string sixMer = sequence.substr(eventSeqLocPairs[i].second, k);
+			double mu = SixMer_model.at(sixMer).first;
+			double stdv = SixMer_model.at(sixMer).second;
+
+			double yi = (event - rescale.shift - rescale.scale*mu);
+			rescale.var += yi * yi / (stdv * stdv);
+		}
+		rescale.var /= raw.size();
+		rescale.var = sqrt(rescale.var);
+	}
+	//fprintf(stderr,"%f %f %f %f %f\n",s.shift,rescale.shift,s.scale,rescale.scale,rescale.var);
+
+	r.eventAlignment = eventSeqLocPairs;
+	r.scalings = rescale;
 }
 //end:from nanopolish
 
 
-std::vector< double > roughRescale( std::vector< double > means, std::string &basecall ){
+PoreParameters roughRescale( std::vector< double > &means, std::string &basecall ){
 
+	PoreParameters s;
 	unsigned int numOfSixMers = basecall.size() - 5;
 
 	/*get a rough estimate for shift */
@@ -566,77 +595,41 @@ std::vector< double > roughRescale( std::vector< double > means, std::string &ba
 		sixMer_sq_sum += pow( sixMer_mean, 2.0 );
 	}
 
-	double shift = event_sum / means.size() - sixMer_sum / numOfSixMers;
+	s.shift = event_sum / means.size() - sixMer_sum / numOfSixMers;
 
 	/*get a rough estimate for scale */
 	double event_sq_sum = 0.0;
 	for ( unsigned int i = 0; i < means.size(); i++ ){
 
-		event_sq_sum += pow( means[i] - shift, 2.0 );
+		event_sq_sum += pow( means[i] - s.shift, 2.0 );
 	}
 
-	double scale = (event_sq_sum / means.size()) / (sixMer_sq_sum / numOfSixMers ); 
-
-	/*reestimate event means adjusting for shift and scale */
-	for ( unsigned int i = 0; i < means.size(); i++ ){
-
-		means[i] = (means[i] - shift) / scale;
-	}
-	return means;
+	s.scale = (event_sq_sum / means.size()) / (sixMer_sq_sum / numOfSixMers ); 
+	s.drift = 0.0;
+	s.var = 1.0;
+	return s;
 }
 
 
 void normaliseEvents( read &r ){
 
-	/*allocate some space for event detection */
-	event_s *c_events = (event_s *)calloc( (r.raw).size(), sizeof( event_s) );
+	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
+	assert(et.n > 0);
 
-	/*we can trim and segment the raw signal if needed - leave these commented out for now */
-	//unsigned int rawStart, rawEnd;
-	//trim_and_segment_raw( &(r.raw)[0], (r.raw).size(), &rawStart, &rawEnd );
-
-	/*use Scrappie to segment events based on the raw signal */
-	size_t numOfDetectedEvents;
-	detect_events( &(r.raw)[0], (r.raw).size(), event_detection_defaults, c_events, &numOfDetectedEvents );
-
-	/*we only care about the mean and stdv, so pull these out so they're easier to work with */
+	/*we only care about the event mean, so pull these out so they're easier to work with */
 	std::vector< double > events_mu;
-	events_mu.reserve( numOfDetectedEvents );
-	std::vector< double > events_stdv;
-	events_stdv.reserve( numOfDetectedEvents );
+	events_mu.reserve( et.n );
 
-	for ( int i = 0; c_events[i].mean != 0; i++ ){
+	for ( int i = 0; i < et.n; i++ ){
 
-		events_mu.push_back( c_events[i].mean );
-		events_stdv.push_back( c_events[i].stdv );
+		events_mu.push_back( et.event[i].mean );
 	}
-	free(c_events);
+	r.normalisedEvents = events_mu;
+	free(et.event);
 
 	/*rough calculation of shift and scale so that we can align events */
-	std::vector< double > rough_mu = roughRescale( events_mu, r.basecall );
-
-	r.normalisedEvents = rough_mu;
+	PoreParameters s = roughRescale( events_mu, r.basecall );
 
 	/*align 5mers to events using the basecall */
-	r.eventAlignment = adaptive_banded_simple_event_align(rough_mu, r.basecall);
-
-	double normalisedEventMean;
-	double alignmentScore = 0.0;
-	int positionAlignedTo;
-	std::string sixMerAlignedTo;
-	int numEventsAdded = 0;
-	for ( unsigned int i = 0 ; i < (r.eventAlignment).size(); i++ ){
-
-		normalisedEventMean = rough_mu[(r.eventAlignment)[i].first];
-
-		positionAlignedTo = (r.eventAlignment)[i].second;
-		sixMerAlignedTo = (r.basecall).substr(positionAlignedTo, 6);
-
-		alignmentScore += normalisedEventMean - SixMer_model[sixMerAlignedTo].first;
-		numEventsAdded++;
-
-		//std::cout << positionAlignedTo << '\t' << normalisedEventMean << '\t' << sixMerAlignedTo << '\t' << SixMer_model[sixMerAlignedTo].first << '\t' << SixMer_model[sixMerAlignedTo].second << std::endl;
-	}
-	//std::cout << "-------------" << std::endl;
-	r.qualityScore = alignmentScore / (double) numEventsAdded;
+	adaptive_banded_simple_event_align(events_mu, r, s);
 }

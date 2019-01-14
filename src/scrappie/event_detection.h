@@ -1,12 +1,11 @@
 #ifndef EVENT_DETECTION_H
-#define EVENT_DETECTION_H
+#    define EVENT_DETECTION_H
+
+#    include "scrappie_structures.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stdlib.h>
-#include <stddef.h>
 
 typedef struct {
     size_t window_length1;
@@ -18,28 +17,25 @@ typedef struct {
 
 
 static detector_param const event_detection_defaults = {
-    .window_length1 = 4,
-    .window_length2 = 8,
-    .threshold1 = 1.5f,
+    .window_length1 = 3,
+    .window_length2 = 6,
+    .threshold1 = 1.4f,
     .threshold2 = 9.0f,
     .peak_height = 0.2f
 };
 
-typedef struct {
-	int pos;
-	int state;
-	unsigned int start;
-	float length;
-	float mean;
-	float stdv;
-} event_s;
+static detector_param const event_detection_rna = {
+    .window_length1 = 7,
+    .window_length2 = 14,
+    .threshold1 = 2.5f,
+    .threshold2 = 9.0f,
+    .peak_height = 1.0f
+};
 
-
-
-void detect_events( double *raw, size_t raw_size, detector_param const edparam, event_s *allEvents, size_t *numOfEvents  );
+event_table detect_events(double *raw, size_t raw_size, detector_param const edparam);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif    
+#endif                          /* EVENT_DETECTION_H */

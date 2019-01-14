@@ -144,7 +144,7 @@ static double externalI2M1 = 0.999;
 static double externalM12D = 0.0025;
 static double externalM12M1 = 0.5965;
 
-double sequenceProbability( std::vector <double> &observations, std::string &sequence, size_t windowSize, bool useBrdU, std::map< std::string, std::pair< double, double > > &analogueModel ){
+double sequenceProbability( std::vector <double> &observations, std::string &sequence, size_t windowSize, bool useBrdU, std::map< std::string, std::pair< double, double > > &analogueModel, PoreParameters scalings ){
 
 	extern std::map< std::string, std::pair< double, double > > SixMer_model;
 
@@ -167,6 +167,7 @@ double sequenceProbability( std::vector <double> &observations, std::string &seq
 
 	/*-----------RECURSION----------- */
 	/*complexity is O(T*N^2) where T is the number of observations and N is the number of states */
+	double level_mu, level_sigma;
 	for ( unsigned int t = 0; t < observations.size(); t++ ){
 
 		std::fill( I_curr.begin(), I_curr.end(), NAN );
@@ -175,7 +176,17 @@ double sequenceProbability( std::vector <double> &observations, std::string &seq
 		firstI_curr = NAN;
 
 		std::string sixMer = sequence.substr(0, 6);
-		matchProb = eln( normalPDF( SixMer_model.at(sixMer).first, SixMer_model.at(sixMer).second, observations[t] ) );
+
+		level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
+		level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+		//level_sigma = SixMer_model.at(sixMer).second;
+
+		//uncomment to scale events
+		//level_mu = SixMer_model.at(sixMer).first;
+		//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
+		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
+
+		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 		insProb = eln( uniformPDF( 50, 150, observations[t] ) );
 
 		//first insertion
@@ -203,11 +214,27 @@ double sequenceProbability( std::vector <double> &observations, std::string &seq
 			insProb = eln( uniformPDF( 50, 150, observations[t] ) );
 			if ( useBrdU and i == windowSize ){
 
-				matchProb = eln( normalPDF( analogueModel.at(sixMer).first, analogueModel.at(sixMer).second, observations[t] ) );
+				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
+				level_sigma = scalings.var * analogueModel.at(sixMer).second;
+				//level_sigma = analogueModel.at(sixMer).second;
+
+				//uncomment if you scale events
+				//level_mu = analogueModel.at(sixMer).first;
+				//level_sigma = scalings.var / scalings.scale * analogueModel.at(sixMer).second;
+
+				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
 			else{
 
-				matchProb = eln( normalPDF( SixMer_model.at(sixMer).first, SixMer_model.at(sixMer).second, observations[t] ) );
+				level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
+				level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+				//level_sigma = SixMer_model.at(sixMer).second;
+
+				//uncomment if you scale events				
+				//level_mu = SixMer_model.at(sixMer).first;
+				//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
+
+				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
 
 			//to the insertion
@@ -547,8 +574,8 @@ void llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< 
 		//catch abnormally few or many events
 		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < windowLength ) continue;
 
-		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel );
-		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel );
+		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings );
+		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel, r.scalings );
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome

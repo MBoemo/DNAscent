@@ -2,18 +2,10 @@
 #ifndef SCRAPPIE_COMMON_H
 #define SCRAPPIE_COMMON_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
-#include <stddef.h>
-#include <assert.h>
-#include <string.h>
+#include "scrappie_structures.h"
 
-void trim_and_segment_raw( double *raw, size_t raw_size, unsigned int *startIndex, unsigned int *endIndex );
-
-#ifdef __cplusplus
-}
-#endif
+raw_table trim_and_segment_raw(raw_table rt, int trim_start, int trim_end, int varseg_chunk, float varseg_thresh);
+raw_table trim_raw_by_mad(raw_table rt, int chunk_size, float proportion);
 
 #endif /* SCRAPPIE_COMMON_H */

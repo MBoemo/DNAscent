@@ -14,10 +14,19 @@
 #include <map>
 #include <vector>
 
+struct PoreParameters {
+
+	double shift;
+	double drift = 0.0;
+	double scale;
+	double var = 1.0;
+};
+
 
 struct read{
 
 	std::string basecall, referenceSeqMappedTo, referenceMappedTo, filename, readID;
+	PoreParameters scalings;
 	std::vector< double > raw, normalisedEvents;
 	std::map< int, int > refToQuery;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;

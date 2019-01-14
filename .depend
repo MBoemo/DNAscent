@@ -1,17 +1,17 @@
 poreModels.o: src/poreModels.cpp
 data_IO.o: src/data_IO.cpp src/data_IO.h src/error_handling.h \
- src/scrappie/event_detection.h src/poreModels.h src/common.h \
- src/pfasta/pfasta.h
+ src/scrappie/event_detection.h src/scrappie/scrappie_structures.h \
+ src/poreModels.h src/common.h src/pfasta/pfasta.h
 regions.o: src/regions.cpp src/regions.h src/data_IO.h \
- src/error_handling.h src/scrappie/event_detection.h src/poreModels.h \
- src/common.h
+ src/error_handling.h src/scrappie/event_detection.h \
+ src/scrappie/scrappie_structures.h src/poreModels.h src/common.h
 detect.o: src/detect.cpp src/detect.h src/common.h src/data_IO.h \
  src/event_handling.h src/probability.h src/poreModels.h \
  src/error_handling.h src/scrappie/event_detection.h \
- src/../htslib/htslib/hts.h src/../htslib/htslib/hts_defs.h \
- src/../htslib/htslib/hts_log.h src/../htslib/htslib/sam.h \
- src/../htslib/htslib/hts.h src/../fast5/include/fast5.hpp \
- src/../fast5/include/fast5/logger.hpp \
+ src/scrappie/scrappie_structures.h src/../htslib/htslib/hts.h \
+ src/../htslib/htslib/hts_defs.h src/../htslib/htslib/hts_log.h \
+ src/../htslib/htslib/sam.h src/../htslib/htslib/hts.h \
+ src/../fast5/include/fast5.hpp src/../fast5/include/fast5/logger.hpp \
  src/../fast5/include/fast5/fast5_version.hpp \
  src/../fast5/include/fast5/hdf5_tools.hpp \
  hdf5-1.8.14/hdf5/include/hdf5.h hdf5-1.8.14/hdf5/include/H5public.h \
@@ -53,15 +53,19 @@ detect.o: src/detect.cpp src/detect.h src/common.h src/data_IO.h \
  src/../fast5/include/fast5/Bit_Packer.hpp
 event_handling.o: src/event_handling.cpp src/probability.h \
  src/poreModels.h src/error_handling.h src/scrappie/event_detection.h \
- src/common.h src/data_IO.h src/event_handling.h
+ src/scrappie/scrappie_structures.h src/common.h src/data_IO.h \
+ src/event_handling.h src/scrappie/scrappie_common.h
 psl.o: src/psl.cpp src/psl.h src/common.h src/data_IO.h \
- src/error_handling.h src/scrappie/event_detection.h src/poreModels.h
+ src/error_handling.h src/scrappie/event_detection.h \
+ src/scrappie/scrappie_structures.h src/poreModels.h
 DNAscent.o: src/DNAscent.cpp src/detect.h src/regions.h src/psl.h
 common.o: src/common.cpp src/common.h src/error_handling.h \
- src/scrappie/event_detection.h src/poreModels.h src/data_IO.h
+ src/scrappie/event_detection.h src/scrappie/scrappie_structures.h \
+ src/poreModels.h src/data_IO.h
 event_detection.o: src/scrappie/event_detection.c \
- src/scrappie/event_detection.h
+ src/scrappie/event_detection.h src/scrappie/scrappie_structures.h \
+ src/scrappie/scrappie_stdlib.h
 scrappie_common.o: src/scrappie/scrappie_common.c \
- src/scrappie/scrappie_common.h src/scrappie/util.h
-util.o: src/scrappie/util.c src/scrappie/util.h
+ src/scrappie/scrappie_common.h src/scrappie/scrappie_structures.h \
+ src/scrappie/scrappie_stdlib.h
 pfasta.o: src/pfasta/pfasta.c src/pfasta/pfasta.h
