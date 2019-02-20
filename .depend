@@ -54,14 +54,98 @@ detect.o: src/detect.cpp src/detect.h src/common.h src/data_IO.h \
 event_handling.o: src/event_handling.cpp src/probability.h \
  src/poreModels.h src/error_handling.h src/scrappie/event_detection.h \
  src/scrappie/scrappie_structures.h src/common.h src/data_IO.h \
- src/event_handling.h src/scrappie/scrappie_common.h
+ src/event_handling.h src/../fast5/include/fast5.hpp \
+ src/../fast5/include/fast5/logger.hpp \
+ src/../fast5/include/fast5/fast5_version.hpp \
+ src/../fast5/include/fast5/hdf5_tools.hpp \
+ hdf5-1.8.14/hdf5/include/hdf5.h hdf5-1.8.14/hdf5/include/H5public.h \
+ hdf5-1.8.14/hdf5/include/H5pubconf.h \
+ hdf5-1.8.14/hdf5/include/H5version.h \
+ hdf5-1.8.14/hdf5/include/H5api_adpt.h \
+ hdf5-1.8.14/hdf5/include/H5Apublic.h \
+ hdf5-1.8.14/hdf5/include/H5Ipublic.h \
+ hdf5-1.8.14/hdf5/include/H5Opublic.h \
+ hdf5-1.8.14/hdf5/include/H5Lpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Tpublic.h \
+ hdf5-1.8.14/hdf5/include/H5ACpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Cpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Dpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Epublic.h \
+ hdf5-1.8.14/hdf5/include/H5Epubgen.h \
+ hdf5-1.8.14/hdf5/include/H5Fpublic.h \
+ hdf5-1.8.14/hdf5/include/H5FDpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Gpublic.h \
+ hdf5-1.8.14/hdf5/include/H5MMpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Ppublic.h \
+ hdf5-1.8.14/hdf5/include/H5Zpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Rpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Spublic.h hdf5-1.8.14/hdf5/include/H5FDcore.h \
+ hdf5-1.8.14/hdf5/include/H5FDfamily.h hdf5-1.8.14/hdf5/include/H5FDlog.h \
+ hdf5-1.8.14/hdf5/include/H5FDmpi.h hdf5-1.8.14/hdf5/include/H5FDmpio.h \
+ hdf5-1.8.14/hdf5/include/H5FDmulti.h hdf5-1.8.14/hdf5/include/H5FDsec2.h \
+ hdf5-1.8.14/hdf5/include/H5FDstdio.h \
+ hdf5-1.8.14/hdf5/include/H5FDdirect.h \
+ src/../fast5/include/fast5/Huffman_Packer.hpp \
+ src/../fast5/include/fast5/logger.hpp \
+ src/../fast5/include/fast5/cwmap.fast5_rw_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_ed_skip_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_ed_len_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_fq_bp_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_fq_qv_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_ev_rel_skip_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_ev_move_1.inl \
+ src/../fast5/include/fast5/Bit_Packer.hpp src/scrappie/scrappie_common.h
 psl.o: src/psl.cpp src/psl.h src/common.h src/data_IO.h \
  src/error_handling.h src/scrappie/event_detection.h \
  src/scrappie/scrappie_structures.h src/poreModels.h
-DNAscent.o: src/DNAscent.cpp src/detect.h src/regions.h src/psl.h
+DNAscent.o: src/DNAscent.cpp src/detect.h src/regions.h src/psl.h \
+ src/index.h
 common.o: src/common.cpp src/common.h src/error_handling.h \
  src/scrappie/event_detection.h src/scrappie/scrappie_structures.h \
  src/poreModels.h src/data_IO.h
+index.o: src/index.cpp src/../tinydir/tinydir.h \
+ src/../fast5/include/fast5.hpp src/../fast5/include/fast5/logger.hpp \
+ src/../fast5/include/fast5/fast5_version.hpp \
+ src/../fast5/include/fast5/hdf5_tools.hpp \
+ hdf5-1.8.14/hdf5/include/hdf5.h hdf5-1.8.14/hdf5/include/H5public.h \
+ hdf5-1.8.14/hdf5/include/H5pubconf.h \
+ hdf5-1.8.14/hdf5/include/H5version.h \
+ hdf5-1.8.14/hdf5/include/H5api_adpt.h \
+ hdf5-1.8.14/hdf5/include/H5Apublic.h \
+ hdf5-1.8.14/hdf5/include/H5Ipublic.h \
+ hdf5-1.8.14/hdf5/include/H5Opublic.h \
+ hdf5-1.8.14/hdf5/include/H5Lpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Tpublic.h \
+ hdf5-1.8.14/hdf5/include/H5ACpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Cpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Dpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Epublic.h \
+ hdf5-1.8.14/hdf5/include/H5Epubgen.h \
+ hdf5-1.8.14/hdf5/include/H5Fpublic.h \
+ hdf5-1.8.14/hdf5/include/H5FDpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Gpublic.h \
+ hdf5-1.8.14/hdf5/include/H5MMpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Ppublic.h \
+ hdf5-1.8.14/hdf5/include/H5Zpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Rpublic.h \
+ hdf5-1.8.14/hdf5/include/H5Spublic.h hdf5-1.8.14/hdf5/include/H5FDcore.h \
+ hdf5-1.8.14/hdf5/include/H5FDfamily.h hdf5-1.8.14/hdf5/include/H5FDlog.h \
+ hdf5-1.8.14/hdf5/include/H5FDmpi.h hdf5-1.8.14/hdf5/include/H5FDmpio.h \
+ hdf5-1.8.14/hdf5/include/H5FDmulti.h hdf5-1.8.14/hdf5/include/H5FDsec2.h \
+ hdf5-1.8.14/hdf5/include/H5FDstdio.h \
+ hdf5-1.8.14/hdf5/include/H5FDdirect.h \
+ src/../fast5/include/fast5/Huffman_Packer.hpp \
+ src/../fast5/include/fast5/logger.hpp \
+ src/../fast5/include/fast5/cwmap.fast5_rw_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_ed_skip_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_ed_len_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_fq_bp_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_fq_qv_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_ev_rel_skip_1.inl \
+ src/../fast5/include/fast5/cwmap.fast5_ev_move_1.inl \
+ src/../fast5/include/fast5/Bit_Packer.hpp src/common.h src/data_IO.h \
+ src/error_handling.h src/scrappie/event_detection.h \
+ src/scrappie/scrappie_structures.h src/poreModels.h
 event_detection.o: src/scrappie/event_detection.c \
  src/scrappie/event_detection.h src/scrappie/scrappie_structures.h \
  src/scrappie/scrappie_stdlib.h

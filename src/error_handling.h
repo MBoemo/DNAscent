@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2017 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
@@ -58,6 +58,25 @@ struct InvalidOption : public std::exception {
 };
 
 
+struct MissingFast5 : public std::exception {
+	std::string badFast5;	
+	MissingFast5( std::string s ){
+
+		badFast5 = s;
+	}
+	const char* what () const throw () {
+		const char* message = "In specified directory, couldn't find fast5 file: ";
+		const char* specifier = badFast5.c_str();
+		char* result;
+		result = static_cast<char*>(calloc(strlen(message)+strlen(specifier)+1, sizeof(char)));
+		strcpy( result, message);
+		strcat( result, specifier );
+
+		return result;
+	}	
+};
+
+
 struct InsufficientArguments : public std::exception {
 	const char * what () const throw () {
 		return "Insufficient number of arguments passed to executable.";
@@ -96,6 +115,12 @@ struct MismatchedDimensions : public std::exception {
 struct ParsingError : public std::exception {
 	const char * what () const throw () {
 		return "Parsing error reading BAM file.";
+	}
+};
+
+struct IndexFormatting : public std::exception {
+	const char * what () const throw () {
+		return "Index should specify whether fast5 is bulk or individual.  Please contact the author.";
 	}
 };
 

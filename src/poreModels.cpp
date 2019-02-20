@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2017 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
@@ -9,6 +9,8 @@
 #include <utility>
 #include <string>
 #include <map>
+#include <math.h>
+#include <iostream>
 
 //BrdU_threshold0.model
 std::map< std::string, std::pair< double, double > > BrdU_model_full = {
@@ -7479,3 +7481,35 @@ std::map< std::string, std::pair< double, double > > SixMer_model = {
 		{ "CACGCC", { 94.739791 ,2.023168} },
 		{ "CCTCCG", { 116.192858 ,2.470406} }
 };
+
+double KLdivergence( double mu1, double sigma1, double mu2, double sigma2 ){
+
+	return log(sigma2 / sigma1) + (pow(sigma1,2) + pow((mu1 - mu2),2))/(2.0*pow(sigma2,2)) - 0.5;
+}
+
+
+std::map< std::string, std::pair< double, double > > buildAnalogueModel(double KLthreshold, bool excludeCpG){
+
+	std::cout << "Building analogue model... ";
+	std::map< std::string, std::pair< double, double > > analogueModel;
+
+	for ( auto b = BrdU_model_full.begin(); b != BrdU_model_full.end(); b++ ){
+
+		std::string sixMer = b -> first;
+		double mu_b = (b -> second).first;
+		double sigma_b = (b -> second).second;
+		double mu_t = SixMer_model.at(sixMer).first;
+		double sigma_t = SixMer_model.at(sixMer).second;
+
+		//throw this one out if it has a CpG and we're excluding CpG-containing 6mers		
+		std::size_t found = sixMer.find("CG");
+		if ( found != std::string::npos and excludeCpG ) continue;
+
+		if( KLdivergence(mu_b, sigma_b, mu_t, sigma_t) > KLthreshold ){
+
+			analogueModel[sixMer] = std::make_pair(mu_b,sigma_b);
+		}
+	}
+	std::cout << analogueModel.size() << " analogue-containing 6mers." << std::endl;
+	return analogueModel;
+}

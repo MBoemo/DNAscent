@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2017 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
@@ -73,6 +73,7 @@ std::map< std::string, std::string > import_reference( std::string fastaFilePath
 
 std::map< std::string, std::string > import_reference_pfasta( std::string fastaFilePath ){
 
+	std::cout << "Importing reference... ";
 	std::map< std::string, std::string > reference;
 
 	int file_descriptor =
@@ -102,6 +103,7 @@ std::map< std::string, std::string > import_reference_pfasta( std::string fastaF
 	pfasta_free(&pf);
 	close(file_descriptor);
 
+	std::cout << "ok." << std::endl;
 	return reference;
 }
 

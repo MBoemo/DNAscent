@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2017 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
@@ -48,8 +48,8 @@ class progressBar{
 			if ( progress <= 1.0 ){
 
 				std::cout << "[";
-				int pos = barWidth * progress;
-				for (int i = 0; i < barWidth; ++i) {
+				unsigned int pos = barWidth * progress;
+				for (unsigned int i = 0; i < barWidth; ++i) {
 					if (i < pos) std::cout << "=";
 					else if (i == pos) std::cout << ">";
 					else std::cout << " ";

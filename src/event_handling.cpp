@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2017 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
@@ -12,6 +12,7 @@
 #include "probability.h"
 #include "error_handling.h"
 #include "event_handling.h"
+#include "../fast5/include/fast5.hpp"
 
 //extern "C" {
 #include "scrappie/event_detection.h"
@@ -21,6 +22,128 @@
 #define _USE_MATH_DEFINES
 
 extern std::map< std::string, std::pair< double, double > > BrdU_model_full, SixMer_model;
+
+// from scrappie
+float fast5_read_float_attribute(hid_t group, const char *attribute) {
+    float val = NAN;
+    if (group < 0) {
+#ifdef DEBUG_FAST5_IO
+        fprintf(stderr, "Invalid group passed to %s:%d.", __FILE__, __LINE__);
+#endif
+        return val;
+    }
+
+    hid_t attr = H5Aopen(group, attribute, H5P_DEFAULT);
+    if (attr < 0) {
+#ifdef DEBUG_FAST5_IO
+        fprintf(stderr, "Failed to open attribute '%s' for reading.", attribute);
+#endif
+        return val;
+    }
+
+    H5Aread(attr, H5T_NATIVE_FLOAT, &val);
+    H5Aclose(attr);
+
+    return val;
+}
+//end scrappie
+
+
+void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<double> &raw ){
+
+	//open the file
+	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+
+	//get the channel parameters
+	std::string scaling_path = "/read_" + readID + "/channel_id";
+	hid_t scaling_group = H5Gopen(hdf5_file, scaling_path.c_str(), H5P_DEFAULT);
+	float digitisation = fast5_read_float_attribute(scaling_group, "digitisation");
+	float offset = fast5_read_float_attribute(scaling_group, "offset");
+	float range = fast5_read_float_attribute(scaling_group, "range");
+	//float sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
+	H5Gclose(scaling_group);
+
+	//get the raw signal
+	hid_t space;
+	hsize_t nsample;
+	float raw_unit;
+	float *rawptr = NULL;
+
+	std::string signal_path = "/read_" + readID + "/Raw/Signal";
+	hid_t dset = H5Dopen(hdf5_file, signal_path.c_str(), H5P_DEFAULT);
+	if (dset < 0 ) throw BadFast5Field(); 
+	space = H5Dget_space(dset);
+	if (space < 0 ) throw BadFast5Field(); 
+	H5Sget_simple_extent_dims(space, &nsample, NULL);
+   	rawptr = (float*)calloc(nsample, sizeof(float));
+    	herr_t status = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, rawptr);
+	if ( status < 0 ){
+		free(rawptr);
+		H5Dclose(dset);
+		return;
+	}
+	H5Dclose(dset);
+	
+	raw_unit = range / digitisation;
+	for ( size_t i = 0; i < nsample; i++ ){
+
+		raw.push_back( (rawptr[i] + offset) * raw_unit );
+	}
+	free(rawptr);
+	H5Fclose(hdf5_file);
+}
+
+
+void getEvents( std::string fast5Filename, std::vector<double> &raw ){
+
+	//open the file
+	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+
+	//get the channel parameters
+	const char *scaling_path = "/UniqueGlobalKey/channel_id";
+	hid_t scaling_group = H5Gopen(hdf5_file, scaling_path, H5P_DEFAULT);
+	float digitisation = fast5_read_float_attribute(scaling_group, "digitisation");
+	float offset = fast5_read_float_attribute(scaling_group, "offset");
+	float range = fast5_read_float_attribute(scaling_group, "range");
+	//float sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
+	H5Gclose(scaling_group);
+
+	//get the raw signal
+	hid_t space;
+	hsize_t nsample;
+	float raw_unit;
+	float *rawptr = NULL;
+
+	ssize_t size = H5Lget_name_by_idx(hdf5_file, "/Raw/Reads/", H5_INDEX_NAME, H5_ITER_INC, 0, NULL, 0, H5P_DEFAULT);
+	char* name = (char*)calloc(1 + size, sizeof(char));
+	H5Lget_name_by_idx(hdf5_file, "/Raw/Reads/", H5_INDEX_NAME, H5_ITER_INC, 0, name, 1 + size, H5P_DEFAULT);
+	std::string readName(name);
+	free(name);
+	std::string signal_path = "/Raw/Reads/" + readName + "/Signal";
+
+	hid_t dset = H5Dopen(hdf5_file, signal_path.c_str(), H5P_DEFAULT);
+	if (dset < 0 ) throw BadFast5Field(); 
+	space = H5Dget_space(dset);
+	if (space < 0 ) throw BadFast5Field(); 
+	H5Sget_simple_extent_dims(space, &nsample, NULL);
+   	rawptr = (float*)calloc(nsample, sizeof(float));
+    	herr_t status = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, rawptr);
+	if ( status < 0 ){
+		free(rawptr);
+		H5Dclose(dset);
+		return;
+	}
+	H5Dclose(dset);
+	
+	raw_unit = range / digitisation;
+	for ( size_t i = 0; i < nsample; i++ ){
+
+		raw.push_back( (rawptr[i] + offset) * raw_unit );
+	}
+	free(rawptr);
+	H5Fclose(hdf5_file);
+}
+
 
 std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A, std::vector< double > b ){
 /*crude but functional algorithm that solves the linear system A*x = b by building an augmented matrix and transforming to reduced row echelon form */
@@ -183,84 +306,6 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 }
 
 
-std::vector< std::pair< unsigned int, unsigned int > > matchWarping_band( std::vector< double > &raw, std::vector< double > &raw_stdv, std::string &basecall ){
-/*use dynamic time warping to calculate an alignment between the raw signal and the basecall */
-
-	int numOfRaw = raw.size();
-	int numOf5mers = basecall.size() - 5;
-	int bandWidth = 500;
-
-	std::vector< std::pair< unsigned int, unsigned int > > eventSeqLocPairs;
-
-	/*allocate the dynamic time warping lattice */
-	std::vector< std::vector< double > > dtw( numOfRaw, std::vector< double >( numOf5mers, std::numeric_limits< double >::max() ) );
-
-	/*INITIALISATION */
-	dtw[0][0] = 0.0;
-	dtw[1][1] = 0.0;
-	double mu = SixMer_model[basecall.substr(1,6)].first;
-	double stdv = SixMer_model[basecall.substr(1,6)].second;
-	dtw[1][1] = manhattanMetric( mu, stdv, raw[1], raw_stdv[1] );
-
-	/*RECURSION: fill in the dynamic time warping lattice */
-	for ( unsigned int col = 2; col < numOf5mers; col++ ){//basecall
-
-		int bandLower = col*numOfRaw/numOf5mers - bandWidth;
-		int bandUpper = col*numOfRaw/numOf5mers + bandWidth;
-
-		bandLower = std::max(1, bandLower);
-		bandUpper = std::min(numOfRaw, bandUpper);
-		
-		for ( unsigned int row = bandLower; row < bandUpper; row++ ){//raw
-
-			mu = SixMer_model[basecall.substr(col, 6)].first;
-			stdv = SixMer_model[basecall.substr(col, 6)].second;
-			dtw[row][col] =  manhattanMetric( mu, stdv, raw[row], raw_stdv[row] ) + std::min( dtw[row - 1][col], std::min(dtw[row - 1][col - 1], dtw[row - 1][col - 2] ) );	
-		}
-	}
-
-	/*TRACEBACK: calculate the optimal warping path */
-	int col = numOf5mers - 1;
-	int row = numOfRaw - 1;
-	eventSeqLocPairs.push_back( std::make_pair( row, col ) );
-
-	while ( row > 0 and col > 0 ){
-
-		std::vector< double > mCand;
-
-		if (col == 1){
-			mCand = { dtw[row - 1][col], dtw[row - 1][col - 1] };
-		}
-		else {
-			mCand = { dtw[row - 1][col], dtw[row - 1][col - 1], dtw[row - 1][col - 2] };
-		}
-
-		int m = std::min_element( mCand.begin(), mCand.end() ) - mCand.begin();
-
-		if ( m == 0 ){
-			row--;
-		}
-		else if ( m == 1 ){
-			row--;
-			col--;
-		}
-		else if ( m == 2 ){
-			row--;
-			col-=2;
-		}
-		else{
-			std::cout << "Exiting with error.  Out of bounds error in dynmaic time warping." << std::endl;
-			exit(EXIT_FAILURE);
-		}
-
-		eventSeqLocPairs.push_back( std::make_pair( row, col ) );
-	}
-	std::reverse( eventSeqLocPairs.begin(), eventSeqLocPairs.end() );
-
-	return eventSeqLocPairs;
-}
-
-
 //start: adapted from nanopolish
 
 inline float logProbabilityMatch(std::string sixMer, double x, double shift, double scale){
@@ -291,7 +336,6 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	std::vector< double > b(2,0.0);
 	PoreParameters rescale;
 
-	size_t strand_idx = 0;
 	size_t k = 6;
 	//const Alphabet* alphabet = pore_model.pmalphabet;
 	size_t n_events = raw.size();
@@ -378,7 +422,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	int fills = 0;
 
 	// fill in remaining bands
-	for(int band_idx = 2; band_idx < n_bands; ++band_idx) {
+	for(unsigned int band_idx = 2; band_idx < n_bands; ++band_idx) {
 	// Determine placement of this band according to Suzuki's adaptive algorithm
         // When both ll and ur are out-of-band (ob) we alternate movements
         // otherwise we decide based on scores
@@ -403,7 +447,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		// If the trim state is within the band, fill it in here
 		int trim_offset = band_kmer_to_offset(band_idx, -1);
 		if(is_offset_valid(trim_offset)) {
-			int event_idx = event_at_offset(band_idx, trim_offset);
+			unsigned int event_idx = event_at_offset(band_idx, trim_offset);
 			if(event_idx >= 0 && event_idx < n_events) {
 				bands[band_idx][trim_offset] = lp_trim * (event_idx + 1);
 				trace[band_idx][trim_offset] = FROM_U;
@@ -475,8 +519,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	int curr_kmer_idx = n_kmers -1;
 
 	// Find best score between an event and the last k-mer. after trimming the remaining evnets
-	for(int event_idx = 0; event_idx < n_events; ++event_idx) {
-		int band_idx = event_kmer_to_band(event_idx, curr_kmer_idx);
+	for(unsigned int event_idx = 0; event_idx < n_events; ++event_idx) {
+		unsigned int band_idx = event_kmer_to_band(event_idx, curr_kmer_idx);
 		assert(band_idx < bands.size());
 		int offset = band_event_to_offset(band_idx, event_idx);
 		if(is_offset_valid(offset)) {
@@ -533,13 +577,11 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
     
 	// QC results
 	double avg_log_emission = sum_emission / n_aligned_events;
-	double avg_eventDiffs = eventDiffs / n_aligned_events;
 	bool spanned = eventSeqLocPairs.front().second == 0 && eventSeqLocPairs.back().second == n_kmers - 1;
     
-	bool failed = false;
 	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold) {
 		
-		failed = true;		
+		//bool failed = true;		
 		eventSeqLocPairs.clear();
     		//fprintf(stderr, "ada\t\t%s\t%s\t%.2lf\t%zu\t%.2lf\t%.2lf\t%d\t%d\t%d\n", failed ? "FAILED" : "OK",spanned ? "SPAN" : "NOTS", events_per_kmer, sequence.size(), avg_log_emission, avg_eventDiffs, curr_event_idx, max_gap, fills);
 	}
@@ -565,6 +607,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		}
 		rescale.var /= raw.size();
 		rescale.var = sqrt(rescale.var);
+		//fprintf(stderr,"%f\n",rescale.var);
 	}
 	//fprintf(stderr,"%f %f %f %f %f\n",s.shift,rescale.shift,s.scale,rescale.scale,rescale.var);
 
@@ -620,7 +663,7 @@ void normaliseEvents( read &r ){
 	std::vector< double > events_mu;
 	events_mu.reserve( et.n );
 
-	for ( int i = 0; i < et.n; i++ ){
+	for ( unsigned int i = 0; i < et.n; i++ ){
 
 		events_mu.push_back( et.event[i].mean );
 	}

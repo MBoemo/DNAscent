@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2017 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
@@ -20,6 +20,7 @@ struct eventDataForRead {
 };
 
 void normaliseEvents( read & );
-
+void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<double> &raw );
+void getEvents( std::string fast5Filename, std::vector<double> &raw );
 
 #endif

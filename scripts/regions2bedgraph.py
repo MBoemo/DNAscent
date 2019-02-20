@@ -8,13 +8,16 @@ signalLineBuffer = []
 forkDirLineBuffer = []
 
 for line in f:
+
+	if not line.rstrip():
+		continue
 	
 	if line[0] == '>':
 		count += 1
 
 		if not first:
 
-			if printThisOne:
+			if printThisOne and len(signalLineBuffer) >= 5:
 
 				#signal
 				outRegions = open( str(count) + '_' + readID + '_scores.bedgraph','w')
@@ -73,7 +76,7 @@ for line in f:
 
 f.close()
 
-if printThisOne:
+if printThisOne and len(signalLineBuffer) >= 5:
 
 	#signal
 	outRegions = open( str(count) + '_' + readID + '_scores.bedgraph','w')

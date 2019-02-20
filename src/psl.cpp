@@ -110,21 +110,21 @@
 	outFile << rd.positions.size() + 2 << " "; //blockCount
  	//blockSizes
 	outFile << 1 << ","; //extra for start
-	for ( int i = 0; i < rd.positions.size(); i++ ){
+	for ( unsigned int i = 0; i < rd.positions.size(); i++ ){
  		outFile << 1  << ",";
 	}
 	outFile << 1 << ","; //extra for end
 	outFile << " ";
  	//qStarts
 	outFile << 0 << ","; //extra for start
-	for ( int i = 0; i < rd.positions.size(); i++ ){
+	for ( unsigned int i = 0; i < rd.positions.size(); i++ ){
  		outFile << rd.positions[i] - rd.mappingLower << ",";
 	}
 	outFile << rd.mappingUpper - rd.mappingLower << ","; //extra for end
 	outFile << " ";
  	//tStarts
 	outFile << rd.mappingLower << ","; //extra for start
-	for ( int i = 0; i < rd.positions.size(); i++ ){
+	for ( unsigned int i = 0; i < rd.positions.size(); i++ ){
  		outFile << rd.positions[i] << ",";
 	}
 	outFile << rd.mappingUpper << ","; //extra for end
@@ -150,7 +150,7 @@
 
  			if ( buffer.size() >= 10 ){
 
- 				for ( int i = 0; i < buffer.size(); i++ ){
+ 				for ( unsigned int i = 0; i < buffer.size(); i++ ){
 
 					writePSL( buffer[i], reference, outFile );
 				}

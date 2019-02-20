@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2017 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
@@ -8,6 +8,7 @@
 
 #include <fstream>
 #include "detect.h"
+#include <math.h>
 #include <stdlib.h>
 #include <limits>
 #include "common.h"
@@ -28,11 +29,12 @@ static const char *help=
 "Required arguments are:\n"
 "  -b,--bam                  path to alignment BAM file,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
-"  -m,--analogue-model       path to analogue model file,\n"
 "  -i,--index                path to DNAscent index,\n"
 "  -o,--output               path to output file that will be generated.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread)\n"
+"  --divergence              minimum KL-divergence between BrdU 6mers to include and ONT pore model (default is 2.0),\n"
+"  --noCpG                   exclude 6mers that contain a CpG (default is to include all 6mers),\n"
 "  -q,--quality              minimum mapping quality (default is 20).\n"
 "  -l,--length               minimum read length in bp (default is 100).\n";
 
@@ -41,11 +43,15 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	std::string analogueModelFilename;
-	unsigned int minQ;
-	unsigned int minL;
+	bool excludeCpG;
+	double divergence;
+	int minQ;
+	int minL;
 	unsigned int threads;
 };
+
+extern std::map< std::string, std::pair< double, double > > SixMer_model;
+extern std::map< std::string, std::pair< double, double > > BrdU_model_full;
 
 Arguments parseDetectArguments( int argc, char** argv ){
 
@@ -72,6 +78,8 @@ Arguments parseDetectArguments( int argc, char** argv ){
 	args.threads = 1;
 	args.minQ = 20;
 	args.minL = 100;
+	args.excludeCpG = false;
+	args.divergence = 2.0;
 
 	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -120,11 +128,16 @@ Arguments parseDetectArguments( int argc, char** argv ){
 			args.outputFilename = strArg;
 			i+=2;
 		}
-		else if ( flag == "-m" or flag == "--analogue-model" ){
+		else if ( flag == "--divergence" ){
 
 			std::string strArg( argv[ i + 1 ] );
-			args.analogueModelFilename = strArg;
+			args.divergence = std::stof(strArg.c_str());
 			i+=2;
+		}
+		else if ( flag == "--noCpG" ){
+
+			args.excludeCpG = true;
+			i+=1;
 		}
 		else throw InvalidOption( flag );
 	}
@@ -145,8 +158,6 @@ static double externalM12D = 0.0025;
 static double externalM12M1 = 0.5965;
 
 double sequenceProbability( std::vector <double> &observations, std::string &sequence, size_t windowSize, bool useBrdU, std::map< std::string, std::pair< double, double > > &analogueModel, PoreParameters scalings ){
-
-	extern std::map< std::string, std::pair< double, double > > SixMer_model;
 
 	std::vector< double > I_curr(2*windowSize-5, NAN), D_curr(2*windowSize-5, NAN), M_curr(2*windowSize-5, NAN), I_prev(2*windowSize-5, NAN), D_prev(2*windowSize-5, NAN), M_prev(2*windowSize-5, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
@@ -215,8 +226,8 @@ double sequenceProbability( std::vector <double> &observations, std::string &seq
 			if ( useBrdU and i == windowSize ){
 
 				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
-				level_sigma = scalings.var * analogueModel.at(sixMer).second;
-				//level_sigma = analogueModel.at(sixMer).second;
+				//level_sigma = scalings.var * analogueModel.at(sixMer).second;
+				level_sigma = analogueModel.at(sixMer).second;
 
 				//uncomment if you scale events
 				//level_mu = analogueModel.at(sixMer).first;
@@ -227,8 +238,8 @@ double sequenceProbability( std::vector <double> &observations, std::string &seq
 			else{
 
 				level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
-				level_sigma = scalings.var * SixMer_model.at(sixMer).second;
-				//level_sigma = SixMer_model.at(sixMer).second;
+				//level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+				level_sigma = SixMer_model.at(sixMer).second;
 
 				//uncomment if you scale events				
 				//level_mu = SixMer_model.at(sixMer).first;
@@ -273,31 +284,6 @@ double sequenceProbability( std::vector <double> &observations, std::string &seq
 	return forwardProb;
 }
 
-// from scrappie
-float fast5_read_float_attribute(hid_t group, const char *attribute) {
-    float val = NAN;
-    if (group < 0) {
-#ifdef DEBUG_FAST5_IO
-        fprintf(stderr, "Invalid group passed to %s:%d.", __FILE__, __LINE__);
-#endif
-        return val;
-    }
-
-    hid_t attr = H5Aopen(group, attribute, H5P_DEFAULT);
-    if (attr < 0) {
-#ifdef DEBUG_FAST5_IO
-        fprintf(stderr, "Failed to open attribute '%s' for reading.", attribute);
-#endif
-        return val;
-    }
-
-    H5Aread(attr, H5T_NATIVE_FLOAT, &val);
-    H5Aclose(attr);
-
-    return val;
-}
-//end scrappie
-
 
 std::string getQuerySequence( bam1_t *record ){ 
 	
@@ -320,7 +306,7 @@ std::string getQuerySequence( bam1_t *record ){
 }
 
 
-void parseCigar(bam1_t *record, std::map< int, int > &ref2query, int &refStart, int &refEnd ){
+void parseCigar(bam1_t *record, std::map< unsigned int, unsigned int > &ref2query, int &refStart, int &refEnd ){
 
 	//initialise reference and query coordinates for the first match
 	refStart = record -> core.pos;
@@ -409,74 +395,35 @@ void parseCigar(bam1_t *record, std::map< int, int > &ref2query, int &refStart, 
 }
 
 
-void parseIndex( std::string indexFilename, std::map< std::string, std::string > &readID2path ){
+void parseIndex( std::string indexFilename, std::map< std::string, std::string > &readID2path, bool &bulk ){
 
+	std::cout << "Loading DNAscent index... ";
 	std::ifstream indexFile( indexFilename );
 	if ( not indexFile.is_open() ) throw IOerror( indexFilename );
-
 	std::string line;
+
+	//get whether this is bulk fast5 or individual fast5 from the index
+	std::getline( indexFile, line);
+	if (line == "#bulk") bulk = true;
+	else if (line == "#individual") bulk = false;
+	else throw IndexFormatting();
+
+	//get the readID to path map
 	while ( std::getline( indexFile, line) ){
 
 		std::string readID = line.substr(0, line.find('\t'));
 		std::string path = line.substr(line.find('\t')+1);
 		readID2path[readID] = path;
 	}
+	std::cout << "ok." << std::endl;
 }
 
-
-void getEvents( std::string fast5Filename, std::vector<double> &raw ){
-
-	//open the file
-	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-
-	//get the channel parameters
-	const char *scaling_path = "/UniqueGlobalKey/channel_id";
-	hid_t scaling_group = H5Gopen(hdf5_file, scaling_path, H5P_DEFAULT);
-	float digitisation = fast5_read_float_attribute(scaling_group, "digitisation");
-	float offset = fast5_read_float_attribute(scaling_group, "offset");
-	float range = fast5_read_float_attribute(scaling_group, "range");
-	float sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
-	H5Gclose(scaling_group);
-
-	//get the raw signal
-	hid_t space;
-	hsize_t nsample;
-	herr_t status;
-	float raw_unit;
-	float *rawptr = NULL;
-
-	ssize_t size = H5Lget_name_by_idx(hdf5_file, "/Raw/Reads/", H5_INDEX_NAME, H5_ITER_INC, 0, NULL, 0, H5P_DEFAULT);
-	char* name = (char*)calloc(1 + size, sizeof(char));
-	H5Lget_name_by_idx(hdf5_file, "/Raw/Reads/", H5_INDEX_NAME, H5_ITER_INC, 0, name, 1 + size, H5P_DEFAULT);
-	std::string readName(name);
-	free(name);
-	std::string signal_path = "/Raw/Reads/" + readName + "/Signal";
-
-	hid_t dset = H5Dopen(hdf5_file, signal_path.c_str(), H5P_DEFAULT);
-	if (dset < 0 ) throw BadFast5Field(); 
-	space = H5Dget_space(dset);
-	if (space < 0 ) throw BadFast5Field(); 
-	H5Sget_simple_extent_dims(space, &nsample, NULL);
-   	rawptr = (float*)calloc(nsample, sizeof(float));
-    	status = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, rawptr);
-	H5Dclose(dset);
-	
-	raw_unit = range / digitisation;
-	for ( size_t i = 0; i < nsample; i++ ){
-
-		raw.push_back( (rawptr[i] + offset) * raw_unit );
-	}
-	free(rawptr);
-	H5Fclose(hdf5_file);
-}
-
-
-void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &numOfRecords, unsigned int minQ, unsigned int minL ){
+void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &numOfRecords, int minQ, int minL ){
 
 	hts_itr_t* itr = sam_itr_querys(bam_idx,bam_hdr,".");
 	int result;
-	do {
 
+	do {
 		bam1_t *record = bam_init1();
 		result = sam_itr_next(bam_fh, itr, record);
 		if ( (record -> core.qual >= minQ) and (record -> core.l_qseq >= minL) ) numOfRecords++;
@@ -496,7 +443,7 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, std::map< std::string,
 }
 
 
-void llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel, std::stringstream &ss ){
+void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel, std::stringstream &ss ){
 
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
@@ -601,16 +548,17 @@ void llAcrossRead( read &r, int windowLength, std::map< std::string, std::pair< 
 int detect_main( int argc, char** argv ){
 
 	Arguments args = parseDetectArguments( argc, argv );
+	bool bulkFast5;
+
+	/*import the analogue pore model that we specified on the command line */
+	std::map< std::string, std::pair< double, double > > analogueModel = buildAnalogueModel(args.divergence, args.excludeCpG);
 
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
-	parseIndex( args.indexFilename, readID2path );
+	parseIndex( args.indexFilename, readID2path, bulkFast5 );
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
-
-	/*import the analogue pore model that we specified on the command line */
-	std::map< std::string, std::pair< double, double > > analogueModel =  import_poreModel( args.analogueModelFilename );
 
 	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
@@ -640,8 +588,9 @@ int detect_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	int windowLength = 20;
-	int result, maxBufferSize;
+	unsigned int windowLength = 20;
+	int result;
+	unsigned int maxBufferSize;
 	std::vector< bam1_t * > buffer;
 	if ( args.threads <= 4 ) maxBufferSize = args.threads;
 	else maxBufferSize = 4*(args.threads);
@@ -652,15 +601,15 @@ int detect_main( int argc, char** argv ){
 		bam1_t *record = bam_init1();
 		result = sam_itr_next(bam_fh, itr, record);
 
-		uint32_t mappingQual = record -> core.qual;
-		uint32_t queryLength = record -> core.l_qseq;
+		int mappingQual = record -> core.qual;
+		int queryLength = record -> core.l_qseq;
 		if ( mappingQual >= args.minQ and queryLength >= args.minL ) buffer.push_back( record );
 		
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
 			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,args,prog,failed) num_threads(args.threads)
-			for (int i = 0; i < buffer.size(); i++){
+			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r; 
 				bam1_t *bamRecord = buffer[i];
@@ -681,8 +630,9 @@ int detect_main( int argc, char** argv ){
 				//open fast5 and normalise events to pA
 				r.filename = readID2path[s_queryName];
 				try{
-			
-					getEvents( r.filename, r.raw );
+
+					if (bulkFast5) bulk_getEvents(r.filename, r.readID, r.raw);			
+					else getEvents( r.filename, r.raw );
 				}
 				catch ( BadFast5Field &bf5 ){
 

@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2017 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
@@ -28,7 +28,7 @@ struct read{
 	std::string basecall, referenceSeqMappedTo, referenceMappedTo, filename, readID;
 	PoreParameters scalings;
 	std::vector< double > raw, normalisedEvents;
-	std::map< int, int > refToQuery;
+	std::map< unsigned int, unsigned int > refToQuery;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
 	double qualityScore;
 	int refStart, refEnd;
