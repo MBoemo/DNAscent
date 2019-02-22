@@ -427,7 +427,11 @@ void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int 
 		bam1_t *record = bam_init1();
 		result = sam_itr_next(bam_fh, itr, record);
 		if ( (record -> core.qual >= minQ) and (record -> core.l_qseq >= minL) ) numOfRecords++;
+		bam_destroy1(record);
 	} while (result > 0);
+
+	//cleanup
+	sam_itr_destroy(itr);
 }
 
 
@@ -603,7 +607,14 @@ int detect_main( int argc, char** argv ){
 
 		int mappingQual = record -> core.qual;
 		int queryLength = record -> core.l_qseq;
-		if ( mappingQual >= args.minQ and queryLength >= args.minL ) buffer.push_back( record );
+
+		//add the record to the buffer if it passes the user's criteria, otherwise destroy it cleanly
+		if ( mappingQual >= args.minQ and queryLength >= args.minL ){
+			buffer.push_back( record );
+		}
+		else{
+			bam_destroy1(record);
+		}
 		
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
@@ -612,19 +623,18 @@ int detect_main( int argc, char** argv ){
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r; 
-				bam1_t *bamRecord = buffer[i];
 
 				//get the read name (which will be the ONT readID from Albacore basecall)
-				const char *queryName = bam_get_qname(bamRecord);
+				const char *queryName = bam_get_qname(buffer[i]);
 				if (queryName == NULL) continue;
 				std::string s_queryName(queryName);
 				r.readID = s_queryName;
 		
 				//iterate on the cigar string to fill up the reference-to-query coordinate map
-				parseCigar(bamRecord, r.refToQuery, r.refStart, r.refEnd);
+				parseCigar(buffer[i], r.refToQuery, r.refStart, r.refEnd);
 
 				//get the name of the reference mapped to
-				std::string mappedTo(bam_hdr -> target_name[bamRecord -> core.tid]);
+				std::string mappedTo(bam_hdr -> target_name[buffer[i] -> core.tid]);
 				r.referenceMappedTo = mappedTo;
 
 				//open fast5 and normalise events to pA
@@ -645,10 +655,10 @@ int detect_main( int argc, char** argv ){
 				r.referenceSeqMappedTo = reference.at(r.referenceMappedTo).substr(r.refStart, r.refEnd - r.refStart);
 
 				//fetch the basecall from the bam file
-				r.basecall = getQuerySequence(bamRecord);
+				r.basecall = getQuerySequence(buffer[i]);
 
 				//account for reverse complements
-				if ( bam_is_rev(bamRecord) ){
+				if ( bam_is_rev(buffer[i]) ){
 
 					r.basecall = reverseComplement( r.basecall );
 					r.referenceSeqMappedTo = reverseComplement( r.referenceSeqMappedTo );
@@ -675,10 +685,12 @@ int detect_main( int argc, char** argv ){
 					pb.displayProgress( prog, failed );
 				}
 			}
+			for ( unsigned int i = 0; i < buffer.size(); i++ ) bam_destroy1(buffer[i]);
 			buffer.clear();
 		}
 		pb.displayProgress( prog, failed );	
 	} while (result > 0);
+	sam_itr_destroy(itr);
 	std::cout << std::endl;
 	return 0;
 }

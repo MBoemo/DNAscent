@@ -143,8 +143,7 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 }
 
 
-std::vector<std::string> fast5_get_multi_read_groups(hid_t &hdf5_file)
-{
+std::vector<std::string> fast5_get_multi_read_groups(hid_t &hdf5_file){
     std::vector<std::string> out;
     size_t buffer_size = 0;
     char* buffer = NULL;
@@ -187,14 +186,17 @@ std::vector<std::string> fast5_get_multi_read_groups(hid_t &hdf5_file)
 }
 
 
-std::map<std::string,std::string> parseSequencingSummary(std::string path){
+std::map<std::string,std::string> parseSequencingSummary(std::string path, bool &bulk){
 
 	std::map<std::string,std::string> readID2fast5;
+	std::map<std::string,std::vector<std::string>> fast52readID;
 	
  	std::ifstream inFile( path );
 	if ( not inFile.is_open() ) throw IOerror( path );
 	std::string line;
 	std::getline(inFile,line);//header
+
+	bulk = false;
 
 	while ( std::getline( inFile, line ) ){
 
@@ -209,7 +211,18 @@ std::map<std::string,std::string> parseSequencingSummary(std::string path){
 			cIndex++;
 		}
 		readID2fast5[readID] = fast5;
+		fast52readID[fast5].push_back(readID);
 	}
+
+	for ( auto idpair = fast52readID.begin(); idpair != fast52readID.end(); idpair++ ){
+
+		if ( (idpair->second).size() > 1 ){
+
+			bulk = true;
+			break;
+		}
+	}
+
 	return readID2fast5;
 }
 
@@ -234,7 +247,12 @@ int index_main( int argc, char** argv ){
 	//if we have a sequencing summary file, use it to build a readID to fast5 map
 	if (args.gaveSeqSummary){
 
-		std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args.ssPath);
+		bool isBulkFast5;
+		std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args.ssPath, isBulkFast5);
+
+		if (isBulkFast5) outFile << "#bulk" << std::endl;
+		else outFile << "#individual" << std::endl;
+
 		for (auto idpair = readID2fast5.begin(); idpair != readID2fast5.end(); idpair++){
 
 			//check that the path we need is in the map and exit gracefully if not
@@ -248,6 +266,8 @@ int index_main( int argc, char** argv ){
 	else{ //otherwise we're going to have to brute force open each fast5 file and pull out the readID
 
 		std::cout << "Warning: No sequencing summary file specified.  Specifying a sequencing summary will make indexing much faster." << std::endl;
+
+		outFile << "#bulk" << std::endl;
 
 		for ( auto pathpair = fast52fullpath.begin(); pathpair != fast52fullpath.end(); pathpair++ ){
 
