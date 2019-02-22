@@ -226,8 +226,8 @@ double sequenceProbability( std::vector <double> &observations, std::string &seq
 			if ( useBrdU and i == windowSize ){
 
 				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
-				//level_sigma = scalings.var * analogueModel.at(sixMer).second;
-				level_sigma = analogueModel.at(sixMer).second;
+				level_sigma = scalings.var * analogueModel.at(sixMer).second;
+				//level_sigma = analogueModel.at(sixMer).second;
 
 				//uncomment if you scale events
 				//level_mu = analogueModel.at(sixMer).first;
@@ -238,8 +238,8 @@ double sequenceProbability( std::vector <double> &observations, std::string &seq
 			else{
 
 				level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
-				//level_sigma = scalings.var * SixMer_model.at(sixMer).second;
-				level_sigma = SixMer_model.at(sixMer).second;
+				level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+				//level_sigma = SixMer_model.at(sixMer).second;
 
 				//uncomment if you scale events				
 				//level_mu = SixMer_model.at(sixMer).first;
@@ -469,11 +469,11 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength);
 
-		//FOR TESTING - print out the read snippet and the event and the ONT model
+		//TESTING - print out the read snippet and the event and the ONT model
 		//extern std::map< std::string, std::pair< double, double > > SixMer_model;
 		//std::cout << readSnippet << std::endl;
 		//for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
-		//
+		
 		//	std::cout << readSnippet.substr(pos,6) << "\t" << SixMer_model.at( readSnippet.substr(pos,6) ).first << std::endl;
 		//}
 		//END TESTING
@@ -509,12 +509,13 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 		for ( unsigned int j = 0; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - 5] ){
 
 				eventSnippet.push_back( (r.normalisedEvents)[(r.eventAlignment)[j].first] );
 
-				//FOR TESTING - print the event snippet
-				//std::cout << (r.normalisedEvents)[(r.eventAlignment)[j].first] << std::endl;
+				//TESTING - print the event snippet
+				//double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+				//std::cout << (ev - r.scalings.shift) / r.scalings.scale << std::endl;
 				//END TESTING
 			}
 
@@ -592,7 +593,7 @@ int detect_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	unsigned int windowLength = 20;
+	unsigned int windowLength = 10;
 	int result;
 	unsigned int maxBufferSize;
 	std::vector< bam1_t * > buffer;
