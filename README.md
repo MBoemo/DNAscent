@@ -2,7 +2,7 @@
 Software for detecting contiguous regions of base analogues incorporated in Oxford Nanopore reads.  Development was done using gcc 5.4.0 on an Ubuntu 16.04 platform.
 
 ## Downloading and Compiling DNAscent
-Clone the DNAscent repository with the recursive flag so that the dependencies as well.
+Clone the DNAscent repository with the recursive flag so that the dependencies are cloned as well.
 ```shell
 git clone --recursive https://github.com/MBoemo/DNAscent.git
 ```
