@@ -28,15 +28,17 @@ class progressBar{
 		std::chrono::time_point<std::chrono::steady_clock> _startTime;
 		std::chrono::time_point<std::chrono::steady_clock> _currentTime;
 		unsigned int maxNumber;
-		unsigned int barWidth = 70;
+		unsigned int barWidth = 35;
 		unsigned int _digits;
+		bool _withFail;
 
 	public:
-		progressBar( unsigned int maxNumber ){
+		progressBar( unsigned int maxNumber, bool withFail ){
 		
 			this -> maxNumber = maxNumber;
 			_digits = std::to_string( maxNumber).length() + 1;
 			_startTime = std::chrono::steady_clock::now();
+			_withFail = withFail;
 		}
 		void displayProgress( unsigned int currentNumber, unsigned int failed ){
 
@@ -64,8 +66,15 @@ class progressBar{
 				unsigned int mins = (estTimeLeft % 3600) / 60;
 				unsigned int secs = (estTimeLeft % 3600) % 60;
 
-				std::cout << std::right << std::setw(2) << hours << "hr" << std::setw(2) << mins << "min" << std::setw(2) << secs << "sec  ";
-				std::cout << "f: " << std::right << std::setw(_digits) << failed << std::setw(3) << "\r";
+				if (_withFail){
+
+					std::cout << std::right << std::setw(2) << hours << "hr" << std::setw(2) << mins << "min" << std::setw(2) << secs << "sec  ";
+					std::cout << "f: " << std::right << std::setw(_digits) << failed << std::setw(3) << "\r";
+				}
+				else{
+
+					std::cout << std::right << std::setw(2) << hours << "hr" << std::setw(2) << mins << "min" << std::setw(2) << secs << "sec  " << "\r";
+				}
 				std::cout.flush();
 			}
 		} 

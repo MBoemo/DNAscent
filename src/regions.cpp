@@ -12,27 +12,29 @@
 #include "error_handling.h"
 #include <cmath>
 #include <math.h>
+#include <algorithm>
 #define _USE_MATH_DEFINES
 
  static const char *help=
-"build: DNAscent executable that builds a PSL file from the output of DNAscent detect.\n"
+"regions: DNAscent executable that finds regions of analogue incorporation from the output of DNAscent detect.\n"
 "To run DNAscent regions, do:\n"
 "  ./DNAscent regions [arguments]\n"
 "Example:\n"
-"  ./DNAscent regions -d /path/to/regions_output.out -p 0.2 -o /path/to/output_prefix\n"
+"  ./DNAscent regions -d /path/to/regions_output.out -o /path/to/output_prefix\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
-"  -p,--probability          probability that a thymidine 6mer contains a BrdU,\n"
 "  -o,--output               path to output directory for bedgraph files.\n"
 "Optional arguments are:\n"
 "     --replication          detect fork direction and call origin firing (default: off),\n"
+"  -p,--probability          override probability that a thymidine 6mer contains a BrdU (default: automatically calculated),\n"
 "  -r,--resolution           minimum length of regions (default is 2kb).\n"
-"  -z,--zScore               zScore threshold for BrdU call (default is -2).\n";
+"  -z,--zScore               zScore threshold for BrdU call (default is 0).\n";
 
  struct Arguments {
 
 	std::string detectFilename;
 	double probability, threshold;
+	bool overrideProb;
 	unsigned int resolution;
 	std::string outputFilename;
 	bool callReplication;
@@ -57,8 +59,9 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 
  	/*defaults - we'll override these if the option was specified by the user */
 	args.resolution = 2000;
-	args.threshold = -2;
+	args.threshold = 0;
 	args.callReplication = false;
+	args.overrideProb = false;
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -73,6 +76,7 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 		else if ( flag == "-p" or flag == "--probability" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.probability = std::stof( strArg.c_str() );
+			args.overrideProb = true;
 			i+=2;
 		}
 		else if ( flag == "-o" or flag == "--output" ){
@@ -108,6 +112,66 @@ struct region{
 	double score;
 	std::string forkDir;
 };
+
+
+double vectorMean( std::vector< double > &obs ){
+
+	double total = 0.0;
+	for ( size_t i = 0; i < obs.size(); i++ ) total += obs[i];
+	return total / (double) obs.size();
+}
+
+
+std::pair< double, double > twoMeans( std::vector< double > &observations ){
+
+	double C1_old = 0.01;
+	double C2_old = 0.3;
+	double C1_new = C1_old;
+	double C2_new = C2_old;
+	double tol = 0.0001;
+	int maxIter = 100;
+	int iter = 0;
+
+	std::vector<double> C1_points_old;
+	std::vector<double> C2_points_old;
+
+	//make an initial assignment
+	for ( size_t i = 0; i < observations.size(); i++ ){
+
+		if ( std::abs(observations[i] - C1_old) < std::abs(observations[i] - C2_old) ) C1_points_old.push_back(observations[i]);
+		else C2_points_old.push_back(observations[i]);
+	}
+
+	//iterate until tolerance is met
+	do{
+		C1_old = C1_new;
+		C2_old = C2_new;
+
+		std::vector<double> C1_points_new;
+		std::vector<double> C2_points_new;
+
+		for ( size_t i = 0; i < C1_points_old.size(); i++ ){
+
+			if ( std::abs(C1_points_old[i] - C1_old) < std::abs(C1_points_old[i] - C2_old) ) C1_points_new.push_back(C1_points_old[i]);
+			else C2_points_new.push_back(C1_points_old[i]);
+		}	
+
+		for ( size_t i = 0; i < C2_points_old.size(); i++ ){
+
+			if ( std::abs(C2_points_old[i] - C1_old) < std::abs(C2_points_old[i] - C2_old) ) C1_points_new.push_back(C2_points_old[i]);
+			else C2_points_new.push_back(C2_points_old[i]);
+		}	
+
+		C1_new = vectorMean(C1_points_new);
+		C2_new = vectorMean(C2_points_new);
+
+		C1_points_old = C1_points_new;
+		C2_points_old = C2_points_new;
+
+		iter++;
+	}while (iter < maxIter and (std::abs(C1_old - C1_new)>tol or std::abs(C2_old - C2_new)>tol));
+	return std::make_pair(C1_new,C2_new);
+}
 
 
 void callOrigins( std::vector< region > &regions, double threshold, std::string &header, std::ofstream &repFile ){
@@ -220,9 +284,83 @@ int regions_main( int argc, char** argv ){
 
 	Arguments args = parseRegionsArguments( argc, argv );
 
- 	std::ifstream inFile( args.detectFilename );
+	//get a read count
+	int readCount = 0;
+	std::string line;
+	std::ifstream inFile( args.detectFilename );
 	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
+	while( std::getline( inFile, line ) ){
 
+		if ( line.substr(0,1) == ">" ) readCount++;
+	}	
+	progressBar pb(readCount,false);
+	inFile.close();
+
+	//estimate the fraction of BrdU incorporation
+	double p;
+	std::string header;
+	unsigned int calls = 0, attempts = 0, gap = 0;
+	int startingPos = -1;
+	int progress = 0;
+
+	if ( not args.overrideProb ){
+
+	 	inFile.open( args.detectFilename );
+		if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
+
+		std::cout << "Estimating analogue incorporation..." << std::endl;
+
+		std::vector< double > callFractions;
+		while( std::getline( inFile, line ) ){
+
+			if ( line.substr(0,1) == ">" ){
+
+				progress++;
+				pb.displayProgress( progress, 0 );
+				continue;
+			}
+
+			std::string column;
+			std::stringstream ssLine(line);
+			int position, cIndex = 0;
+			double B;
+			while ( std::getline( ssLine, column, '\t' ) ){
+
+				if ( cIndex == 0 ){
+
+					position = std::stoi(column);
+				}
+				else if ( cIndex == 1 ){
+
+					B = std::stof(column);
+					if ( B > 2.5 ) calls++;
+				}
+				cIndex++;
+			}
+
+			if ( startingPos == -1 ) startingPos = position;
+			gap = position - startingPos;
+			attempts++;
+
+			if ( gap > args.resolution and attempts >= args.resolution / 30 ){
+
+				double frac = (double) calls / (double) attempts;
+				callFractions.push_back( frac );
+				calls = 0, attempts = 0, gap = 0, startingPos = -1;
+			}
+		}
+		std::cout << std::endl << "Done." << std::endl;
+		double k1,k2;
+		std::tie(k1,k2) = twoMeans( callFractions );
+		p = std::max(k1,k2);
+		std::cout << "Estimated fraction of analogue substitution in analogue-positive regions: " << p << std::endl;
+		inFile.close();
+	}
+	else p = args.probability;
+
+	//call regions
+ 	inFile.open( args.detectFilename );
+	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
  	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
@@ -231,15 +369,17 @@ int regions_main( int argc, char** argv ){
 
 		repFile.open("calledOrigins.dnascent");
 	}
-
-
- 	std::string line, header;
+	std::cout << "Calling regions..." << std::endl;
 	std::vector< region > buffer;
-	unsigned int calls = 0, attempts = 0, gap = 0;
-	int startingPos = -1;
+	calls = 0; attempts = 0; gap = 0;
+	startingPos = -1;
+	progress = 0;
 	while( std::getline( inFile, line ) ){
 
 		if ( line.substr(0,1) == ">" ){
+
+			progress++;
+			pb.displayProgress( progress, 0 );
 
 			if ( buffer.size() > 5 and args.callReplication ){
 
@@ -297,7 +437,7 @@ int regions_main( int argc, char** argv ){
 
 				region r;
 
-				r.score = (calls - attempts * args.probability) / sqrt( attempts * args.probability * ( 1 - args.probability) );
+				r.score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
 
 				if ( r.score > args.threshold ) r.call = "BrdU";
 				else r.call = "Thym";
@@ -329,6 +469,7 @@ int regions_main( int argc, char** argv ){
 	if ( repFile.is_open() ) repFile.close();
 	inFile.close();
 	outFile.close();
+	std::cout << std::endl << "Done." << std::endl;
 
 	return 0;
 }

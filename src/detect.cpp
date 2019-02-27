@@ -21,11 +21,11 @@
 
 
 static const char *help=
-"build: DNAscent executable that detects BrdU in Oxford Nanopore reads.\n"
+"detect: DNAscent executable that detects BrdU in Oxford Nanopore reads.\n"
 "To run DNAscent detect, do:\n"
 "  ./DNAscent detect [arguments]\n"
 "Example:\n"
-"  ./DNAscent detect -b /path/to/alignment.bam -r /path/to/reference.fasta -m /path/to/BrdU.model -i /path/to/index.index -o /path/to/output.out -t 20\n"
+"  ./DNAscent detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.index -o /path/to/output.out -t 20\n"
 "Required arguments are:\n"
 "  -b,--bam                  path to alignment BAM file,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
@@ -587,7 +587,7 @@ int detect_main( int argc, char** argv ){
 	/*initialise progress */
 	int numOfRecords = 0, prog = 0, failed = 0;
 	countRecords( bam_fh, bam_idx, bam_hdr, numOfRecords, args.minQ, args.minL );
-	progressBar pb(numOfRecords);
+	progressBar pb(numOfRecords,true);
 
 	//build an iterator for all reads in the bam file
 	const char *allReads = ".";

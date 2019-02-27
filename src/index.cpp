@@ -235,7 +235,7 @@ int index_main( int argc, char** argv ){
 	countFast5(args.fast5path.c_str(), totalFast5);
 
 	int progress = 0;
-	progressBar pb(totalFast5);
+	progressBar pb(totalFast5,false);
 
 	std::ofstream outFile( "index.dnascent" );
 	if ( not outFile.is_open() ) throw IOerror( "index.dnascent" );

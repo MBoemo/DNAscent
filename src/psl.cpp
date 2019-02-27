@@ -14,7 +14,7 @@
  #define _USE_MATH_DEFINES
 
  static const char *help=
-"build: DNAscent executable that builds a PSL file from the output of DNAscent detect.\n"
+"psl: DNAscent executable that builds a PSL file from the output of DNAscent detect.\n"
 "To run DNAscent psl, do:\n"
 "  ./DNAscent psl [arguments]\n"
 "Example:\n"
