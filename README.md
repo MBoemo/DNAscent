@@ -40,9 +40,9 @@ which will put a file `output.psl` in your working directory.
 
 If you can approximate the probability at which cannonical bases are substituted for an analogue in an analogue-rich region, DNAscent can use the output from `DNAscent detect` to call regions of analogue incorporation.  Run,
 ```shell
-bin/DNAscent regions -d output.detect -p 0.2 -o output.regions
+bin/DNAscent regions -d output.detect -o output.regions
 ```
-where `p` is the probability that there is an analogue in any 6mer.  The file `output.regions` will have the same header for each read as in `output.detect`.  The first column specifies where the region started, the second column specifies where the region ended, and the third column gives a z-score specifying how well this region fit the model for analogue incorporation.  Scores near or above 0 indicate that this region fit the model well and is most likely a region of analogue incorporation.  Negative scores indicate that there were fewer analogue calls than would be expected in an analogue region.  The DNAscent regions executable can also call fork direction and origin location.  To enable this functionality, add the `--replication` flag when you call DNAscent regions.  This will produce a file `calledOrigins.dnascent` that lists the chromosomal coordinates of called origins on individual reads.
+The file `output.regions` will have the same header for each read as in `output.detect`.  The first column specifies where the region started, the second column specifies where the region ended, and the third column gives a z-score specifying how well this region fit the model for analogue incorporation.  Scores near or above 0 indicate that this region fit the model well and is most likely a region of analogue incorporation.  Negative scores indicate that there were fewer analogue calls than would be expected in an analogue region.  The DNAscent regions executable can also call fork direction and origin location.  To enable this functionality, add the `--replication` flag when you call DNAscent regions.  This will produce a file `calledOrigins.dnascent` that lists the chromosomal coordinates of called origins on individual reads.
 
 ## Runtime
 The runtime of DNAscent is linear with respect to the amount of data (in bases) passed to it.
