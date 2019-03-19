@@ -56,3 +56,6 @@ Cloning the repository recursively (see above) will provide all the required dep
 - tinydir (https://github.com/cxong/tinydir.git)
 
 Note that the high throughput sequencing library (htslib) requires bzlib and lzma for compression.  If you don't have these, apt-get lzma-dev and liblzma-dev.  In addition, pfasta requires libbsd on Linux.
+
+## Citation
+Mueller, C.A., Boemo, M.A., Spingardi, P., Kessler, B., Kriaucionis, S., Simpson, J.T., Nieduszynski, C.A. (2018) Capturing the dynamics of genome replication on individual ultra-long nanopore sequence reads.  bioRxiv DOI: https://doi.org/10.1101/442814
