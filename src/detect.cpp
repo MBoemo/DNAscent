@@ -157,7 +157,7 @@ static double externalI2M1 = 0.999;
 static double externalM12D = 0.0025;
 static double externalM12M1 = 0.5965;
 
-double sequenceProbability( std::vector <double> &observations, std::string &sequence, size_t windowSize, bool useBrdU, std::map< std::string, std::pair< double, double > > &analogueModel, PoreParameters scalings ){
+double sequenceProbability_old( std::vector <double> &observations, std::string &sequence, size_t windowSize, bool useBrdU, std::map< std::string, std::pair< double, double > > &analogueModel, PoreParameters scalings ){
 
 	std::vector< double > I_curr(2*windowSize-5, NAN), D_curr(2*windowSize-5, NAN), M_curr(2*windowSize-5, NAN), I_prev(2*windowSize-5, NAN), D_prev(2*windowSize-5, NAN), M_prev(2*windowSize-5, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
@@ -227,6 +227,139 @@ double sequenceProbability( std::vector <double> &observations, std::string &seq
 
 				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
 				level_sigma = scalings.var * analogueModel.at(sixMer).second;
+				//level_sigma = analogueModel.at(sixMer).second;
+
+				//uncomment if you scale events
+				//level_mu = analogueModel.at(sixMer).first;
+				//level_sigma = scalings.var / scalings.scale * analogueModel.at(sixMer).second;
+
+				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+			}
+			else{
+
+				level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
+				level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+				//level_sigma = SixMer_model.at(sixMer).second;
+
+				//uncomment if you scale events				
+				//level_mu = SixMer_model.at(sixMer).first;
+				//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
+
+				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+			}
+
+			//to the insertion
+			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ) );  //I to I
+			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12I ) ), insProb ) ); //M to I 
+
+			//to the match
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( I_prev[i-1], eln( externalI2M1 ) ), matchProb ) );  //external I to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i-1], eln( externalM12M1 ) ), matchProb ) );  //external M to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12M1 ) ), matchProb ) );  //interal M to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( D_prev[i-1], eln( externalD2M1 ) ), matchProb ) );  //external D to M
+		}
+
+		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
+
+			//to the deletion
+			D_curr[i] = lnSum( D_curr[i], lnProd( M_curr[i-1], eln( externalM12D ) ) );  //external M to D
+			D_curr[i] = lnSum( D_curr[i], lnProd( D_curr[i-1], eln( externalD2D ) ) );  //external D to D
+		}
+		
+		I_prev = I_curr;
+		M_prev = M_curr;
+		D_prev = D_curr;
+		firstI_prev = firstI_curr;
+		start_prev = start_curr;
+	}
+
+
+	/*-----------TERMINATION----------- */
+	double forwardProb = NAN;
+
+	forwardProb = lnSum( forwardProb, lnProd( D_curr.back(), eln( 1.0 ) ) ); //D to end
+	forwardProb = lnSum( forwardProb, lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ) ); //M to end
+	forwardProb = lnSum( forwardProb, lnProd( I_curr.back(), eln( externalI2M1 ) ) ); //I to end
+
+	return forwardProb;
+}
+
+double sequenceProbability( std::vector <double> &observations,
+				std::string &sequence, 
+				size_t windowSize, 
+				bool useBrdU, 
+				std::map< std::string, std::pair< double, double > > &analogueModel, 
+				PoreParameters scalings,
+				int Tloc ){
+
+	std::vector< double > I_curr(2*windowSize-5, NAN), D_curr(2*windowSize-5, NAN), M_curr(2*windowSize-5, NAN), I_prev(2*windowSize-5, NAN), D_prev(2*windowSize-5, NAN), M_prev(2*windowSize-5, NAN);
+	double firstI_curr = NAN, firstI_prev = NAN;
+	double start_curr = NAN, start_prev = 0.0;
+
+	double matchProb, insProb;
+
+	/*-----------INITIALISATION----------- */
+	//transitions from the start state
+	D_prev[0] = lnProd( start_prev, eln( 0.25 ) );
+
+	//account for transitions between deletion states before we emit the first observation
+	for ( unsigned int i = 1; i < D_prev.size(); i++ ){
+
+		D_prev[i] = lnProd( D_prev[i-1], eln ( externalD2D ) );
+	}
+
+
+	/*-----------RECURSION----------- */
+	/*complexity is O(T*N^2) where T is the number of observations and N is the number of states */
+	double level_mu, level_sigma;
+	for ( unsigned int t = 0; t < observations.size(); t++ ){
+
+		std::fill( I_curr.begin(), I_curr.end(), NAN );
+		std::fill( M_curr.begin(), M_curr.end(), NAN );
+		std::fill( D_curr.begin(), D_curr.end(), NAN );
+		firstI_curr = NAN;
+
+		std::string sixMer = sequence.substr(0, 6);
+
+		level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
+		level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+		//level_sigma = SixMer_model.at(sixMer).second;
+
+		//uncomment to scale events
+		//level_mu = SixMer_model.at(sixMer).first;
+		//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
+		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
+
+		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+		insProb = eln( uniformPDF( 50, 150, observations[t] ) );
+
+		//first insertion
+		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( start_prev, eln( 0.25 ) ), insProb ) ); //start to first I
+		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( firstI_prev, eln( 0.25 ) ), insProb ) ); //first I to first I
+
+		//to the base 1 insertion
+		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ) );  //I to I
+		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ) ); //M to I 
+
+		//to the base 1 match
+		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( firstI_prev, eln( 0.5 ) ), matchProb ) ); //first I to first match
+		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ) );  //M to M
+		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( start_prev, eln( 0.5 ) ), matchProb ) );  //start to M
+
+		//to the base 1 deletion
+		D_curr[0] = lnSum( D_curr[0], lnProd( NAN, eln( 0.25 ) ) );  //start to D
+		D_curr[0] = lnSum( D_curr[0], lnProd( firstI_curr, eln( 0.25 ) ) ); //first I to first deletion
+
+		//the rest of the sequence
+		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
+
+			//get model parameters
+			sixMer = sequence.substr(i, 6);
+			insProb = eln( uniformPDF( 50, 150, observations[t] ) );
+			if ( useBrdU and abs(i - Tloc) <= 6 and sixMer.find('T') != std::string::npos and BrdU_model_full.count(sixMer) > 0 ){
+				
+				level_mu = scalings.shift + scalings.scale * BrdU_model_full.at(sixMer).first;
+				level_sigma = scalings.var * BrdU_model_full.at(sixMer).second;
 				//level_sigma = analogueModel.at(sixMer).second;
 
 				//uncomment if you scale events
@@ -526,9 +659,34 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 		//catch abnormally few or many events
 		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < windowLength ) continue;
 
-		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings );
-		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel, r.scalings );
-		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
+		//figure out where the T's are
+		//std::cout << ">--------------" << std::endl;
+		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
+		//std::cout << sixOI << std::endl;
+		std::vector<double> BrdUscores;
+		for ( unsigned int j = 0; j < sixOI.length(); j++ ){
+
+			if ( sixOI.substr(j,1) == "T" ){
+			
+				double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings, j+windowLength );
+				BrdUscores.push_back(logProbAnalogue);
+				//std::cout << logProbAnalogue << std::endl;
+			}
+		}
+
+		double BrdUmax = BrdUscores[0];
+		for ( unsigned int j = 1; j < BrdUscores.size(); j++ ){
+
+			if (BrdUscores[j] > BrdUmax) BrdUmax = BrdUscores[j];
+		}
+		//std::cout << "max: " << BrdUmax << std::endl;
+		double old = sequenceProbability_old( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings );
+		//std::cout << "BrdU old calc: " << old << std::endl;
+		//double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings );
+		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel, r.scalings, 0 );
+		//std::cout << "thym: " << logProbThymidine << std::endl;
+		double logLikelihoodRatio = BrdUmax - logProbThymidine;
+		//double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
