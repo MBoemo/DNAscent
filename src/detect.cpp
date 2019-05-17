@@ -460,7 +460,7 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 	}
 	else strand = "fwd";
 
-	ss << ">" << r.readID << " " << r.referenceMappedTo << ":" << r.refStart << "-" << r.refEnd << "#" << strand << std::endl;
+	ss << ">" << r.readID << " " << r.referenceMappedTo << " " << r.refStart << " " << r.refEnd << " " << strand << std::endl;
 
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 

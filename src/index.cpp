@@ -107,6 +107,12 @@ void countFast5(std::string path, int &count){
 	tinydir_close(&dir);
 }
 
+const char *get_ext(const char *filename){
+
+	const char *ext = strrchr(filename, '.');
+	if(!ext || ext == filename) return "";
+	return ext + 1;
+}
 
 void readDirectory(std::string path, std::map<std::string,std::string> &allfast5paths){
 
@@ -119,8 +125,9 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 	}
 
 	for (i = 0; i < dir.n_files; i++){
-
+		
 		tinydir_file file;
+
 		if (tinydir_readfile_n(&dir, &file, i) == -1){
 			std::string error = "Error opening file in "+path;
 			perror(error.c_str());
@@ -135,7 +142,13 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 				readDirectory(newPath, allfast5paths);
 			}
 		}
-		else allfast5paths[file.name] = path + "/" + file.name;
+		else{
+			const char *ext = get_ext(file.name);
+			if ( strcmp(ext,"fast5") == 0 ){
+
+				allfast5paths[file.name] = path + "/" + file.name;
+			}
+		}
 	}
 
 	fail:
@@ -283,7 +296,7 @@ int index_main( int argc, char** argv ){
 				id.erase(0, id.find(prefix) + prefix.length());
 				outFile << id << "\t" << path << std::endl;
 			}
-		
+			H5Fclose(hdf5_file);
 			progress++;
 			pb.displayProgress( progress, 0 );
 		}
