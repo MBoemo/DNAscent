@@ -198,7 +198,7 @@ double sequenceProbability( std::vector <double> &observations, std::string &seq
 		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
-		insProb = eln( uniformPDF( 50, 150, observations[t] ) );
+		insProb = eln( uniformPDF( 0, 250, observations[t] ) );
 
 		//first insertion
 		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( start_prev, eln( 0.25 ) ), insProb ) ); //start to first I
@@ -222,7 +222,7 @@ double sequenceProbability( std::vector <double> &observations, std::string &seq
 
 			//get model parameters
 			sixMer = sequence.substr(i, 6);
-			insProb = eln( uniformPDF( 50, 150, observations[t] ) );
+			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
 			if ( useBrdU and i == windowSize ){
 
 				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
@@ -511,10 +511,10 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 			/*if an event has been aligned to a position in the window, add it */
 			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - 5] ){
 
-				eventSnippet.push_back( (r.normalisedEvents)[(r.eventAlignment)[j].first] );
+				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+				if (ev > 0 and ev < 250) eventSnippet.push_back( ev );
 
 				//TESTING - print the event snippet
-				//double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 				//std::cout << (ev - r.scalings.shift) / r.scalings.scale << std::endl;
 				//END TESTING
 			}

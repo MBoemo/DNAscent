@@ -665,7 +665,7 @@ void normaliseEvents( read &r ){
 
 	for ( unsigned int i = 0; i < et.n; i++ ){
 
-		events_mu.push_back( et.event[i].mean );
+		if (et.event[i].mean > 0) events_mu.push_back( et.event[i].mean );
 	}
 	r.normalisedEvents = events_mu;
 	free(et.event);

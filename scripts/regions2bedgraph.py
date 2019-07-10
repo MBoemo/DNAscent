@@ -58,8 +58,8 @@ for line in f:
 		score = float(splitLine[2])
 		call = splitLine[3]
 
-		if call == "BrdU":
-			printThisOne = True
+		#if call == "BrdU":
+		printThisOne = True
 
 		signalLineBuffer.append( chromosome + ' ' + str(start) + ' ' + str(end) + ' ' + str(score) + '\n' )
 		

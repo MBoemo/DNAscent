@@ -24,6 +24,7 @@
 "  -r,--reference            path to genome reference in fasta format,\n"
 "  -o,--output               path to output bed prefix.\n"
 "Optional arguments are:\n"
+"     --threshold            log-likelihood threshold for a positive BrdU call (default is 2.5),\n"
 "     --min                  minimum read length to compute (default is 1),\n"
 "     --max                  maximum read length to compute (default is Inf).\n";
 
@@ -33,6 +34,7 @@
 	std::string outputFilename;
 	std::string referenceFilename;
 	bool cropToMin = false;
+	double threshold = 2.5;
 	unsigned int min = 0;
 	bool cropToMax = false;
 	unsigned int max = 0;
@@ -70,6 +72,11 @@
 			args.cropToMin = true;
  			std::string strArg( argv[ i + 1 ] );
 			args.min = std::stoi( strArg.c_str() );
+			i+=2;
+		}
+		else if ( flag == "--threshold" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.threshold = std::stof( strArg.c_str() );
 			i+=2;
 		}
 		else if ( flag == "--max" ){
@@ -157,10 +164,28 @@
 				buffer.clear();
 			}
  			readDetection rd;
-			rd.readID = line.substr(1, line.find(' ') - 1);
-			rd.chromosome = line.substr(line.find(' ') + 1, line.find(':') - line.find(' ') - 1);
-			rd.mappingLower = std::stoi(line.substr(line.find(':') + 1, line.rfind('-') - line.find(':') - 1));
-			rd.mappingUpper = std::stoi(line.substr(line.rfind('-')+1, line.find('#') - line.rfind('-') - 1 ));
+			std::string strand;
+			if (line.find(':') != std::string::npos){ //use old version
+				rd.readID = line.substr(1, line.find(' ') - 1);
+				rd.chromosome = line.substr(line.find(' ') + 1, line.find(':') - line.find(' ') - 1);
+				rd.mappingLower = std::stoi(line.substr(line.find(':') + 1, line.rfind('-') - line.find(':') - 1));
+				rd.mappingUpper = std::stoi(line.substr(line.rfind('-')+1, line.find('#') - line.rfind('-') - 1 ));
+				strand = line.substr(line.find('#')+1);
+			}
+			else{ //use new version
+				std::stringstream ssLine(line);
+				std::string column;
+				int cIndex = 0;
+				while ( std::getline( ssLine, column, ' ' ) ){
+
+					if (cIndex == 0) rd.readID = column.substr(1);
+					else if (cIndex == 1) rd.chromosome = column;
+					else if (cIndex == 2) rd.mappingLower = std::stoi(column);
+					else if (cIndex == 3) rd.mappingUpper = std::stoi(column);
+					else if (cIndex == 4) strand = column;
+					cIndex++;
+				}
+			}
 
 			int readLength = rd.mappingUpper - rd.mappingLower;
 			recordRead = true;
@@ -170,7 +195,7 @@
 				continue;
 			}
 
-			std::string strand = line.substr(line.find('#')+1);
+
 			if (strand == "fwd") rd.direction = "+";
 			else if (strand == "rev") rd.direction = "-";
 			else throw BadStrandDirection();
@@ -191,7 +216,7 @@
 				else if (cIndex == 1){
 
 					B = std::stof(column);
-					if ( B > 2.5 ){
+					if ( B > args.threshold ){
 						buffer.back().positions.push_back(position);
 					}
 					break;
@@ -199,6 +224,14 @@
 				cIndex++;
 			}
 		}
+	}
+ 	if ( buffer.size() >= 0 ){
+
+ 		for ( unsigned int i = 0; i < buffer.size(); i++ ){
+
+			writePSL( buffer[i], reference, outFile );
+		}
+		buffer.clear();
 	}
  	return 0;
 }
