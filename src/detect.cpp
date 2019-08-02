@@ -46,7 +46,7 @@ struct Arguments {
 	bool excludeCpG;
 	double divergence;
 	int minQ;
-	int minL;
+	unsigned int minL;
 	unsigned int threads;
 };
 
@@ -439,7 +439,7 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, std::map< std::string,
 
 	std::vector< unsigned int > POIs;
 
-	for ( unsigned int i = windowLength; i < refSeq.length() - 2*windowLength; i++ ){
+	for ( unsigned int i = 2*windowLength; i < refSeq.length() - 2*windowLength; i++ ){
 
 		if ( analogueModel.count( refSeq.substr(i, 6) ) > 0 ) POIs.push_back(i);
 	}
@@ -453,12 +453,18 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
 
 	std::string strand;
+	unsigned int readHead = 0;
 	if ( r.isReverse ){
 
 		strand = "rev";
+		readHead = (r.eventAlignment).size() - 1;
 		std::reverse( POIs.begin(), POIs.end() );
 	}
-	else strand = "fwd";
+	else{
+		
+		strand = "fwd";
+		readHead = 0;
+	}
 
 	ss << ">" << r.readID << " " << r.referenceMappedTo << " " << r.refStart << " " << r.refEnd << " " << strand << std::endl;
 
@@ -470,12 +476,18 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength);
 
 		//TESTING - print out the read snippet and the event and the ONT model
-		//extern std::map< std::string, std::pair< double, double > > SixMer_model;
-		//std::cout << readSnippet << std::endl;
-		//for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
+		/*
+		std::cout << "ref start: " << r.refStart << std::endl;
+		std::cout << "ref end: " << r.refEnd << std::endl;
+		std::cout << "position on ref: " << posOnRef << std::endl;
+		std::cout << "strand: " << strand << std::endl;
+		extern std::map< std::string, std::pair< double, double > > SixMer_model;
+		std::cout << readSnippet << std::endl;
+		for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
 		
-		//	std::cout << readSnippet.substr(pos,6) << "\t" << SixMer_model.at( readSnippet.substr(pos,6) ).first << std::endl;
-		//}
+			std::cout << readSnippet.substr(pos,6) << "\t" << SixMer_model.at( readSnippet.substr(pos,6) ).first << std::endl;
+		}
+		*/
 		//END TESTING
 
 		//make sure the read snippet is fully defined as A/T/G/C in reference
@@ -506,29 +518,76 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 		if ( spanOnQuery > 2.5*windowLength or spanOnQuery < 1.5*windowLength ) continue;
 
 		/*get the events that correspond to the read snippet */
-		for ( unsigned int j = 0; j < (r.eventAlignment).size(); j++ ){
+		bool first = true;
+		if ( r.isReverse ){
 
-			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - 5] ){
+			for ( unsigned int j = readHead; j >= 0; j-- ){
 
-				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-				if (ev > 0 and ev < 250) eventSnippet.push_back( ev );
+				/*if an event has been aligned to a position in the window, add it */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - 5] ){
 
-				//TESTING - print the event snippet
-				//std::cout << (ev - r.scalings.shift) / r.scalings.scale << std::endl;
-				//END TESTING
+					if (first){
+						readHead = j;
+						first = false;
+					}
+
+					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+					if (ev > 0 and ev < 250) eventSnippet.push_back( ev );
+
+					//TESTING - print the event snippet
+					//std::cout << "snippet size: " << eventSnippet.size() << std::endl;
+					//std::cout << j << " " << (r.eventAlignment)[j].first << " " << (r.eventAlignment)[j].second << std::endl;
+					//std::cout << (ev - r.scalings.shift) / r.scalings.scale << std::endl;
+					//END TESTING
+				}
+
+				/*stop once we get to the end of the window */
+				if ( (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef - windowLength] ){
+
+					std::reverse(eventSnippet.begin(), eventSnippet.end());
+					break;
+				}
 			}
+		}
+		else{
+			for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
-			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef + windowLength] ) break;
+				/*if an event has been aligned to a position in the window, add it */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - 5] ){
+
+					if (first){
+						readHead = j;
+						first = false;
+					}
+
+					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+					if (ev > 0 and ev < 250) eventSnippet.push_back( ev );
+
+					//TESTING - print the event snippet
+					//std::cout << "snippet size: " << eventSnippet.size() << std::endl;
+					//std::cout << j << " " << (r.eventAlignment)[j].first << " " << (r.eventAlignment)[j].second << std::endl;
+					//std::cout << (ev - r.scalings.shift) / r.scalings.scale << std::endl;
+					//END TESTING
+				}
+
+				/*stop once we get to the end of the window */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - 5] ) break;
+			}
 		}
 
 		//catch abnormally few or many events
 		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < windowLength ) continue;
 
+		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
+		std::vector<double> BrdUscores;
 		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings );
+
+		//std::cout << "log likelihood brdu: " << logProbAnalogue << std::endl;
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel, r.scalings );
+		//std::cout << "log likelihood thym: " << logProbThymidine << std::endl;
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
+		//std::cout << "log likelihood ratio:" << logLikelihoodRatio << std::endl;
+		//std::cout << "----------------------------------------------" << std::endl;
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
@@ -544,8 +603,7 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 
 			globalPosOnRef = r.refStart + posOnRef;
 		}
-
-		ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" <<  sixMerRef << "\t" << sixMerQuery << std::endl;
+		ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" << sixMerRef << "\t" << sixMerQuery << std::endl;
 	}
 }
 
@@ -607,10 +665,9 @@ int detect_main( int argc, char** argv ){
 		result = sam_itr_next(bam_fh, itr, record);
 
 		int mappingQual = record -> core.qual;
-		int queryLength = record -> core.l_qseq;
 
 		//add the record to the buffer if it passes the user's criteria, otherwise destroy it cleanly
-		if ( mappingQual >= args.minQ and queryLength >= args.minL ){
+		if ( mappingQual >= args.minQ ){
 			buffer.push_back( record );
 		}
 		else{
@@ -654,6 +711,9 @@ int detect_main( int argc, char** argv ){
 
 				/*get the subsequence of the reference this read mapped to */
 				r.referenceSeqMappedTo = reference.at(r.referenceMappedTo).substr(r.refStart, r.refEnd - r.refStart);
+
+				/*pass on reads that cover a subsequences of the reference shorter than the minimum length */
+				if ( r.referenceSeqMappedTo.size() < args.minL ) continue;
 
 				//fetch the basecall from the bam file
 				r.basecall = getQuerySequence(buffer[i]);

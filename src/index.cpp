@@ -24,7 +24,7 @@
 "Example:\n"
 "  ./DNAscent index -d /path/to/detect_output.out\n"
 "Required arguments are:\n"
-"  -d,--detect               path to fast5 files.\n"
+"  -f,--files                path to fast5 files.\n"
 "Optional arguments are:\n"
 "  -s,--sequencing-summary   path to sequencing summary file from guppy/albacore basecalling.\n";
 
@@ -287,6 +287,7 @@ int index_main( int argc, char** argv ){
 			std::string path = pathpair -> second;
 
 			hid_t hdf5_file = H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+			if (hdf5_file < 0) throw IOerror(path.c_str());
 			std::vector<std::string> readIDs = fast5_get_multi_read_groups(hdf5_file);
 		
 			std::string prefix = "read_";
