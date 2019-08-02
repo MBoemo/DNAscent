@@ -22,7 +22,7 @@ We assume the following:
 
 Before running detection, the fast5 reads need to be indexed.  Run,
 ```shell
-DNAscent index -d path/to/fast5/reads -s path/to/sequencing_summary.txt
+DNAscent index -f path/to/fast5/reads -s path/to/sequencing_summary.txt
 ```
 (Note that both Albacore and Guppy produce a sequencing summary file.  While this is not a required argument, it will make indexing run much faster and is strongly recommended.)  This will produce a file `index.dnascent` which will be needed as input to the `DNAscent detect` executable.
 
