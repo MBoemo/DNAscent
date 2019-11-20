@@ -55,7 +55,7 @@ Arguments parseIndexArguments( int argc, char** argv ){
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
  		std::string flag( argv[ i ] );
- 		if ( flag == "-d" or flag == "--detect" ){
+ 		if ( flag == "-f" or flag == "--files" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.fast5path = strArg;
 			i+=2;
