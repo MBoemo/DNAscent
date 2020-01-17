@@ -84,7 +84,6 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 		return;
 	}
 	H5Dclose(dset);
-	
 	raw_unit = range / digitisation;
 	for ( size_t i = 0; i < nsample; i++ ){
 

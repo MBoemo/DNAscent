@@ -1,4 +1,3 @@
-poreModels.o: src/poreModels.cpp
 data_IO.o: src/data_IO.cpp src/data_IO.h src/error_handling.h \
  src/scrappie/event_detection.h src/scrappie/scrappie_structures.h \
  src/poreModels.h src/common.h src/pfasta/pfasta.h
@@ -100,6 +99,7 @@ common.o: src/common.cpp src/common.h src/error_handling.h \
  src/poreModels.h src/data_IO.h
 DNAscent.o: src/DNAscent.cpp src/detect.h src/regions.h src/psl.h \
  src/index.h
+poreModels.o: src/poreModels.cpp
 psl.o: src/psl.cpp src/psl.h src/common.h src/data_IO.h \
  src/error_handling.h src/scrappie/event_detection.h \
  src/scrappie/scrappie_structures.h src/poreModels.h

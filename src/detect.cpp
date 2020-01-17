@@ -697,6 +697,7 @@ int detect_main( int argc, char** argv ){
 
 				//open fast5 and normalise events to pA
 				r.filename = readID2path[s_queryName];
+
 				try{
 
 					if (bulkFast5) bulk_getEvents(r.filename, r.readID, r.raw);			

@@ -138,6 +138,9 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 
 			if (strcmp(file.name,".") != 0 and strcmp(file.name,"..") != 0){
 
+				char &trail = path.back();
+				if (trail == '/') path.pop_back();
+
 				std::string newPath = path + "/" + file.name;
 				readDirectory(newPath, allfast5paths);
 			}
@@ -145,6 +148,9 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 		else{
 			const char *ext = get_ext(file.name);
 			if ( strcmp(ext,"fast5") == 0 ){
+
+				char &trail = path.back();
+				if (trail == '/') path.pop_back();
 
 				allfast5paths[file.name] = path + "/" + file.name;
 			}
