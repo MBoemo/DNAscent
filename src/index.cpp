@@ -22,7 +22,7 @@
 "To run DNAscent index, do:\n"
 "  ./DNAscent index -f /path/to/fast5Directory\n"
 "Required arguments are:\n"
-"  -d,--detect               path to fast5 files.\n"
+"  -f,--files                path to fast5 files.\n"
 "Optional arguments are:\n"
 "  -o,--output               output file name (default is index.dnascent),\n"
 "  -s,--sequencing-summary   path to sequencing summary file Guppy (optional but strongly recommended).\n"
@@ -57,7 +57,7 @@ Arguments parseIndexArguments( int argc, char** argv ){
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
  		std::string flag( argv[ i ] );
- 		if ( flag == "-d" or flag == "--detect" ){
+ 		if ( flag == "-f" or flag == "--files" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.fast5path = strArg;
 			i+=2;
@@ -115,6 +115,7 @@ void countFast5(std::string path, int &count){
 	tinydir_close(&dir);
 }
 
+
 const char *get_ext(const char *filename){
 
 	const char *ext = strrchr(filename, '.');
@@ -146,11 +147,23 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 
 			if (strcmp(file.name,".") != 0 and strcmp(file.name,"..") != 0){
 
+				char &trail = path.back();
+				if (trail == '/') path.pop_back();
+
 				std::string newPath = path + "/" + file.name;
 				readDirectory(newPath, allfast5paths);
 			}
 		}
-		else allfast5paths[file.name] = path + "/" + file.name;
+		else{
+			const char *ext = get_ext(file.name);
+			if ( strcmp(ext,"fast5") == 0 ){
+
+				char &trail = path.back();
+				if (trail == '/') path.pop_back();
+
+				allfast5paths[file.name] = path + "/" + file.name;
+			}
+		}
 	}
 
 	fail:
@@ -289,6 +302,7 @@ int index_main( int argc, char** argv ){
 			std::string path = pathpair -> second;
 
 			hid_t hdf5_file = H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+			if (hdf5_file < 0) throw IOerror(path.c_str());
 			std::vector<std::string> readIDs = fast5_get_multi_read_groups(hdf5_file);
 		
 			std::string prefix = "read_";

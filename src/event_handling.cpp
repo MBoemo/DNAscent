@@ -54,6 +54,7 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 
 	//open the file
 	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+	if (hdf5_file < 0) throw IOerror(fast5Filename.c_str());
 
 	//get the channel parameters
 	std::string scaling_path = "/read_" + readID + "/channel_id";
@@ -99,6 +100,7 @@ void getEvents( std::string fast5Filename, std::vector<double> &raw ){
 
 	//open the file
 	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+	if (hdf5_file < 0) throw IOerror(fast5Filename.c_str());
 
 	//get the channel parameters
 	const char *scaling_path = "/UniqueGlobalKey/channel_id";
@@ -316,7 +318,6 @@ inline float logProbabilityMatch(std::string sixMer, double x, double shift, dou
 	float a = (x - mu) / sigma;
 	static const float log_inv_sqrt_2pi = log(0.3989422804014327);
     	double thymProb = log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
-
 	return thymProb;
 	/*
 	if (analogueModel.count(sixMer) > 0){
@@ -365,7 +366,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	int max_gap_threshold = 50;
 
 	// banding
-	int bandwidth = 200;//100;
+	int bandwidth = 100;
 
 	int half_bandwidth = bandwidth / 2;
  

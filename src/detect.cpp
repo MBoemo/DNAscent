@@ -534,6 +534,10 @@ std::string llAcrossRead( read &r,
 		int posOnRef = POIs[i];
 		int posOnQuery = (r.refToQuery).at(posOnRef);
 
+		//sequence needs to be 6 bases longer than the span of events we catch
+		//so sequence goes from posOnRef - windowLength to posOnRef + windowLength + 6
+		//event span goes from posOnRef - windowLength to posOnRef + windowLength
+
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength+6);
 
 		//make sure the read snippet is fully defined as A/T/G/C in reference
