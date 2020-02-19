@@ -53,8 +53,9 @@ Below the header, each line corresponds to the position of a thymidine in the re
 
 * the coordinate on the reference,
 * log-likelihood that the thymidine is actually BrdU (positive values look more like BrdU, negative values look more like thymidine),
-* Guppy-basecalled 6mer on the query,
-* Guppy-basecalled 6mer on the reference.
+* 6mer on the reference,
+* Guppy-basecalled 6mer on the query (or its reverse complement if the read mapped to the reverse strand).
+
 
 Consider the following example:
 

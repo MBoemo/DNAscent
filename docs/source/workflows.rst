@@ -49,7 +49,7 @@ This should put a file called ``output.detect`` in the current directory.  We ca
 
 .. code-block:: console
 
-   DNAscent psl -d output.detect -r /full/path/to/reference.fasta -o output.psl
+   DNAscent psl -d output.detect -r /full/path/to/reference.fasta -o output
 
 The resulting file ``output.psl`` can be loaded into IGV or the UCSC Genome Browser.
 
@@ -67,4 +67,4 @@ Lastly, we can take a look at the DNAscent regions results in IVG by generating 
    cd bedgraphs
    python /path/to/DNAscent/scripts/regions2bedgraph.py ../output.regions
 
-These bedgraph files can then be viewed in IGV or the UCSC Genome Brower.
+To make things a little more manageable, regions2bedgraph.py puts the bedgraph files into numbered subdirectories such that each contains about 400 reads. These bedgraph files can then be viewed in IGV or the UCSC Genome Brower.

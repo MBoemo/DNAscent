@@ -31,7 +31,7 @@ static const char *help=
 "     --replication          detect fork direction and call origin firing (default: off),\n"
 "  -l,--likelihood           log-likelihood threshold for a positive analogue call (default: 1.25),\n"
 "  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
-"  -r,--resolution           minimum length of regions (default is 2kb).\n"
+"  -r,--resolution           minimum length of regions (default is 2kb),\n"
 "  -p,--probability          override probability that a thymidine 6mer contains a BrdU (default: automatically calculated),\n"
 "  -z,--zScore               override zScore threshold for BrdU call (default: automatically calculated).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"

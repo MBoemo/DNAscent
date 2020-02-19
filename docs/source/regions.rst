@@ -16,12 +16,16 @@ Usage
      -d,--detect               path to output file from DNAscent detect,
      -o,--output               path to output directory for bedgraph files.
    Optional arguments are:
-        --replication          detect fork direction and call origin firing (default: off),
+      --replication          detect fork direction and call origin firing (default: off),
+     -l,--likelihood           log-likelihood threshold for a positive analogue call (default: 1.25),
+     -c,--cooldown             minimum gap between positive analogue calls (default: 4),
+     -r,--resolution           minimum length of regions (default is 2kb),
      -p,--probability          override probability that a thymidine 6mer contains a BrdU (default: automatically calculated),
-     -r,--resolution           minimum length of regions (default is 2kb).
-     -z,--zScore               zScore threshold for BrdU call (default is 0).
+     -z,--zScore               override zScore threshold for BrdU call (default: automatically calculated).
 
-The only required input of ``DNAscent regions`` is the output file produced by ``DNAscent detect``.  ``DNAscent regions`` will look at this output and determine the approximate fraction of thymidines replaced by BrdU in BrdU-positive regions using k-means clustering.  Using this probability, a z-score is assigned to each window (2 kb wide by default, but this can be changed using the ``-r`` flag) to indicate whether there is more or less BrdU than would be expected for an average BrdU-positive region.  Naturally, some regions will be BrdU-positive but will have a substitution rate lower than average for BrdU-positive regions. Hence, ``DNAscent regions`` uses a Gaussian mixture model to determine an appropriate boundary threshold between BrdU-positive regions and thymidine regions and rescales all of the z-scores so that this boundary is 0. ``DNAscent regions`` will calculate these values for you, but they can be overridden with the  ``-p`` and ``-z`` flags (though this is not recommended).
+The only required input of ``DNAscent regions`` is the output file produced by ``DNAscent detect``.  ``DNAscent regions`` will look at this output and determine the approximate fraction of thymidines replaced by BrdU in BrdU-positive regions.  Using this probability, a z-score is assigned to each window (2 kb wide by default, but this can be changed using the ``-r`` flag) to indicate whether there is more or less BrdU than would be expected for an average BrdU-positive region.  Naturally, some regions will be BrdU-positive but will have a substitution rate lower than average for BrdU-positive regions. Hence, ``DNAscent regions`` determines an appropriate boundary threshold between BrdU-positive regions and thymidine regions and rescales all of the z-scores so that this boundary is 0. ``DNAscent regions`` will calculate these values for you, but they can be overridden with the  ``-p`` and ``-z`` flags (though this is not recommended).
+
+In order to determine regions of high and low BrdU incorporation, ``DNAscent regions`` needs to count positive BrdU calls.  By default, a 6mer is considered to have BrdU incorporated if the log-likelihood of incorporation exceeds 1.25.  This value was tuned in-house to optimise signal-to-noise, but it can be changed with the ``-l`` flag.  Likewise, some care has to be given to how positive calls are counted.  In the example sequence AGCCATTGCAAC, the 6mers TTGCAA and TGCAAC will both be assessed by ``DNAscent detect``.  If only one of these Ts is a BrdU, their proximity means that both 6mers may flag as positive calls.  To prevent artefacts from overcounting while minimising undercounting, the default behaviour is to only make a positive call every 4 bases, though this can be changed with the ``-c`` flag.
 
 Output
 ------
