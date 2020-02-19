@@ -1,4 +1,7 @@
 import sys
+import os
+
+printForkDir = False
 
 f = open(sys.argv[1],'r')
 first = True
@@ -7,20 +10,28 @@ count = 0
 signalLineBuffer = []
 forkDirLineBuffer = []
 
+filesPerDir = 400
+directoryCount = 0
+
 for line in f:
 
 	if not line.rstrip():
 		continue
 	
 	if line[0] == '>':
-		count += 1
 
 		if not first:
 
 			if printThisOne and len(signalLineBuffer) >= 5:
 
+				if count % filesPerDir == 0:
+					directoryCount += 1
+					os.system('mkdir '+str(directoryCount))
+
+				count += 1
+
 				#signal
-				outRegions = open( str(count) + '_' + readID + '_scores.bedgraph','w')
+				outRegions = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_scores.bedgraph','w')
 				outRegions.write( 'track type=bedGraph name="'+readID + '_scores'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20'+'\n')
 
 				for l in signalLineBuffer:
@@ -28,9 +39,9 @@ for line in f:
 				outRegions.close()
 
 				#fork direction
-				if len( forkDirLineBuffer ) > 0:
+				if len( forkDirLineBuffer ) > 0 and printForkDir:
 
-					outForkDir = open( str(count) + '_' + readID + '_forkDir.bedgraph','w')
+					outForkDir = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkDir.bedgraph','w')
 					outForkDir.write( 'track type=bedGraph name="'+readID + '_forkDir'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20'+'\n')
 
 					for l in forkDirLineBuffer:
@@ -64,7 +75,7 @@ for line in f:
 		signalLineBuffer.append( chromosome + ' ' + str(start) + ' ' + str(end) + ' ' + str(score) + '\n' )
 		
 
-		if len(splitLine) > 4:
+		if len(splitLine) > 4 and printForkDir:
 
 			forkDir = splitLine[4]
 			if forkDir == "-":
@@ -77,9 +88,9 @@ for line in f:
 f.close()
 
 if printThisOne and len(signalLineBuffer) >= 5:
-
+	count += 1
 	#signal
-	outRegions = open( str(count) + '_' + readID + '_scores.bedgraph','w')
+	outRegions = open( str(directoryCount) + '/' +str(count) + '_' + readID + '_scores.bedgraph','w')
 	outRegions.write( 'track type=bedGraph name="'+readID + '_scores'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20'+'\n')
 
 	for l in signalLineBuffer:
@@ -87,9 +98,9 @@ if printThisOne and len(signalLineBuffer) >= 5:
 	outRegions.close()
 
 	#fork direction
-	if len( forkDirLineBuffer ) > 0:
+	if len( forkDirLineBuffer ) > 0 and printForkDir:
 
-		outForkDir = open( str(count) + '_' + readID + '_forkDir.bedgraph','w')
+		outForkDir = open( str(directoryCount) + '/' +str(count) + '_' + readID + '_forkDir.bedgraph','w')
 		outForkDir.write( 'track type=bedGraph name="'+readID + '_forkDir'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20'+'\n')
 
 		for l in forkDirLineBuffer:

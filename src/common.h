@@ -1,6 +1,6 @@
 //----------------------------------------------------------
 // Copyright 2019 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -10,6 +10,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#define VERSION "1.0.0"
 
 #include <algorithm>
 #include <vector>
@@ -21,6 +22,7 @@
 #include <chrono>
 #include <iomanip>
 
+int show_version( int, char** );
 
 class progressBar{
 
@@ -40,7 +42,7 @@ class progressBar{
 			_startTime = std::chrono::steady_clock::now();
 			_withFail = withFail;
 		}
-		void displayProgress( unsigned int currentNumber, unsigned int failed ){
+		void displayProgress( unsigned int currentNumber, unsigned int failed, int failedEvents ){
 
 			_currentTime = std::chrono::steady_clock::now();
 			 std::chrono::duration<double> elapsedTime = _currentTime - _startTime;
@@ -69,7 +71,8 @@ class progressBar{
 				if (_withFail){
 
 					std::cout << std::right << std::setw(2) << hours << "hr" << std::setw(2) << mins << "min" << std::setw(2) << secs << "sec  ";
-					std::cout << "f: " << std::right << std::setw(_digits) << failed << std::setw(3) << "\r";
+					std::cout << "fr: " << std::right << std::setw(_digits) << failed << std::setw(3);
+					std::cout << "  fe: " << std::right << std::setw(_digits) << failedEvents << std::setw(3) << "\r";
 				}
 				else{
 
@@ -178,6 +181,5 @@ inline std::string complement( std::string DNAseq ){
 void displayProgress( int, int );
 std::vector< std::string > split( std::string, char );
 int argMin( std::vector< double > & );
-
 
 #endif

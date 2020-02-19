@@ -1,6 +1,6 @@
 //----------------------------------------------------------
 // Copyright 2017 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -159,4 +159,9 @@ inline double uniformPDF( double lb, double ub, double x ){
 inline double normalPDF( double mu, double sigma, double x ){
 
 	return ( 1.0/sqrt( 2.0*pow( sigma, 2.0 )*M_PI ) )*exp( -pow( x - mu , 2.0 )/( 2.0*pow( sigma, 2.0 ) ) );
+}
+
+inline double KLdivergence( double mu1, double sigma1, double mu2, double sigma2 ){
+
+	return log(sigma2 / sigma1) + (pow(sigma1,2) + pow((mu1 - mu2),2))/(2.0*pow(sigma2,2)) - 0.5;
 }

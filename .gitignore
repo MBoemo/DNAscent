@@ -11,6 +11,9 @@ examples/
 .*swo
 .*swm
 
+#generated
+.depend
+
 #libraries
 hdf5-1.8.14/
 hdf5-1.8.14.tar.gz

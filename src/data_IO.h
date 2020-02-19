@@ -1,6 +1,6 @@
 //----------------------------------------------------------
 // Copyright 2019 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -13,6 +13,8 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <iostream>
+#include <cassert>
 
 struct PoreParameters {
 
@@ -22,6 +24,26 @@ struct PoreParameters {
 	double var = 1.0;
 };
 
+class EventAlignment{
+
+	double avg_log_emission = 0.0;
+	bool spanned = false, set = false;
+	unsigned int maxGap = 0;
+	public:
+		void recordQCs(double avg_log_emission, bool spanned, unsigned int maxGap){
+
+			this -> avg_log_emission = avg_log_emission;
+			this -> spanned = spanned;
+			this -> maxGap = maxGap;
+			set = true;
+		}
+		void printQCs(void){
+			assert(set);
+			std::cerr << "avg_log_emission" << " " << avg_log_emission << std::endl;
+			std::cerr << "spanned" << " " << spanned << std::endl;
+			std::cerr << "maxGap" << " " << maxGap << std::endl;
+		}
+};
 
 struct read{
 
@@ -30,10 +52,21 @@ struct read{
 	std::vector< double > raw, normalisedEvents;
 	std::map< unsigned int, unsigned int > refToQuery;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
-	double qualityScore;
+	std::map<unsigned int, double> posToScore;
+	EventAlignment alignmentQCs;
 	int refStart, refEnd;
 	bool isReverse = false;
+	public:
+		void printScalings(void){
+
+			std::cerr << "shift" << " " << scalings.shift << std::endl;
+			std::cerr << "drift" << " " << scalings.drift << std::endl;
+			std::cerr << "scale" << " " << scalings.scale << std::endl;
+			std::cerr << "var" << " " << scalings.var << std::endl;
+		}
 };
+
+
 
 
 /*function prototypes */

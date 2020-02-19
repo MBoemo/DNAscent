@@ -1,41 +1,49 @@
 //----------------------------------------------------------
 // Copyright 2017 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
 
- #include <fstream>
+#define TEST_CLUSTERING 0
+//#define TEST_COOLDOWN 1
+
+#include <fstream>
 #include "regions.h"
 #include "data_IO.h"
 #include "error_handling.h"
+#include "train.h"
 #include <cmath>
 #include <math.h>
 #include <algorithm>
 #define _USE_MATH_DEFINES
 
- static const char *help=
+
+static const char *help=
 "regions: DNAscent executable that finds regions of analogue incorporation from the output of DNAscent detect.\n"
 "To run DNAscent regions, do:\n"
-"  ./DNAscent regions [arguments]\n"
-"Example:\n"
-"  ./DNAscent regions -d /path/to/regions_output.out -o /path/to/output_prefix\n"
+"  ./DNAscent regions -d /path/to/output.detect -o /path/to/output.regions\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
 "  -o,--output               path to output directory for bedgraph files.\n"
 "Optional arguments are:\n"
 "     --replication          detect fork direction and call origin firing (default: off),\n"
-"  -p,--probability          override probability that a thymidine 6mer contains a BrdU (default: automatically calculated),\n"
+"  -l,--likelihood           log-likelihood threshold for a positive analogue call (default: 1.25),\n"
+"  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
 "  -r,--resolution           minimum length of regions (default is 2kb).\n"
-"  -z,--zScore               zScore threshold for BrdU call (default is 0).\n";
+"  -p,--probability          override probability that a thymidine 6mer contains a BrdU (default: automatically calculated),\n"
+"  -z,--zScore               override zScore threshold for BrdU call (default: automatically calculated).\n"
+"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
  struct Arguments {
 
 	std::string detectFilename;
-	double probability, threshold;
-	bool overrideProb;
+	double probability, threshold, likelihood;
+	bool overrideProb,overrideZ;
 	unsigned int resolution;
+	int cooldown;
 	std::string outputFilename;
 	bool callReplication;
 };
@@ -57,11 +65,14 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 
  	Arguments args;
 
- 	/*defaults - we'll override these if the option was specified by the user */
+ 	//defaults - we'll override these if the option was specified by the user
 	args.resolution = 2000;
 	args.threshold = 0;
 	args.callReplication = false;
 	args.overrideProb = false;
+	args.overrideZ = false;
+	args.likelihood = 1.25;
+	args.cooldown = 4;
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -87,12 +98,23 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 		else if ( flag == "-z" or flag == "--zScore" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.threshold = std::stof(strArg.c_str());
+			args.overrideZ = true;
 			i+=2;
 		}
 		else if ( flag == "--replication" ){
 
 			args.callReplication = true;
 			i+=1;
+		}
+		else if ( flag == "-c" or flag == "--cooldown" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.cooldown = std::stoi( strArg.c_str() );
+			i+=2;
+		}
+		else if ( flag == "-l" or flag == "--likelihood" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.likelihood = std::stof( strArg.c_str() );
+			i+=2;
 		}
 		else if ( flag == "-r" or flag == "--resolution" ){
  			std::string strArg( argv[ i + 1 ] );
@@ -107,10 +129,10 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 
 struct region{
 
-	std::string call;
+	std::string call="";
 	int start, end;
 	double score;
-	std::string forkDir;
+	std::string forkDir="";
 };
 
 
@@ -170,6 +192,14 @@ std::pair< double, double > twoMeans( std::vector< double > &observations ){
 
 		iter++;
 	}while (iter < maxIter and (std::abs(C1_old - C1_new)>tol or std::abs(C2_old - C2_new)>tol));
+
+#if TEST_CLUSTERING
+	std::cerr << ">" << C1_new << std::endl;
+	for (auto c = C1_points_old.begin(); c < C1_points_old.end(); c++) std::cerr << *c << std::endl;
+	std::cerr << ">" << C2_new << std::endl;
+	for (auto c = C2_points_old.begin(); c < C2_points_old.end(); c++) std::cerr << *c << std::endl;
+#endif 
+
 	return std::make_pair(C1_new,C2_new);
 }
 
@@ -267,6 +297,13 @@ void callOrigins( std::vector< region > &regions, double threshold, std::string 
 		}
 	}
 
+	//fix the ends
+	if (regions.size() > 3){
+
+		if (not regions[1].forkDir.empty() and regions[0].call == "BrdU") regions[0].forkDir = regions[1].forkDir;
+		if (not regions[regions.size()-2].forkDir.empty() and regions[regions.size()-1].call == "BrdU") regions[regions.size()-1].forkDir = regions[regions.size()-2].forkDir;
+	}
+
 	//write the origins to the output stream
 	if ( oriPosForRead.size() > 0 ){
 
@@ -302,6 +339,8 @@ int regions_main( int argc, char** argv ){
 	unsigned int calls = 0, attempts = 0, gap = 0;
 	int startingPos = -1;
 	int progress = 0;
+	int callCooldown = 0;
+	int attemptCooldown = 0;
 
 	if ( not args.overrideProb ){
 
@@ -316,14 +355,17 @@ int regions_main( int argc, char** argv ){
 			if ( line.substr(0,1) == ">" ){
 
 				progress++;
-				pb.displayProgress( progress, 0 );
+				pb.displayProgress( progress, 0, 0 );
+				callCooldown = 0;
+				attemptCooldown = 0;
 				continue;
 			}
 
 			std::string column;
 			std::stringstream ssLine(line);
-			int position, cIndex = 0;
-			double B;
+			int position = -1, cIndex = 0;
+			AnalogueScore B, BM;
+			int countCol = std::count(line.begin(), line.end(), '\t');
 			while ( std::getline( ssLine, column, '\t' ) ){
 
 				if ( cIndex == 0 ){
@@ -332,15 +374,41 @@ int regions_main( int argc, char** argv ){
 				}
 				else if ( cIndex == 1 ){
 
-					B = std::stof(column);
-					if ( B > 2.5 ) calls++;
+					B.set(std::stof(column));
+				}
+				else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
+
+					BM.set(std::stof(column));
 				}
 				cIndex++;
+			}
+			assert(position != -1);
+			if ( countCol > 3){
+
+					if ( B.get() > args.likelihood and BM.get() > args.likelihood ){
+						calls++;
+						attempts++;
+					}
+					else if ( B.get() < args.likelihood and BM.get() > 0.0 ) attempts++;
+					// if B < args.likelihood and BM < 0, then it's corrupted by methylation so don't count as attempt
+			}
+			else{
+					//testing
+					//std::cout << B.get() << " " << position << " " << callCooldown << std::endl;
+					if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown ){
+						attemptCooldown = position;
+						callCooldown = position;
+						calls++;
+						attempts++;
+					}
+					else if (position - attemptCooldown >= args.cooldown){
+						attempts++;
+						attemptCooldown = position;
+					}
 			}
 
 			if ( startingPos == -1 ) startingPos = position;
 			gap = position - startingPos;
-			attempts++;
 
 			if ( gap > args.resolution and attempts >= args.resolution / 30 ){
 
@@ -353,11 +421,139 @@ int regions_main( int argc, char** argv ){
 		double k1,k2;
 		std::tie(k1,k2) = twoMeans( callFractions );
 		p = std::max(k1,k2);
-		std::cout << "Estimated fraction of analogue substitution in analogue-positive regions: " << p << std::endl;
+#if !TEST_CLUSTERING
+		std::cerr << "Estimated fraction of analogue substitution in analogue-positive regions: " << p << std::endl;
+#endif
 		inFile.close();
 	}
 	else p = args.probability;
 
+	if ( not args.overrideZ ){
+
+		//estimate appropriate z-score threshold
+		std::cout << "Setting Z-score threshold..." << std::endl;
+		inFile.open( args.detectFilename );
+		if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
+		progressBar pb_z(readCount,false);
+		calls = 0; attempts = 0; gap = 0;
+		startingPos = -1;
+		progress = 0;
+		callCooldown = 0; attemptCooldown = 0;
+		std::vector<double> allZScores;
+		while( std::getline( inFile, line ) ){
+
+			if ( line.substr(0,1) == ">" ){
+
+				progress++;
+				pb_z.displayProgress( progress, 0, 0 );
+				calls = 0, attempts = 0, gap = 0, startingPos = -1;
+				callCooldown = 0;
+				attemptCooldown = 0;
+			}
+			else{
+
+				std::string column;
+				std::stringstream ssLine(line);
+				int position = -1, cIndex = 0;
+				AnalogueScore B, BM;
+				int countCol = std::count(line.begin(), line.end(), '\t');
+				while ( std::getline( ssLine, column, '\t' ) ){
+
+					if ( cIndex == 0 ){
+
+						position = std::stoi(column);
+					}
+					else if ( cIndex == 1 ){
+
+						B.set(std::stof(column));
+					}
+					else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
+
+						BM.set(std::stof(column));
+					}
+					cIndex++;
+				}
+				assert(position != -1);
+
+				if ( countCol > 3){
+
+						if ( B.get() > args.likelihood and BM.get() > args.likelihood ){
+							calls++;
+							attempts++;
+						}
+						else if ( B.get() < args.likelihood and BM.get() > 0 ) attempts++;
+						//not strong BrdU but more BrdU than methyl counts as an attempt
+				}
+				else{
+
+					if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown){
+						callCooldown = position;
+						attemptCooldown = position;
+						calls++;
+						attempts++;
+					}
+					else if (position - attemptCooldown >= args.cooldown){
+						attempts++;
+						attemptCooldown = position;
+					}
+				}
+
+				if ( startingPos == -1 ) startingPos = position;
+				gap = position - startingPos;
+
+				if ( gap > args.resolution and attempts >= args.resolution / 30 ){
+
+					double score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
+					allZScores.push_back(score);
+					calls = 0, attempts = 0, gap = 0, startingPos = -1;
+				}
+			}
+		}
+		inFile.close();
+		std::cout << "Done." << std::endl;
+
+		std::vector< double > fitParams = gaussianMixtureEM(-3.0, 3.0, 0, 3.0, allZScores, 0.01, 100 );
+		double thym_mu, thym_mix, thym_sigma, brdu_mu, brdu_mix, brdu_sigma;
+		if (fitParams[1] < fitParams[2]){
+
+			thym_mix = fitParams[0];
+			thym_mu = fitParams[1];
+			thym_sigma = fitParams[2];
+			brdu_mix = fitParams[3];
+			brdu_mu = fitParams[4];
+			brdu_sigma = fitParams[5];
+		}
+		else{
+
+			thym_mix = fitParams[3];
+			thym_mu = fitParams[4];
+			thym_sigma = fitParams[5];
+			brdu_mix = fitParams[0];
+			brdu_mu = fitParams[1];
+			brdu_sigma = fitParams[2];
+		}
+#if !TEST_CLUSTERING
+		std::cerr << "Estimated fraction of thymidine regions: " << thym_mix << std::endl;
+		std::cerr << "Estimated fraction of BrdU regions: " << brdu_mix << std::endl;
+		std::cerr << "Thymidine Z-score mean, stdv: " << thym_mu << " " << thym_sigma << std::endl;
+		std::cerr << "BrdU Z-score mean, stdv: " << brdu_mu << " " << brdu_sigma << std::endl;
+#endif
+		if (2*thym_sigma < (brdu_mu - thym_mu)/2.0){
+
+#if !TEST_CLUSTERING
+			std::cerr << "Set Z-score threshold: " << thym_mu+(brdu_mu - thym_mu)/2.0 << std::endl;
+#endif
+			args.threshold = thym_mu+(brdu_mu - thym_mu)/2.0;
+		}
+		else{
+
+#if !TEST_CLUSTERING
+			std::cerr << "Set Z-score threshold: " << thym_mu+2*thym_sigma << std::endl;
+#endif
+			args.threshold = thym_mu+2*thym_sigma;
+		}
+	}
+	
 	//call regions
  	inFile.open( args.detectFilename );
 	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
@@ -374,12 +570,13 @@ int regions_main( int argc, char** argv ){
 	calls = 0; attempts = 0; gap = 0;
 	startingPos = -1;
 	progress = 0;
+	callCooldown = 0; attemptCooldown = 0;
 	while( std::getline( inFile, line ) ){
 
 		if ( line.substr(0,1) == ">" ){
 
 			progress++;
-			pb.displayProgress( progress, 0 );
+			pb.displayProgress( progress, 0, 0 );
 
 			if ( buffer.size() > 5 and args.callReplication ){
 
@@ -404,14 +601,16 @@ int regions_main( int argc, char** argv ){
 			header = line;
 			buffer.clear();
 			calls = 0, attempts = 0, gap = 0, startingPos = -1;
+			callCooldown = 0;
+			attemptCooldown = 0;
 			
 		}
 		else{
 
 			std::string column;
 			std::stringstream ssLine(line);
-			int position, cIndex = 0;
-			double B;
+			int position = -1, cIndex = 0;
+			AnalogueScore B;
 			while ( std::getline( ssLine, column, '\t' ) ){
 
 				if ( cIndex == 0 ){
@@ -420,19 +619,42 @@ int regions_main( int argc, char** argv ){
 				}
 				else if ( cIndex == 1 ){
 
-					B = std::stof(column);
-					if ( B > 2.5 ){
-
-						calls++;
-					}
+					B.set(std::stof(column));
 				}
 				cIndex++;
 			}
+			assert(position != -1);
 
 			if ( startingPos == -1 ) startingPos = position;
 			gap = position - startingPos;
-			attempts++;
 
+			if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown){
+#if TEST_COOLDOWN
+std::cout << ">>>>>Call: " << line << std::endl;
+std::cout << "     Call Cooldown: " << callCooldown << std::endl;
+std::cout << "     Attempt Cooldown: " << attemptCooldown << std::endl;
+#endif
+				callCooldown = position;
+				attemptCooldown = position;
+				calls++;
+				attempts++;
+			}
+			else if (position - attemptCooldown >= args.cooldown){
+#if TEST_COOLDOWN
+std::cout << ">>>>>Attempt: " << line << std::endl;
+std::cout << "     Call Cooldown: " << callCooldown << std::endl;
+std::cout << "     Attempt Cooldown: " << attemptCooldown << std::endl;
+#endif
+				attempts++;
+				attemptCooldown = position;
+			}
+#if TEST_COOLDOWN
+			else{
+			std::cout << ">>>>>Ignored: " << line << std::endl;
+			std::cout << "     Call Cooldown: " << callCooldown << std::endl;
+			std::cout << "     Attempt Cooldown: " << attemptCooldown << std::endl;
+			}
+#endif
 			if ( gap > args.resolution and attempts >= args.resolution / 30 ){
 
 				region r;

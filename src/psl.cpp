@@ -1,6 +1,6 @@
 //----------------------------------------------------------
 // Copyright 2017 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -11,21 +11,23 @@
 #include "data_IO.h"
 #include "error_handling.h"
 #include <cmath>
- #define _USE_MATH_DEFINES
+#define _USE_MATH_DEFINES
 
  static const char *help=
 "psl: DNAscent executable that builds a PSL file from the output of DNAscent detect.\n"
 "To run DNAscent psl, do:\n"
-"  ./DNAscent psl [arguments]\n"
-"Example:\n"
-"  ./DNAscent psl -d /path/to/detect_output.out -r path/to/reference.fasta -o /path/to/output_prefix\n"
+"  ./DNAscent psl -d /path/to/DNAscentOutput.detect -r /path/to/reference.fasta -o /path/to/psl_prefix\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
 "  -o,--output               path to output bed prefix.\n"
 "Optional arguments are:\n"
+"  -l,--likelihood           log-likelihood threshold for a positive analogue call (default: 1.25),\n"
+"  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
 "     --min                  minimum read length to compute (default is 1),\n"
-"     --max                  maximum read length to compute (default is Inf).\n";
+"     --max                  maximum read length to compute (default is Inf).\n"
+"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
 
  struct Arguments {
@@ -36,6 +38,9 @@
 	unsigned int min = 0;
 	bool cropToMax = false;
 	unsigned int max = 0;
+	double likelihood;
+	int cooldown;
+
 
 };
  Arguments parsePslArguments( int argc, char** argv ){
@@ -52,6 +57,8 @@
 		exit(EXIT_FAILURE);
 	}
  	Arguments args;
+	args.likelihood = 1.25;
+	args.cooldown = 4;
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -81,6 +88,16 @@
 		else if ( flag == "-r" or flag == "--reference" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.referenceFilename = strArg;
+			i+=2;
+		}
+		else if ( flag == "-c" or flag == "--cooldown" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.cooldown = std::stoi( strArg.c_str() );
+			i+=2;
+		}
+		else if ( flag == "-l" or flag == "--likelihood" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.likelihood = std::stof( strArg.c_str() );
 			i+=2;
 		}
 		else throw InvalidOption( flag );
@@ -143,6 +160,7 @@
  	std::string line;
 	std::vector< readDetection > buffer;
 	bool recordRead = true;
+	int callCooldown = 0;
 
 	while ( std::getline( inFile, line ) ){
 
@@ -157,12 +175,24 @@
 				buffer.clear();
 			}
  			readDetection rd;
-			rd.readID = line.substr(1, line.find(' ') - 1);
-			rd.chromosome = line.substr(line.find(' ') + 1, line.find(':') - line.find(' ') - 1);
-			rd.mappingLower = std::stoi(line.substr(line.find(':') + 1, line.rfind('-') - line.find(':') - 1));
-			rd.mappingUpper = std::stoi(line.substr(line.rfind('-')+1, line.find('#') - line.rfind('-') - 1 ));
 
-			int readLength = rd.mappingUpper - rd.mappingLower;
+			callCooldown = 0;
+
+			std::stringstream ssLine(line);
+			std::string column;
+			int cIndex = 0;
+			while ( std::getline( ssLine, column, ' ' ) ){
+
+				if ( cIndex == 0 ) rd.readID = column;
+				else if ( cIndex == 1 ) rd.chromosome = column;
+				else if ( cIndex == 2 ) rd.mappingLower = std::stoi(column);
+				else if ( cIndex == 3 ) rd.mappingUpper = std::stoi(column);
+				else if ( cIndex == 4 ) rd.strand = column;
+				else throw DetectParsing();
+				cIndex++;
+			}
+			assert(rd.mappingUpper > rd.mappingLower);
+			unsigned int readLength = rd.mappingUpper - rd.mappingLower;
 			recordRead = true;
 			if ( (args.cropToMin and readLength < args.min) or (args.cropToMax and readLength > args.max) ){
 
@@ -170,9 +200,8 @@
 				continue;
 			}
 
-			std::string strand = line.substr(line.find('#')+1);
-			if (strand == "fwd") rd.direction = "+";
-			else if (strand == "rev") rd.direction = "-";
+			if (rd.strand == "fwd") rd.direction = "+";
+			else if (rd.strand == "rev") rd.direction = "-";
 			else throw BadStrandDirection();
 			buffer.push_back(rd);
 		}
@@ -182,6 +211,7 @@
 			std::stringstream ssLine(line);
 			int position, cIndex = 0;
 			double B;
+
 			while( std::getline( ssLine, column, '\t' ) ){
 
 				if (cIndex == 0){
@@ -191,8 +221,11 @@
 				else if (cIndex == 1){
 
 					B = std::stof(column);
-					if ( B > 2.5 ){
+
+					if ( B > args.likelihood and position - callCooldown >= args.cooldown ){
+
 						buffer.back().positions.push_back(position);
+						callCooldown = position;
 					}
 					break;
 				}
@@ -200,5 +233,12 @@
 			}
 		}
 	}
+
+ 	for ( unsigned int i = 0; i < buffer.size(); i++ ){
+
+		writePSL( buffer[i], reference, outFile );
+	}
+	buffer.clear();
+
  	return 0;
 }
