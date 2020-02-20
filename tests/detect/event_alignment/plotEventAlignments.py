@@ -7,7 +7,7 @@ import sys
 #Usage: python plotEventAlignments.py stderr.out DNAscent.detect
 #where stderr.out is the result of a stderr redirect after running DNAscent detect with #define TEST_ALIGNMENT 1
 
-maxReads = 20000
+maxReads = 2000
 plot = False
 
 threshold = 1.25 #log likelihood threshold for a positive BrdU call (this should be the default value used by DNAscent regions)

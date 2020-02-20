@@ -8,7 +8,7 @@
 
 //#define TEST_HMM 1
 //#define TEST_LL 1
-#define TEST_ALIGNMENT 1
+//#define TEST_ALIGNMENT 1
 
 #include <fstream>
 #include "detect.h"
