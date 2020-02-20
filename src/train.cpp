@@ -118,6 +118,8 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 		}
 		else throw InvalidOption( flag );
 	}
+	if (trainArgs.trainingOutputFilename == trainArgs.eventalignFilename) throw OverwriteFailure();
+
 	return trainArgs;
 }
 

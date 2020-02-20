@@ -123,6 +123,8 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 		}
 		else throw InvalidOption( flag );
 	}
+	if (args.outputFilename == args.detectFilename) throw OverwriteFailure();
+
 	return args;
 }
 

@@ -137,5 +137,11 @@ struct MissingModelPath : public std::exception {
 	}
 };
 
+struct OverwriteFailure : public std::exception {
+	const char * what () const throw () {
+		return "Output filename would overwrite one of the input files.";
+	}
+};
+
 #endif
 

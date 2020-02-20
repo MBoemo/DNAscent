@@ -5,7 +5,8 @@
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
- #include <fstream>
+
+#include <fstream>
 #include "psl.h"
 #include "common.h"
 #include "data_IO.h"
@@ -102,6 +103,8 @@
 		}
 		else throw InvalidOption( flag );
 	}
+	if (args.outputFilename == args.referenceFilename or args.outputFilename == args.detectFilename) throw OverwriteFailure();
+
 	return args;
 }
 

@@ -43,7 +43,6 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool excludeCpG;
 	int minQ;
 	int minL;
 	unsigned int threads;
@@ -124,6 +123,7 @@ Arguments parseDetectArguments( int argc, char** argv ){
 		}
 		else throw InvalidOption( flag );
 	}
+	if (args.outputFilename == args.indexFilename or args.outputFilename == args.referenceFilename or args.outputFilename == args.bamFilename) throw OverwriteFailure();
 	return args;
 }
 
