@@ -484,7 +484,8 @@ void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int 
 		result = sam_itr_next(bam_fh, itr, record);
 		int refStart,refEnd;		
 		getRefEnd(record,refStart,refEnd);
-		if ( (record -> core.qual >= minQ) and (refEnd - refStart >= minL) ) numOfRecords++;
+		int queryLen = record -> core.l_qseq;
+		if ( (record -> core.qual >= minQ) and (refEnd - refStart >= minL) and queryLen != 0) numOfRecords++;
 		bam_destroy1(record);
 	} while (result > 0);
 
@@ -750,7 +751,8 @@ int detect_main( int argc, char** argv ){
 		int mappingQual = record -> core.qual;
 		int refStart,refEnd;		
 		getRefEnd(record,refStart,refEnd);
-		if ( mappingQual >= args.minQ and refEnd - refStart >= args.minL ){
+		int queryLen = record -> core.l_qseq;
+		if ( mappingQual >= args.minQ and refEnd - refStart >= args.minL and queryLen != 0 ){
 			buffer.push_back( record );
 		}
 		else{
