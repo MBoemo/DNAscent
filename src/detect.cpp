@@ -752,7 +752,9 @@ int detect_main( int argc, char** argv ){
 		int refStart,refEnd;		
 		getRefEnd(record,refStart,refEnd);
 		int queryLen = record -> core.l_qseq;
-		if ( mappingQual >= args.minQ and refEnd - refStart >= args.minL and queryLen != 0 ){
+		assert(refEnd >= refStart);
+		unsigned int refSpan = refEnd - refStart;
+		if ( mappingQual >= args.minQ and refSpan >= args.minL and queryLen != 0 ){
 			buffer.push_back( record );
 		}
 		else{
