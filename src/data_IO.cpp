@@ -1,6 +1,6 @@
 //----------------------------------------------------------
 // Copyright 2019 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <libgen.h>
 #include <iostream>
 #include <random>
 #include <algorithm>
@@ -107,16 +108,33 @@ std::map< std::string, std::string > import_reference_pfasta( std::string fastaF
 	return reference;
 }
 
+std::string getExePath(void){
 
-std::map< std::string, std::pair< double, double > > import_poreModel( std::string poreModelFilePath ){
+	int PATH_MAX=1000;
+	char result[ PATH_MAX ];
+	ssize_t count = readlink( "/proc/self/exe", result, PATH_MAX );
+	const char *path;
+
+	if (count != -1) path = dirname(dirname(result));
+	else throw MissingModelPath();
+
+	std::string s(path);
+	return s;
+}
+
+
+std::map< std::string, std::pair< double, double > > import_poreModel( std::string poreModelFilename ){
+
+	std::string pathExe = getExePath();
+	std::string modelPath = pathExe + "/pore_models/" + poreModelFilename;
 
 	/*map that sends a 5mer or 6mer to the characteristic mean and standard deviation (a pair) */
 	std::map< std::string, std::pair< double, double > > kmer2MeanStd;
 
 	/*file handle, and delimiter between columns (a \t character in the case of ONT model files) */
-	std::ifstream file( poreModelFilePath );
+	std::ifstream file( modelPath );
 
-	if ( not file.is_open() ) throw IOerror( poreModelFilePath );
+	if ( not file.is_open() ) throw IOerror( modelPath );
 
 	std::string line, key, mean, std;
 	std::string delim = "\t";

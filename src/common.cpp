@@ -1,6 +1,6 @@
 //----------------------------------------------------------
 // Copyright 2019 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -12,6 +12,15 @@
 #include "math.h"
 #include "common.h"
 #include "error_handling.h"
+
+
+int show_version( int, char** ){
+
+	std::cout << "Version: " << VERSION << std::endl;
+	std::cout << "Written by Michael Boemo, Department of Pathology, University of Cambridge." << std::endl;
+	std::cout << "Please submit bug reports to GitHub Issues." << std::endl;
+	return 0;
+}
 
 
 void displayProgress( int current, int total ){

@@ -1,10 +1,12 @@
 //----------------------------------------------------------
 // Copyright 2019 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
+
+//#define EVENT_LENGTHS 1
 
 #include <iterator>
 #include <algorithm>
@@ -13,6 +15,7 @@
 #include "error_handling.h"
 #include "event_handling.h"
 #include "../fast5/include/fast5.hpp"
+#include "poreModels.h"
 
 //extern "C" {
 #include "scrappie/event_detection.h"
@@ -21,30 +24,28 @@
 
 #define _USE_MATH_DEFINES
 
-extern std::map< std::string, std::pair< double, double > > BrdU_model_full, SixMer_model;
-
-// from scrappie
+//from scrappie
 float fast5_read_float_attribute(hid_t group, const char *attribute) {
-    float val = NAN;
-    if (group < 0) {
+	float val = NAN;
+	if (group < 0) {
 #ifdef DEBUG_FAST5_IO
-        fprintf(stderr, "Invalid group passed to %s:%d.", __FILE__, __LINE__);
+		fprintf(stderr, "Invalid group passed to %s:%d.", __FILE__, __LINE__);
 #endif
-        return val;
-    }
+		return val;
+	}
 
-    hid_t attr = H5Aopen(group, attribute, H5P_DEFAULT);
-    if (attr < 0) {
+	hid_t attr = H5Aopen(group, attribute, H5P_DEFAULT);
+	if (attr < 0) {
 #ifdef DEBUG_FAST5_IO
-        fprintf(stderr, "Failed to open attribute '%s' for reading.", attribute);
+		fprintf(stderr, "Failed to open attribute '%s' for reading.", attribute);
 #endif
-        return val;
-    }
+		return val;
+	}
 
-    H5Aread(attr, H5T_NATIVE_FLOAT, &val);
-    H5Aclose(attr);
+	H5Aread(attr, H5T_NATIVE_FLOAT, &val);
+	H5Aclose(attr);
 
-    return val;
+	return val;
 }
 //end scrappie
 
@@ -224,7 +225,6 @@ double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
 /*computes the length of the geodesic between N(mu1,stdv1) and N(mu2,stdv2) using the Fisher-Rao metric as a distance */
 
 	double F = sqrt( ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )*( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 + stdv2, 2.0 ) ) );
-
 	return sqrt(2)*log( (F + pow( mu1 - mu2, 2.0 ) + 2*( pow( stdv1, 2.0 ) + pow( stdv2, 2.0 ) ) ) / ( 4 * stdv1 * stdv2 ) );
 }
 
@@ -250,8 +250,8 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 	/*INITIALISATION */
 	dtw[0][0] = 0.0;
 	dtw[1][1] = 0.0;
-	double mu = SixMer_model[basecall.substr(1,6)].first;
-	double stdv = SixMer_model[basecall.substr(1,6)].second;
+	double mu = thymidineModel[basecall.substr(1,6)].first;
+	double stdv = thymidineModel[basecall.substr(1,6)].second;
 	dtw[1][1] = manhattanMetric( mu, stdv, raw[1], raw_stdv[1] );
 
 	/*RECURSION: fill in the dynamic time warping lattice */
@@ -259,8 +259,8 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 
 		for ( unsigned int col = 2; col < numOf5mers; col++ ){
 
-			mu = SixMer_model[basecall.substr(col, 6)].first;
-			stdv = SixMer_model[basecall.substr(col, 6)].second;
+			mu = thymidineModel[basecall.substr(col, 6)].first;
+			stdv = thymidineModel[basecall.substr(col, 6)].second;
 			dtw[row][col] =  manhattanMetric( mu, stdv, raw[row], raw_stdv[row] ) + std::min( dtw[row - 1][col], std::min(dtw[row - 1][col - 1], dtw[row - 1][col - 2] ) );	
 		}
 	}
@@ -309,14 +309,27 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 
 //start: adapted from nanopolish
 
-inline float logProbabilityMatch(std::string sixMer, double x, double shift, double scale){
+inline std::pair<bool,float> logProbabilityMatch(std::string sixMer, double x, double shift, double scale){
 
-	double mu = scale * SixMer_model.at(sixMer).first + shift;
-	double sigma = SixMer_model.at(sixMer).second;
+	double mu = scale * thymidineModel.at(sixMer).first + shift;
+	double sigma = thymidineModel.at(sixMer).second;
 
 	float a = (x - mu) / sigma;
 	static const float log_inv_sqrt_2pi = log(0.3989422804014327);
-    	return log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
+    	double thymProb = log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
+
+	if (analogueModel.count(sixMer) > 0){
+
+		mu = scale * analogueModel.at(sixMer).first + shift;
+		sigma = analogueModel.at(sixMer).second;
+
+		a = (x - mu) / sigma;
+	    	double brduProb = log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
+	
+		if (brduProb > thymProb) return std::make_pair(true,brduProb);
+		else return std::make_pair(false,thymProb);
+	}
+	else return std::make_pair(false,thymProb);
 }	
 
 #define event_kmer_to_band(ei, ki) (ei + 1) + (ki + 1)
@@ -348,7 +361,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	const uint8_t FROM_L = 2;
  
 	// qc
-	double min_average_log_emission = -6.0;//-5.0;
+	double min_average_log_emission = -3.5;//-5.0;
 	int max_gap_threshold = 50;
 
 	// banding
@@ -486,7 +499,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 			float diag = is_offset_valid(offset_diag) ? bands[band_idx - 2][offset_diag] : -INFINITY;
  
 			//float lp_emission = log_probability_match_r9(read, pore_model, kmer_rank, event_idx, strand_idx);
-			float lp_emission = logProbabilityMatch(sixMer, raw[event_idx],s.shift,s.scale);
+			std::pair<bool,float> matchOut = logProbabilityMatch(sixMer, raw[event_idx],s.shift,s.scale);
+			float lp_emission = matchOut.second;
 
 			float score_d = diag + lp_step + lp_emission;
 			float score_u = up + lp_stay + lp_emission;
@@ -514,6 +528,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	double n_aligned_events = 0;
 	//std::vector<AlignedPair> out;
 	std::vector< std::pair< unsigned int, unsigned int > > eventSeqLocPairs;
+	std::vector<bool> useBrdUDistribution;
+	std::map<unsigned int, double> eventToScore;
     
 	float max_score = -INFINITY;
 	int curr_event_idx = 0;
@@ -544,15 +560,29 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		//size_t kmer_rank = sixMerRank_nanopolish(sequence.substr(curr_kmer_idx, k).c_str());
 		//sum_emission += log_probability_match_r9(read, pore_model, kmer_rank, curr_event_idx, strand_idx);
 		std::string sixMer = sequence.substr(curr_kmer_idx, k);
-		sum_emission += logProbabilityMatch(sixMer, raw[curr_event_idx], s.shift, s.scale);
-		eventDiffs += SixMer_model.at(sixMer).first - raw[curr_event_idx];
+		//eventToScore[curr_event_idx] = logProbabilityMatch(sixMer, raw[curr_event_idx], s.shift, s.scale);
+		std::pair<bool,float> matchOut = logProbabilityMatch(sixMer, raw[curr_event_idx], s.shift, s.scale);
+		bool useBrdU = matchOut.first;
+		float logProbability = matchOut.second;
+		useBrdUDistribution.push_back(useBrdU);
+		sum_emission += logProbability;
+		eventDiffs += thymidineModel.at(sixMer).first - raw[curr_event_idx];
 
 		//update A,b for recomputing shift and scale
-		A[0][0] += 1.0 / pow( SixMer_model.at(sixMer).second, 2.0 );
-		A[0][1] += SixMer_model.at(sixMer).first / pow( SixMer_model.at(sixMer).second, 2.0 );
-		A[1][1] += pow( SixMer_model.at(sixMer).first, 2.0 ) / pow( SixMer_model.at(sixMer).second, 2.0 );
-		b[0] += raw[curr_event_idx] / pow( SixMer_model.at(sixMer).second, 2.0 );
-		b[1] += raw[curr_event_idx] * SixMer_model.at(sixMer).first / pow( SixMer_model.at(sixMer).second, 2.0 );
+		if (not useBrdU){
+			A[0][0] += 1.0 / pow( thymidineModel.at(sixMer).second, 2.0 );
+			A[0][1] += thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
+			A[1][1] += pow( thymidineModel.at(sixMer).first, 2.0 ) / pow( thymidineModel.at(sixMer).second, 2.0 );
+			b[0] += raw[curr_event_idx] / pow( thymidineModel.at(sixMer).second, 2.0 );
+			b[1] += raw[curr_event_idx] * thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
+		}
+		else{
+			A[0][0] += 1.0 / pow( analogueModel.at(sixMer).second, 2.0 );
+			A[0][1] += analogueModel.at(sixMer).first / pow( analogueModel.at(sixMer).second, 2.0 );
+			A[1][1] += pow( analogueModel.at(sixMer).first, 2.0 ) / pow( analogueModel.at(sixMer).second, 2.0 );
+			b[0] += raw[curr_event_idx] / pow( analogueModel.at(sixMer).second, 2.0 );
+			b[1] += raw[curr_event_idx] * analogueModel.at(sixMer).first / pow( analogueModel.at(sixMer).second, 2.0 );
+		}
 
 		n_aligned_events += 1;
 
@@ -560,7 +590,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		int offset = band_event_to_offset(band_idx, curr_event_idx);
 		assert(band_kmer_to_offset(band_idx, curr_kmer_idx) == offset);
 
-		uint8_t from = trace[band_idx][offset];  //PROBLEM HERE
+		uint8_t from = trace[band_idx][offset];
 		if(from == FROM_D) {
 			curr_kmer_idx -= 1;
 			curr_event_idx -= 1;
@@ -575,11 +605,14 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		}   
 	}
 	std::reverse(eventSeqLocPairs.begin(), eventSeqLocPairs.end());
+	std::reverse(useBrdUDistribution.begin(), useBrdUDistribution.end());
     
 	// QC results
 	double avg_log_emission = sum_emission / n_aligned_events;
 	bool spanned = eventSeqLocPairs.front().second == 0 && eventSeqLocPairs.back().second == n_kmers - 1;
     
+	r.alignmentQCs.recordQCs(avg_log_emission, spanned, max_gap);
+
 	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold) {
 		
 		//bool failed = true;		
@@ -600,8 +633,15 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 			double event = raw[eventSeqLocPairs[i].first];
 			std::string sixMer = sequence.substr(eventSeqLocPairs[i].second, k);
-			double mu = SixMer_model.at(sixMer).first;
-			double stdv = SixMer_model.at(sixMer).second;
+			double mu,stdv;
+			if (not useBrdUDistribution[i]){
+				mu = thymidineModel.at(sixMer).first;
+				stdv = thymidineModel.at(sixMer).second;
+			}
+			else{
+				mu = analogueModel.at(sixMer).first;
+				stdv = analogueModel.at(sixMer).second;
+			}
 
 			double yi = (event - rescale.shift - rescale.scale*mu);
 			rescale.var += yi * yi / (stdv * stdv);
@@ -613,6 +653,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	//fprintf(stderr,"%f %f %f %f %f\n",s.shift,rescale.shift,s.scale,rescale.scale,rescale.var);
 
 	r.eventAlignment = eventSeqLocPairs;
+	r.posToScore = eventToScore;
 	r.scalings = rescale;
 }
 //end:from nanopolish
@@ -634,7 +675,7 @@ PoreParameters roughRescale( std::vector< double > &means, std::string &basecall
 	double sixMer_sq_sum = 0.0;
 	for ( unsigned int i = 0; i < numOfSixMers; i ++ ){
 
-		double sixMer_mean = SixMer_model[basecall.substr(i, 6)].first;
+		double sixMer_mean = thymidineModel[basecall.substr(i, 6)].first;
 		sixMer_sum += sixMer_mean;
 		sixMer_sq_sum += pow( sixMer_mean, 2.0 );
 	}
@@ -667,6 +708,11 @@ void normaliseEvents( read &r ){
 	for ( unsigned int i = 0; i < et.n; i++ ){
 
 		if (et.event[i].mean > 0) events_mu.push_back( et.event[i].mean );
+
+#if EVENT_LENGTHS
+		if (et.event[i].mean > 0) std::cerr << et.event[i].length << std::endl;
+#endif
+
 	}
 	r.normalisedEvents = events_mu;
 	free(et.event);
