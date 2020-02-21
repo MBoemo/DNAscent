@@ -30,9 +30,9 @@ Publications
 
 Please cite the following publication if you use DNAscent for your research: 
 
-Muller CA, Boemo MA, Spingardi P, Kessler, BM, Kriaucionis S, Simpson JT, Nieduszynski CA. Capturing the dynamics of genome replication on individual ultra-long nanopore sequence reads. Nature Methods 2019;16:429-436. [`Journal DOI <https://doi.org/10.1038/s41592-019-0394-y>`_]
+Muller CA, Boemo MA, Spingardi P, Kessler, BM, Kriaucionis S, Simpson JT, Nieduszynski CA. Capturing the dynamics of genome replication on individual ultra-long nanopore sequence reads. *Nature Methods* 2019;16:429-436. [`Journal DOI <https://doi.org/10.1038/s41592-019-0394-y>`_]
 
 Bugs, Questions, and Comments
 -----------------------------
 
-Should any bugs arise or if you have any questions about usage, please raise a `GitHub issue <https://github.com/MBoemo/DNAscent/issues>`_. If you have comments or suggestions to improve the software or the documentation, please Email Michael Boemo at mb915@cam.ac.uk.
+Should any bugs arise or if you have basic usage questions, please raise a `GitHub issue <https://github.com/MBoemo/DNAscent/issues>`_. For more detailed discussions or collaborations, please Email Michael Boemo at mb915@cam.ac.uk.

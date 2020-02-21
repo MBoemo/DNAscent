@@ -14,7 +14,7 @@ cd DNAscent
 git checkout v1.0.0
 make
 ```
-This will put the DNAscent executable into the DNAscent/bin directory.  A typical compile time for DNAscent and all of its dependencies is 5-7 minutes.
+This will put the DNAscent executable into the DNAscent/bin directory.  A typical compile time for DNAscent and its dependencies is 5 minutes.
 
 ## Documentation
 Please see the [documentation](https://dnascent.readthedocs.io) for detailed usage instructions, descriptions of DNAscent's subprograms, and an example workflow.

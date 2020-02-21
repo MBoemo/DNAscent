@@ -27,6 +27,8 @@ The only required input of ``DNAscent regions`` is the output file produced by `
 
 In order to determine regions of high and low BrdU incorporation, ``DNAscent regions`` needs to count positive BrdU calls.  By default, a 6mer is considered to have BrdU incorporated if the log-likelihood of incorporation exceeds 1.25.  This value was tuned in-house to optimise signal-to-noise, but it can be changed with the ``-l`` flag.  Likewise, some care has to be given to how positive calls are counted.  In the example sequence AGCCATTGCAAC, the 6mers TTGCAA and TGCAAC will both be assessed by ``DNAscent detect``.  If only one of these Ts is a BrdU, their proximity means that both 6mers may flag as positive calls.  To prevent artefacts from overcounting while minimising undercounting, the default behaviour is to only make a positive call every 4 bases, though this can be changed with the ``-c`` flag.
 
+``DNAscent regions`` also includes a ``--replication`` flag which will mark replication origins and write them to a file in the working directory called ``calledOrigins.dnascent``.  Please note that this feature is currently only applicable to BrdU pulses in early S-phase.  More general origin calling algorithms are currently under development and will be released in due course.
+
 Output
 ------
 
