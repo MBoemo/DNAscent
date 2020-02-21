@@ -122,13 +122,6 @@ const char *get_ext(const char *filename){
 	return ext + 1;
 }
 
-const char *get_ext(const char *filename){
-
-	const char *ext = strrchr(filename, '.');
-	if(!ext || ext == filename) return "";
-	return ext + 1;
-}
-
 
 void readDirectory(std::string path, std::map<std::string,std::string> &allfast5paths){
 

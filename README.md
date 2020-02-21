@@ -11,7 +11,7 @@ git clone --recursive https://github.com/MBoemo/DNAscent.git
 The DNAscent directory will appear in your current directory.  Switch to the latest tagged version and compile the software by running:
 ```shell
 cd DNAscent
-git checkout v1.0.0
+git checkout 1.0.0
 make
 ```
 This will put the DNAscent executable into the DNAscent/bin directory.  A typical compile time for DNAscent and its dependencies is 5 minutes.

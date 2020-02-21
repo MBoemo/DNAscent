@@ -16,7 +16,7 @@ The DNAscent directory will appear in your current directory. Change to the late
 .. code-block:: console
 
    cd DNAscent
-   git checkout v1.0.0
+   git checkout 1.0.0
    make
 
 This will put the DNAscent executable into the DNAscent/bin directory. A typical compile time for DNAscent and all of its dependencies is 5-7 minutes.
