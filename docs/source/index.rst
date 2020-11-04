@@ -1,38 +1,26 @@
-.. DNAscent documentation master file, created by
-   sphinx-quickstart on Fri Feb  7 18:58:49 2020.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+.. _index:
 
-DNAscent
-====================================
+Index
+===============================
 
-.. toctree::
-   :maxdepth: 1
-   :caption: Contents:
+``DNAscent index`` is a ``DNAscent`` subprogram that creates a map between Oxford Nanopore readIDs and fast5 files.  This allows ``DNAscent detect`` to scan through bam files and pull out the relevant signal information for each read.
 
-   installation
-   index_subprog
-   detect
-   regions
-   psl
-   workflows
+Usage
+-----
 
-Overview
---------
+.. code-block:: console
 
-DNAscent is software designed to detect the modified base BrdU in Oxford Nanopore reads.  It uses a hidden Markov approach to differentiate between BrdU and thymidine using the raw nanopore signal.  In an experimental setup where BrdU is incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis.  
+   To run DNAscent index, do:
+      DNAscent index -f /path/to/fast5Directory
+   Required arguments are:
+     -f,--files                path to fast5 files.
+   Optional arguments are:
+     -o,--output               output file name (default is index.dnascent),
+     -s,--sequencing-summary   path to sequencing summary file Guppy (optional but strongly recommended).
 
-DNAscent is under active development by the `Boemo Group <https://www.boemogroup.org/>`_ based in the `Department of Pathology, University of Cambridge <https://www.path.cam.ac.uk/>`_.  We aim to push regular updates and improvements, and incorporating new functionality is an active area of our computational research.
+The only required input to ``DNAscent index`` is the full path to the top-level directory containing the sequencing run's fast5 files, passed using the ``-f`` flag.  This will typically be the directory created with MinKNOW during sequencing.  An additional optional argument is the full path to the ``sequencing_summary.txt`` file, specified using the ``-s`` flag.  This file is created by Guppy during basecalling and is located in the top level directory containing the Guppy-created fastq files.  While including the sequencing summary file is optional, it is strongly recommended as it will make ``DNAscent index`` run much faster. The default behaviour of ``DNAscent index`` is to place a file called ``index.dnascent`` in the working directory.  The name of this file can be overridden using the ``-o`` flag.
 
+Output
+-------
 
-Publications
-------------
-
-Please cite the following publication if you use DNAscent for your research: 
-
-Muller CA, Boemo MA, Spingardi P, Kessler, BM, Kriaucionis S, Simpson JT, Nieduszynski CA. Capturing the dynamics of genome replication on individual ultra-long nanopore sequence reads. *Nature Methods* 2019;16:429-436. [`Journal DOI <https://doi.org/10.1038/s41592-019-0394-y>`_]
-
-Bugs, Questions, and Comments
------------------------------
-
-Should any bugs arise or if you have basic usage questions, please raise a `GitHub issue <https://github.com/MBoemo/DNAscent/issues>`_. For more detailed discussions or collaborations, please Email Michael Boemo at mb915@cam.ac.uk.
+``DNAscent index`` will put a file called ``index.dnascent`` in the current working directory (note that if you used the ``-o`` flag, then the file will have the name and location that you specified).  This file will be needed as an input to ``DNAscent detect``.

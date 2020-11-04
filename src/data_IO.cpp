@@ -1,7 +1,7 @@
 //----------------------------------------------------------
-// Copyright 2019 University of Oxford
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
-// This software is licensed under GPL-2.0.  You should have
+// This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
@@ -23,6 +23,78 @@
 #include "error_handling.h"
 #include "pfasta/pfasta.h"
 #include "poreModels.h"
+#include "gitcommit.h"
+#include "common.h"
+
+std::string writeDetectHeader(std::string alignmentFilename,
+		                std::string refFilename,
+				std::string indexFn,
+				int threads,
+				bool useHMM,
+				unsigned int quality,
+				unsigned int length,
+				double dilation,
+				bool useGPU){
+
+	std::string detMode = "CNN";
+
+	std::string compMode;
+	if (useGPU) compMode = "GPU";
+	else compMode = "CPU";
+
+	std::string out;
+	out += "#Alignment " + alignmentFilename + "\n";
+	out += "#Genome " + refFilename + "\n";
+	out += "#Index " + indexFn + "\n";
+	out += "#Threads " + std::to_string(threads) + "\n";
+	out += "#Compute " + compMode + "\n";
+	out += "#Mode " + detMode + "\n";
+	out += "#MappingQuality " + std::to_string(quality) + "\n";
+	out += "#MappingLength " + std::to_string(length) + "\n";
+	out += "#SignalDilation " + std::to_string(dilation) + "\n";
+	out += "#Version " + std::string(VERSION) + "\n";
+	out += "#Commit " + std::string(gitcommit) + "\n";
+
+	return out;
+}
+
+std::string writeRegionsHeader(std::string detectFile,
+		                double threshold,
+						bool useHMM,
+						unsigned int cooldown,
+						unsigned int resolution,
+						double probability,
+						double zscore){
+
+	std::string detMode;
+	if (useHMM) detMode = "HMM";
+	else detMode = "CNN";
+
+	std::string out;
+	out += "#DetectFile " + detectFile + "\n";
+	out += "#Mode " + detMode + "\n";
+	out += "#CallThreshold " + std::to_string(threshold) + "\n";
+	out += "#Cooldown " + std::to_string(cooldown) + "\n";
+	out += "#Resolution " + std::to_string(resolution) + "\n";
+	out += "#Probability " + std::to_string(probability) + "\n";
+	out += "#ZScore " + std::to_string(zscore) + "\n";
+	out += "#Version " + std::string(VERSION) + "\n";
+	out += "#Commit " + std::string(gitcommit) + "\n";
+
+	return out;
+}
+
+std::string writeForkSenseHeader(std::string detectFile,
+		                int threads){
+
+	std::string out;
+	out += "#DetectFile " + detectFile + "\n";
+	out += "#Threads " + std::to_string(threads) + "\n";
+	out += "#Version " + std::string(VERSION) + "\n";
+	out += "#Commit " + std::string(gitcommit) + "\n";
+
+	return out;
+}
 
 
 std::map< std::string, std::string > import_reference( std::string fastaFilePath ){
@@ -108,6 +180,7 @@ std::map< std::string, std::string > import_reference_pfasta( std::string fastaF
 	return reference;
 }
 
+
 std::string getExePath(void){
 
 	int PATH_MAX=1000;
@@ -123,7 +196,23 @@ std::string getExePath(void){
 }
 
 
-std::map< std::string, std::pair< double, double > > import_poreModel( std::string poreModelFilename ){
+std::map<std::string, int> base2index = {{"A",0}, {"T",1}, {"G",2}, {"C",3}};
+
+
+unsigned int sixMer2index(std::string &sixMer){
+
+	unsigned int p = 1;
+	unsigned int r = 0;
+	for (size_t i = 0; i < 6; i++){
+
+		r += base2index[sixMer.substr(6-i-1,1)] * p;
+		p *= 4;
+	}
+	return r;
+}
+
+
+std::vector< std::pair< double, double > > import_poreModel( std::string poreModelFilename ){
 
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/pore_models/" + poreModelFilename;
@@ -133,7 +222,6 @@ std::map< std::string, std::pair< double, double > > import_poreModel( std::stri
 
 	/*file handle, and delimiter between columns (a \t character in the case of ONT model files) */
 	std::ifstream file( modelPath );
-
 	if ( not file.is_open() ) throw IOerror( modelPath );
 
 	std::string line, key, mean, std;
@@ -160,10 +248,17 @@ std::map< std::string, std::pair< double, double > > import_poreModel( std::stri
 		}
 	}
 
-	/*if you need to print out the map for debugging purposes 
+	std::vector< std::pair< double, double > > indexedPoreModel(4096, std::make_pair(0,0));
+
 	for(auto it = kmer2MeanStd.cbegin(); it != kmer2MeanStd.cend(); ++it){
-	    std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
-	}*/
-	
-	return kmer2MeanStd;
+
+		std::string sixMer = it -> first;
+		kmer2MeanStd[sixMer] = std::make_pair(it->second.first, it->second.second);
+
+		indexedPoreModel[sixMer2index(sixMer)] = std::make_pair(it->second.first, it->second.second);
+
+	    //std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
+	}
+
+	return indexedPoreModel;
 }

@@ -1,13 +1,16 @@
 .. _workflows:
 
-Sample Workflow
+Workflow
 ===============================
 
 The following is a full DNAscent workflow, where we'll start off after Guppy has finished running (users that need help with Guppy should refer to the `Oxford Nanopore webpages <https://nanoporetech.com/nanopore-sequencing-data-analysis>`_).  In particular, we assume the following:
 
-* you have a directory of 1D R9.5 450bp/s Oxford Nanopore fast5 reads (which may be in subdirectories) that you want to use for detection,
+* you have a directory of 1D R9.5 or R9.4.1 450bp/s Oxford Nanopore fast5 reads (which may be in subdirectories) that you want to use for detection,
 * these reads have been basecalled to fastq format using Albacore or Guppy (available from Oxford Nanopore),
 * you have a reference/genome file (in fasta format) for your reads.
+
+Example Workflow
+----------------
 
 Download and compile DNAscent:
 
@@ -15,6 +18,7 @@ Download and compile DNAscent:
 
    git clone --recursive https://github.com/MBoemo/DNAscent.git
    cd DNAscent
+   git checkout 2.0.0
    make
    cd ..
 
@@ -39,32 +43,72 @@ Now we're ready to use DNAscent.  Let's index the run:
 
    DNAscent index -f /full/path/to/fast5 -s /full/path/to/GuppyOutDirectory/sequencing_summary.txt
 
-This should put a file called ``index.dnascent`` in the current directory.  You can run DNAscent detect (on 10 threads, for example) by running:
+This should put a file called ``index.dnascent`` in the current directory.  
+
+You can run DNAscent detect (on 10 threads, for example) by running:
 
 .. code-block:: console
 
    DNAscent detect -b alignment.sorted.bam -r /full/path/to/reference.fasta -i index.dnascent -o output.detect -t 10
 
-This should put a file called ``output.detect`` in the current directory.  We can look at the individual positive BrdU calls by running:
+Alternatively, if the system has a CUDA-compatible GPU in it, we can run ``nvidia-smi`` to get an output that looks like the following:
 
 .. code-block:: console
 
-   DNAscent psl -d output.detect -r /full/path/to/reference.fasta -o output
+   +-----------------------------------------------------------------------------+
+   | NVIDIA-SMI 450.51.06    Driver Version: 450.51.06    CUDA Version: 11.0     |
+   |-------------------------------+----------------------+----------------------+
+   | GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+   | Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+   |                               |                      |               MIG M. |
+   |===============================+======================+======================|
+   |   0  Tesla P100-PCIE...  On   | 00000000:05:00.0 Off |                    0 |
+   | N/A   41C    P0    52W / 250W |   2571MiB / 16280MiB |     43%      Default |
+   |                               |                      |                  N/A |
+   +-------------------------------+----------------------+----------------------+
 
-The resulting file ``output.psl`` can be loaded into IGV or the UCSC Genome Browser.
+   +-----------------------------------------------------------------------------+
+   | Processes:                                                                  |
+   |  GPU   GI   CI        PID   Type   Process name                  GPU Memory | 
+   |        ID   ID                                                   Usage      |
+   |=============================================================================|
+   |    0   N/A  N/A    178943      C   ...DNAscent_dev/bin/DNAscent     2569MiB |
+   +-----------------------------------------------------------------------------+
 
-We can measure the regions of each read with high BrdU incorporation by using ``DNAscent regions``:
+From this, we can see that the GPU's device ID is 0 (just to the left of Tesla) so we can run:
 
 .. code-block:: console
 
-   DNAscent regions -d output.detect -o output.regions
+   DNAscent detect -b alignment.sorted.bam -r /full/path/to/reference.fasta -i index.dnascent -o output.detect -t 10 --GPU 0
 
-Lastly, we can take a look at the DNAscent regions results in IVG by generating a bedgraph file for each read.  Note that the bedgraph format requires that we make a separate file for each read, so we'll want to make a separate directory for this.
+Note that we're assuming the CUDA libraries for the GPU have been set up properly (see :ref:`installation`). If these libraries can't be accessed, DNAscent will splash a warning saying so and default back to using CPUs.
+
+When ``DNAscent detect`` is finished, it will should put a file called ``output.detect`` in the current directory.  We can look at the individual positive BrdU calls with ``DNAscent psl``.  Let's create a psl file that shows any position where BrdU is called at 0.7 probability or higher:
 
 .. code-block:: console
 
-   mkdir bedgraphs
-   cd bedgraphs
-   python /path/to/DNAscent/scripts/regions2bedgraph.py ../output.regions
+   DNAscent psl -d output.detect -r /full/path/to/reference.fasta -o output --threshold 0.7
 
-To make things a little more manageable, regions2bedgraph.py puts the bedgraph files into numbered subdirectories such that each contains about 400 reads. These bedgraph files can then be viewed in IGV or the UCSC Genome Brower.
+The resulting file ``output.psl`` can be loaded into IGV or the UCSC Genome Browser.  At this point, we can make bedgraphs out of the ``DNAscent detect`` output (see :ref:`visualisation`) which can also be loaded into IGV or the UCSC Genome Browser.
+
+Lastly, we can run ``DNAscent forkSense`` on the output of ``DNAscent detect`` to measure replication fork movement.  Let's run it on four threads and specify that we want it to keep track of replication origins, forks, and termination sites:
+
+.. code-block:: console
+
+   DNAscent forkSense -d output.detect -o output.forkSense -t 4 --markOrigins --markTerminations --markForks
+
+This will make three files: origins_DNAscent_forkSense.bed (with our origin calls), terminations_DNAscent_forkSense.bed (with our termination calls), and output.forkSense. We can load the two bed files directly into IGV to see where origins and terminiations were called in the genome.
+
+We can visualise (see :ref:`visualisation`) the first 1500 reads of output.forkSense by turning them into bedgraphs:
+
+.. code-block:: console
+
+   python dnascent2bedgraph.py -d output.detect -f output.forkSense -o newBedgraphDirectory -n 1500
+
+This will create a new directory called ``newBedgraphDirectory``.  By passing both a ``forkSense`` and ``detect`` file to dnascent2bedgraph.py, the utility will convert them both into bedgraphs and organise them so that for each read, we can see the bp-resolution BrdU detection output from ``DNAscent detect`` right next to the left- and rightward-moving fork probabilities from ``DNAscent forkSense``.  These bedgraphs can then be loaded into IGV or the UCSC Genome Browser. 
+
+Barcoding
+---------
+
+The workflow for a barcoded run is very similar to the workflow above with a few minor changes. If you're using a barcoded run that you demultiplexed with Guppy, make a fastq file for each barcode and align each of them to the reference to make as many bam files as you have barcodes. Then run ``DNAscent detect`` on the bam file for each barcode. You only have to run ``DNAscent index`` once per run, and the same ``index.dnascent`` file can be passed to ``DNAscent detect`` regardless of which barcode you're working with.
+

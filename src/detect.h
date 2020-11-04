@@ -1,7 +1,7 @@
 //----------------------------------------------------------
-// Copyright 2019 University of Oxford
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
-// This software is licensed under GPL-2.0.  You should have
+// This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
@@ -13,22 +13,14 @@
 #include <string>
 #include <vector>
 #include "data_IO.h"
-#include "../htslib/htslib/hts.h"
-#include "../htslib/htslib/sam.h"
+
 
 /*function prototypes */
 int detect_main( int argc, char** argv );
 
 std::vector< unsigned int > getPOIs( std::string &, int );
-void countRecords( htsFile *, hts_idx_t *, bam_hdr_t *, int &, int, int );
 void parseIndex( std::string, std::map< std::string, std::string > &, bool & );
-void parseCigar(bam1_t *, std::map< unsigned int, unsigned int > &, int &, int & );
-std::string getQuerySequence( bam1_t * ); 
-double sequenceProbability( std::vector <double> &,
-				std::string &,
-				size_t,
-				bool,
-				PoreParameters,
-				int );
+double sequenceProbability( std::vector <double> &, std::string &, size_t, bool, PoreParameters, size_t, size_t );
+std::map<unsigned int, double> llAcrossRead_forTraining( read &, unsigned int);
 
 #endif

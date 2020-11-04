@@ -1,7 +1,7 @@
 //----------------------------------------------------------
-// Copyright 2019 University of Oxford
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
-// This software is licensed under GPL-2.0.  You should have
+// This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
@@ -22,6 +22,7 @@ struct PoreParameters {
 	double drift = 0.0;
 	double scale;
 	double var = 1.0;
+	double eventsPerBase = 0.0;
 };
 
 class EventAlignment{
@@ -49,7 +50,7 @@ struct read{
 
 	std::string basecall, referenceSeqMappedTo, referenceMappedTo, filename, readID;
 	PoreParameters scalings;
-	std::vector< double > raw, normalisedEvents;
+	std::vector< double > raw, normalisedEvents, eventLengths;
 	std::map< unsigned int, unsigned int > refToQuery;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
 	std::map<unsigned int, double> posToScore;
@@ -67,11 +68,15 @@ struct read{
 };
 
 
-
-
 /*function prototypes */
 std::map< std::string, std::string > import_reference( std::string );
 std::map< std::string, std::string > import_reference_pfasta( std::string );
-std::map< std::string, std::pair< double, double > > import_poreModel( std::string );
+std::vector< std::pair< double, double > > import_poreModel( std::string );
+std::string getExePath(void);
+std::string writeDetectHeader(std::string, std::string, std::string, int, bool, unsigned int, unsigned int, double, bool);
+std::string writeRegionsHeader(std::string, double, bool, unsigned int, unsigned int, double, double);
+std::string writeForkSenseHeader(std::string detectFile, int threads);
+unsigned int sixMer2index(std::string &);
+
 
 #endif

@@ -25,3 +25,10 @@ hdf5-1.8.14.tar.gz
 .cproject
 .pydevproject
 .settings/*
+
+#commit log file
+src/gitcommit.h
+
+#plots
+*.png
+*.pdf

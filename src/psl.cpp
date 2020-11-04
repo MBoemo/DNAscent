@@ -1,7 +1,7 @@
 //----------------------------------------------------------
-// Copyright 2017 University of Oxford
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
-// This software is licensed under GPL-2.0.  You should have
+// This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
@@ -17,35 +17,31 @@
  static const char *help=
 "psl: DNAscent executable that builds a PSL file from the output of DNAscent detect.\n"
 "To run DNAscent psl, do:\n"
-"  ./DNAscent psl -d /path/to/DNAscentOutput.detect -r /path/to/reference.fasta -o /path/to/psl_prefix\n"
+"   DNAscent psl -d /path/to/DNAscentOutput.detect -r /path/to/reference.fasta -o /path/to/psl_prefix\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
 "  -o,--output               path to output bed prefix.\n"
 "Optional arguments are:\n"
-"  -l,--likelihood           log-likelihood threshold for a positive analogue call (default: 1.25),\n"
-"  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
+"     --threshold            probability above which a BrdU call is considered positive (default: 0.8),\n"
 "     --min                  minimum read length to compute (default is 1),\n"
 "     --max                  maximum read length to compute (default is Inf).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
 
- struct Arguments {
+struct Arguments {
 	std::string detectFilename;
 	std::string outputFilename;
 	std::string referenceFilename;
 	bool cropToMin = false;
-	double threshold = 2.5;
 	unsigned int min = 0;
 	bool cropToMax = false;
 	unsigned int max = 0;
-	double likelihood;
-	int cooldown;
-
-
+	double threshold;
 };
- Arguments parsePslArguments( int argc, char** argv ){
+
+Arguments parsePslArguments( int argc, char** argv ){
  	if( argc < 2 ){
  		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent psl." << std::endl << help << std::endl;
 		exit(EXIT_FAILURE);
@@ -59,8 +55,7 @@
 		exit(EXIT_FAILURE);
 	}
  	Arguments args;
-	args.likelihood = 1.25;
-	args.cooldown = 4;
+	args.threshold = 0.8;
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -81,11 +76,6 @@
 			args.min = std::stoi( strArg.c_str() );
 			i+=2;
 		}
-		else if ( flag == "--threshold" ){
- 			std::string strArg( argv[ i + 1 ] );
-			args.threshold = std::stof( strArg.c_str() );
-			i+=2;
-		}
 		else if ( flag == "--max" ){
 			args.cropToMax = true;
  			std::string strArg( argv[ i + 1 ] );
@@ -97,14 +87,9 @@
 			args.referenceFilename = strArg;
 			i+=2;
 		}
-		else if ( flag == "-c" or flag == "--cooldown" ){
+		else if ( flag == "-l" or flag == "--threshold" ){
  			std::string strArg( argv[ i + 1 ] );
-			args.cooldown = std::stoi( strArg.c_str() );
-			i+=2;
-		}
-		else if ( flag == "-l" or flag == "--likelihood" ){
- 			std::string strArg( argv[ i + 1 ] );
-			args.likelihood = std::stof( strArg.c_str() );
+			args.threshold = std::stof( strArg.c_str() );
 			i+=2;
 		}
 		else throw InvalidOption( flag );
@@ -169,7 +154,6 @@
  	std::string line;
 	std::vector< readDetection > buffer;
 	bool recordRead = true;
-	int callCooldown = 0;
 
 	while ( std::getline( inFile, line ) ){
 
@@ -184,8 +168,6 @@
 				buffer.clear();
 			}
  			readDetection rd;
-
-			callCooldown = 0;
 
 			std::stringstream ssLine(line);
 			std::string column;
@@ -218,7 +200,7 @@
 
 			std::string column;
 			std::stringstream ssLine(line);
-			int position, cIndex = 0;
+			int position = 0, cIndex = 0;
 			double B;
 
 			while( std::getline( ssLine, column, '\t' ) ){
@@ -231,10 +213,9 @@
 
 					B = std::stof(column);
 
-					if ( B > args.likelihood and position - callCooldown >= args.cooldown ){
+					if ( B > args.threshold ){
 
 						buffer.back().positions.push_back(position);
-						callCooldown = position;
 					}
 					break;
 				}
@@ -242,10 +223,12 @@
 			}
 		}
 	}
+
  	for ( unsigned int i = 0; i < buffer.size(); i++ ){
 
 		writePSL( buffer[i], reference, outFile );
 	}
 	buffer.clear();
+
  	return 0;
 }

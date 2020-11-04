@@ -1,7 +1,7 @@
 //----------------------------------------------------------
-// Copyright 2019 University of Oxford
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
-// This software is licensed under GPL-2.0.  You should have
+// This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
@@ -77,6 +77,25 @@ struct MissingFast5 : public std::exception {
 };
 
 
+struct InvalidDevice : public std::exception {
+	std::string badDeviceID;
+	InvalidDevice( std::string s ){
+
+		badDeviceID = s;
+	}
+	const char* what () const throw () {
+		const char* message = "Invalid GPU device ID (expected single int): ";
+		const char* specifier = badDeviceID.c_str();
+		char* result;
+		result = static_cast<char*>(calloc(strlen(message)+strlen(specifier)+1, sizeof(char)));
+		strcpy( result, message);
+		strcat( result, specifier );
+
+		return result;
+	}
+};
+
+
 struct InsufficientArguments : public std::exception {
 	const char * what () const throw () {
 		return "Insufficient number of arguments passed to executable.";
@@ -140,6 +159,12 @@ struct MissingModelPath : public std::exception {
 struct OverwriteFailure : public std::exception {
 	const char * what () const throw () {
 		return "Output filename would overwrite one of the input files.";
+	}
+};
+
+struct UnrecognisedBase : public std::exception {
+	const char * what () const throw () {
+		return "Input sequence contains an unrecognised base - must be A, T, G, C, or N.";
 	}
 };
 

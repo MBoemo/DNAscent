@@ -1,7 +1,7 @@
 //----------------------------------------------------------
-// Copyright 2019 University of Oxford
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
-// This software is licensed under GPL-2.0.  You should have
+// This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
@@ -9,23 +9,33 @@
 //#define TEST_HMM 1
 //#define TEST_LL 1
 //#define TEST_ALIGNMENT 1
+//#define TEST_METHYL 1
 
 #include <fstream>
-#include "detect.h"
+#include <algorithm>
 #include <math.h>
 #include <stdlib.h>
 #include <limits>
+#include "detect.h"
 #include "common.h"
 #include "event_handling.h"
 #include "probability.h"
 #include "../fast5/include/fast5.hpp"
 #include "poreModels.h"
+#include "../htslib/htslib/hts.h"
+#include "../htslib/htslib/sam.h"
+#include "../tensorflow/include/tensorflow/c/eager/c_api.h"
+#include "htsInterface.h"
+#include "tensor.h"
+#include "alignment.h"
+#include "error_handling.h"
+#include <omp.h>
 
 
 static const char *help=
 "detect: DNAscent executable that detects BrdU in Oxford Nanopore reads.\n"
 "To run DNAscent detect, do:\n"
-"  ./DNAscent detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
+"   DNAscent detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
 "Required arguments are:\n"
 "  -b,--bam                  path to alignment BAM file,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
@@ -33,8 +43,9 @@ static const char *help=
 "  -o,--output               path to output file that will be generated.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
-"  -q,--quality              minimum mapping quality (default is 20).\n"
-"  -l,--length               minimum read length in bp (default is 100).\n"
+"  --GPU                     use the GPU device indicated for prediction (default is CPU),\n"
+"  -q,--quality              minimum mapping quality (default is 20),\n"
+"  -l,--length               minimum read length in bp (default is 1000).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -43,9 +54,12 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	int minQ;
-	unsigned int minL;
-	unsigned int threads;
+	bool useGPU = false;
+	unsigned char GPUdevice = '0';
+	int minQ = 20;
+	int minL = 1000;
+	unsigned int threads = 1;
+	double dilation = 1.0;
 };
 
 Arguments parseDetectArguments( int argc, char** argv ){
@@ -69,12 +83,8 @@ Arguments parseDetectArguments( int argc, char** argv ){
 
 	Arguments args;
 
-	/*defaults - we'll override these if the option was specified by the user */
-	args.threads = 1;
-	args.minQ = 20;
-	args.minL = 100;
-
 	/*parse the command line arguments */
+
 	for ( int i = 1; i < argc; ){
 
 		std::string flag( argv[ i ] );
@@ -121,32 +131,50 @@ Arguments parseDetectArguments( int argc, char** argv ){
 			args.outputFilename = strArg;
 			i+=2;
 		}
+		else if ( flag == "--GPU" ){
+
+			args.useGPU = true;
+			std::string strArg( argv[ i + 1 ] );
+			if (strArg.length() > 1) throw InvalidDevice(strArg);
+
+			args.GPUdevice = *argv[ i + 1 ];
+
+			i+=2;
+		}
+		else if ( flag == "--dilation" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			args.dilation = std::stof( strArg.c_str() );
+			i+=2;
+		}
 		else throw InvalidOption( flag );
 	}
 	if (args.outputFilename == args.indexFilename or args.outputFilename == args.referenceFilename or args.outputFilename == args.bamFilename) throw OverwriteFailure();
+
 	return args;
 }
 
-//Initial transitions within modules (internal transitions)
-static double internalM12I = 0.3475;
-static double internalI2I = 0.5;
-static double internalM12M1 = 0.4;
-
-//Initial transitions between modules (external transitions)
-static double externalD2D = 0.3;
-static double externalD2M1 = 0.7;
-static double externalI2M1 = 0.5;
-static double externalM12D = 0.0025;
-static double externalM12M1 = 0.25;
 
 double sequenceProbability( std::vector <double> &observations,
-				std::string &sequence, 
-				size_t windowSize, 
-				bool useBrdU, 
+				std::string &sequence,
+				size_t windowSize,
+				bool useBrdU,
 				PoreParameters scalings,
 				size_t BrdUStart,
 				size_t BrdUEnd ){
 //covered in: tests/detect/hmm_forward
+
+	//Initial transitions within modules (internal transitions)
+	double internalM12I = eln(0.3475);
+	double internalI2I = eln(0.5);
+	double internalM12M1 = eln(0.4);
+
+	//Initial transitions between modules (external transitions)
+	double externalD2D = eln(0.3);
+	double externalD2M1 = eln(0.7);
+	double externalI2M1 = eln(0.5);
+	double externalM12D = eln(0.0025);
+	double externalM12M1 = eln(0.25);
 
 	std::vector< double > I_curr(2*windowSize+1, NAN), D_curr(2*windowSize+1, NAN), M_curr(2*windowSize+1, NAN), I_prev(2*windowSize+1, NAN), D_prev(2*windowSize+1, NAN), M_prev(2*windowSize+1, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
@@ -161,7 +189,7 @@ double sequenceProbability( std::vector <double> &observations,
 	//account for transitions between deletion states before we emit the first observation
 	for ( unsigned int i = 1; i < D_prev.size(); i++ ){
 
-		D_prev[i] = lnProd( D_prev[i-1], eln ( externalD2D ) );
+		D_prev[i] = lnProd( D_prev[i-1], externalD2D );
 	}
 
 
@@ -177,8 +205,9 @@ double sequenceProbability( std::vector <double> &observations,
 
 		std::string sixMer = sequence.substr(0, 6);
 
-		level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-		level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+		std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+		level_mu = scalings.shift + scalings.scale * meanStd.first;
+		level_sigma = scalings.var * meanStd.second;
 
 		//uncomment to scale events
 		//level_mu = thymidineModel.at(sixMer).first;
@@ -193,12 +222,12 @@ double sequenceProbability( std::vector <double> &observations,
 		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( firstI_prev, eln( 0.25 ) ), insProb ) ); //first I to first I
 
 		//to the base 1 insertion
-		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ) );  //I to I
-		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ) ); //M to I 
+		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( I_prev[0], internalI2I ), insProb ) );  //I to I
+		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( M_prev[0], internalM12I ), insProb ) ); //M to I
 
 		//to the base 1 match
 		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( firstI_prev, eln( 0.5 ) ), matchProb ) ); //first I to first match
-		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ) );  //M to M
+		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( M_prev[0], internalM12M1 ), matchProb ) );  //M to M
 		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( start_prev, eln( 0.5 ) ), matchProb ) );  //start to M
 
 		//to the base 1 deletion
@@ -209,12 +238,13 @@ double sequenceProbability( std::vector <double> &observations,
 		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
 
 			//get model parameters
-			sixMer = sequence.substr(i, 6); 
+			sixMer = sequence.substr(i, 6);
+			std::pair<double,double> analogue_meanStd = analogueModel[sixMer2index(sixMer)];
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( useBrdU and BrdUStart <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
+			if ( useBrdU and BrdUStart <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogue_meanStd.first != 0. ){
 
-				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
-				level_sigma = scalings.var * analogueModel.at(sixMer).second;
+				level_mu = scalings.shift + scalings.scale * analogue_meanStd.first;
+				level_sigma = scalings.var * analogue_meanStd.second;
 
 				//uncomment if you scale events
 				//level_mu = analogueModel.at(sixMer).first;
@@ -224,10 +254,11 @@ double sequenceProbability( std::vector <double> &observations,
 			}
 			else{
 
-				level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-				level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+				level_mu = scalings.shift + scalings.scale * meanStd.first;
+				level_sigma = scalings.var * meanStd.second;
 
-				//uncomment if you scale events				
+				//uncomment if you scale events
 				//level_mu = thymidineModel.at(sixMer).first;
 				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
 
@@ -235,23 +266,23 @@ double sequenceProbability( std::vector <double> &observations,
 			}
 
 			//to the insertion
-			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ) );  //I to I
-			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12I ) ), insProb ) ); //M to I 
+			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( I_prev[i], internalI2I ), insProb ) );  //I to I
+			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( M_prev[i], internalM12I ), insProb ) ); //M to I
 
 			//to the match
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( I_prev[i-1], eln( externalI2M1 ) ), matchProb ) );  //external I to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i-1], eln( externalM12M1 ) ), matchProb ) );  //external M to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12M1 ) ), matchProb ) );  //interal M to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( D_prev[i-1], eln( externalD2M1 ) ), matchProb ) );  //external D to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( I_prev[i-1], externalI2M1 ), matchProb ) );  //external I to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i-1], externalM12M1 ), matchProb ) );  //external M to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i], internalM12M1 ), matchProb ) );  //interal M to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( D_prev[i-1], externalD2M1 ), matchProb ) );  //external D to M
 		}
 
 		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
 
 			//to the deletion
-			D_curr[i] = lnSum( D_curr[i], lnProd( M_curr[i-1], eln( externalM12D ) ) );  //external M to D
-			D_curr[i] = lnSum( D_curr[i], lnProd( D_curr[i-1], eln( externalD2D ) ) );  //external D to D
+			D_curr[i] = lnSum( D_curr[i], lnProd( M_curr[i-1], externalM12D ) );  //external M to D
+			D_curr[i] = lnSum( D_curr[i], lnProd( D_curr[i-1], externalD2D ) );  //external D to D
 		}
-		
+
 		I_prev = I_curr;
 		M_prev = M_curr;
 		D_prev = D_curr;
@@ -264,8 +295,8 @@ double sequenceProbability( std::vector <double> &observations,
 	double forwardProb = NAN;
 
 	forwardProb = lnSum( forwardProb, lnProd( D_curr.back(), eln( 1.0 ) ) ); //D to end
-	forwardProb = lnSum( forwardProb, lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ) ); //M to end
-	forwardProb = lnSum( forwardProb, lnProd( I_curr.back(), eln( externalI2M1 ) ) ); //I to end
+	forwardProb = lnSum( forwardProb, lnProd( M_curr.back(), lnSum(externalM12M1, externalM12D) ) ); //M to end
+	forwardProb = lnSum( forwardProb, lnProd( I_curr.back(), externalI2M1 ) ); //I to end
 
 #if TEST_HMM
 std::cerr << "<-------------------" << std::endl;
@@ -280,173 +311,6 @@ std::cerr << forwardProb << std::endl;
 #endif
 
 	return forwardProb;
-}
-
-
-std::string getQuerySequence( bam1_t *record ){ 
-//Covered in: tests/detect/htslib
-	
-	std::string seq;
-	uint8_t *a_seq = bam_get_seq(record);
-	for ( int i = 0; i < record -> core.l_qseq; i++){
-		int seqInBase = bam_seqi(a_seq,i);
-
-		switch (seqInBase) {
-
-			case 1: seq += "A"; break;
-			case 2: seq += "C"; break;
-			case 4: seq += "G"; break;
-			case 8: seq += "T"; break;
-			case 15: seq += "N"; break;
-			default: throw ParsingError();
-		}
-	}
-	return seq;
-}
-
-
-void getRefEnd(bam1_t *record, int &refStart, int &refEnd ){
-//Covered in: tests/detect/htslib
-
-	//initialise reference coordinates for the first match
-	refStart = record -> core.pos;
-	int refPosition = 0;
-
-	const uint32_t *cigar = bam_get_cigar(record);
-
-	if ( bam_is_rev(record) ){
-
-		for ( int i = record -> core.n_cigar - 1; i >= 0; i--){
-
-			const int op = bam_cigar_op(cigar[i]); //cigar operation
-			const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
-
-			//for a match
-			if (op == BAM_CMATCH or op == BAM_CEQUAL or op == BAM_CDIFF){
-
-				refPosition += ol;
-			}
-			//for a deletion
-			else if (op == BAM_CDEL or op == BAM_CREF_SKIP){
-
-				refPosition += ol;
-			}
-			//for insertions, advance only the query position so skip
-			//N.B. hard clipping advances neither refernce nor query, so ignore it
-		}
-	}
-	else {
-
-		for ( unsigned int i = 0; i < record -> core.n_cigar; ++i){
-
-			const int op = bam_cigar_op(cigar[i]); //cigar operation
-			const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
-
-			//for a match, advance both reference and query together
-			if (op == BAM_CMATCH or op == BAM_CEQUAL or op == BAM_CDIFF){
-
-				refPosition += ol;
-			}
-			//for a deletion, advance only the reference position
-			else if (op == BAM_CDEL or op == BAM_CREF_SKIP){
-
-				refPosition += ol;
-			}
-			//for insertions, advance only the query position so skip
-			//N.B. hard clipping advances neither refernce nor query, so ignore it
-		}
-	}
-	refEnd = refStart + refPosition;
-}
-
-
-void parseCigar(bam1_t *record, std::map< unsigned int, unsigned int > &ref2query, int &refStart, int &refEnd ){
-//Covered in: tests/detect/htslib
-
-	//initialise reference and query coordinates for the first match
-	refStart = record -> core.pos;
-	int queryPosition = 0;
-	int refPosition = 0;
-
-	const uint32_t *cigar = bam_get_cigar(record);
-
-	if ( bam_is_rev(record) ){
-
-		for ( int i = record -> core.n_cigar - 1; i >= 0; i--){
-
-			const int op = bam_cigar_op(cigar[i]); //cigar operation
-			const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
-
-			//for a match, advance both reference and query together
-			if (op == BAM_CMATCH or op == BAM_CEQUAL or op == BAM_CDIFF){
-
-				for ( int j = refPosition; j < refPosition + ol; j++ ){
-
-					ref2query[j] = queryPosition;
-					queryPosition++;
-				}
-				refPosition += ol;
-			}
-			//for a deletion, advance only the reference position
-			else if (op == BAM_CDEL or op == BAM_CREF_SKIP){
-
-				for ( int j = refPosition; j < refPosition + ol; j++ ){
-
-					ref2query[j] = queryPosition;
-				}
-				refPosition += ol;
-			}
-			//for insertions or soft clipping, advance only the query position
-			else if (op == BAM_CSOFT_CLIP or op == BAM_CINS){
-
-				for ( int j = refPosition; j < refPosition + ol; j++ ){
-
-					ref2query[j] = queryPosition;
-					queryPosition++;
-				}
-			}
-			//N.B. hard clipping advances neither refernce nor query, so ignore it
-		}
-	}
-	else {
-
-		for ( unsigned int i = 0; i < record -> core.n_cigar; ++i){
-
-			const int op = bam_cigar_op(cigar[i]); //cigar operation
-			const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
-
-			//for a match, advance both reference and query together
-			if (op == BAM_CMATCH or op == BAM_CEQUAL or op == BAM_CDIFF){
-
-				for ( int j = refPosition; j < refPosition + ol; j++ ){
-
-					ref2query[j] = queryPosition;
-					queryPosition++;
-				}
-				refPosition += ol;
-			}
-			//for a deletion, advance only the reference position
-			else if (op == BAM_CDEL or op == BAM_CREF_SKIP){
-
-				for ( int j = refPosition; j < refPosition + ol; j++ ){
-
-					ref2query[j] = queryPosition;
-				}
-				refPosition += ol;
-			}
-			//for insertions or soft clipping, advance only the query position
-			else if (op == BAM_CSOFT_CLIP or op == BAM_CINS){
-
-				for ( int j = refPosition; j < refPosition + ol; j++ ){
-
-					ref2query[j] = queryPosition;
-					queryPosition++;
-				}
-			}
-			//N.B. hard clipping advances neither refernce nor query, so ignore it
-		}
-	}
-	refEnd = refStart + refPosition;
 }
 
 
@@ -473,27 +337,6 @@ void parseIndex( std::string indexFilename, std::map< std::string, std::string >
 	std::cout << "ok." << std::endl;
 }
 
-void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &numOfRecords, int minQ, int minL ){
-
-	std::cout << "Scanning bam file...";
-	hts_itr_t* itr = sam_itr_querys(bam_idx,bam_hdr,".");
-	int result;
-
-	do {
-		bam1_t *record = bam_init1();
-		result = sam_itr_next(bam_fh, itr, record);
-		int refStart,refEnd;		
-		getRefEnd(record,refStart,refEnd);
-		int queryLen = record -> core.l_qseq;
-		if ( (record -> core.qual >= minQ) and (refEnd - refStart >= minL) and queryLen != 0) numOfRecords++;
-		bam_destroy1(record);
-	} while (result > 0);
-
-	//cleanup
-	sam_itr_destroy(itr);
-	std::cout << "ok." << std::endl;
-}
-
 
 std::vector< unsigned int > getPOIs( std::string &refSeq, int windowLength ){
 
@@ -507,9 +350,33 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, int windowLength ){
 }
 
 
+std::string methylateSequence( std::string &inSeq ){
+
+	std::string outSeq = inSeq;
+
+	for ( unsigned int i = 0; i < inSeq.size(); i++ ){
+
+		//CpG
+		if ( inSeq.substr(i,2) == "CG" ) outSeq.replace(i,1,"M");
+
+		//GpC
+		//if ( inSeq.substr(i,2) == "GC" ) outSeq.replace(i+1,1,"M");
+
+		//Dam methylation (methyl-adenine in GATC)
+		//if ( inSeq.substr(i,4) == "GATC" ) outSeq.replace(i+1,1,"M");
+
+		//Dcm methylation (methyl-cytosine second cytonsine of CCAGG and CCTGG)
+		//if ( inSeq.substr(i,5) == "CCAGG" ) outSeq.replace(i+1,1,"M");
+		//if ( inSeq.substr(i,5) == "CCTGG" ) outSeq.replace(i+1,1,"M");
+	}
+	return outSeq;
+}
+
+
 std::string llAcrossRead( read &r,
-                          unsigned int windowLength, 
-                          int &failedEvents){
+                          unsigned int windowLength,
+                          int &failedEvents,
+                          bool methylAware ){
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
@@ -523,7 +390,7 @@ std::string llAcrossRead( read &r,
 		std::reverse( POIs.begin(), POIs.end() );
 	}
 	else{
-		
+
 		strand = "fwd";
 		readHead = 0;
 	}
@@ -544,7 +411,7 @@ std::string llAcrossRead( read &r,
 		//make sure the read snippet is fully defined as A/T/G/C in reference
 		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
 		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
-	
+
 			switch( *i ){
 				case 'A' :
 					As++;
@@ -584,7 +451,7 @@ std::string llAcrossRead( read &r,
 					}
 
 					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-					if (ev > 0 and ev < 250){
+					if (ev > 1.0 and ev < 250.0){
 						eventSnippet.push_back( ev );
 					}
 					else{
@@ -614,7 +481,7 @@ std::string llAcrossRead( read &r,
 					}
 
 					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-					if (ev > 0 and ev < 250){
+					if (ev > 1.0 and ev < 250.0){
 						eventSnippet.push_back( ev );
 					}
 					else{
@@ -630,12 +497,12 @@ std::string llAcrossRead( read &r,
 
 		//catch abnormally few or many events (this QC was set using results of tests/detect/hmm_falsePositives)
 		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < 3.5*windowLength ) continue;
-	
+
 		/*
-		TESTING - print out the read snippet, the ONT model, and the aligned events 
+		TESTING - print out the read snippet, the ONT model, and the aligned events
 		std::cout << readSnippet << std::endl;
 		for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
-		
+
 			std::cout << readSnippet.substr(pos,6) << "\t" << thymidineModel.at( readSnippet.substr(pos,6) ).first << std::endl;
 		}
 		for ( auto ev = eventSnippet.begin(); ev < eventSnippet.end(); ev++){
@@ -692,6 +559,283 @@ std::cerr << logLikelihoodRatio << std::endl;
 }
 
 
+std::map<unsigned int, double> llAcrossRead_forTraining( read &r, unsigned int windowLength){
+
+	std::map<unsigned int, double> refPos2likelihood;
+
+	//get the positions on the reference subsequence where we could attempt to make a call
+	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, windowLength );
+	std::string strand;
+	unsigned int readHead = 0;
+	if ( r.isReverse ){
+
+		strand = "rev";
+		readHead = (r.eventAlignment).size() - 1;
+		std::reverse( POIs.begin(), POIs.end() );
+	}
+	else{
+
+		strand = "fwd";
+		readHead = 0;
+	}
+
+	for ( unsigned int i = 0; i < POIs.size(); i++ ){
+
+		int posOnRef = POIs[i];
+		int posOnQuery = (r.refToQuery).at(posOnRef);
+
+		//sequence needs to be 6 bases longer than the span of events we catch
+		//so sequence goes from posOnRef - windowLength to posOnRef + windowLength + 6
+		//event span goes from posOnRef - windowLength to posOnRef + windowLength
+
+		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength+6);
+
+		//make sure the read snippet is fully defined as A/T/G/C in reference
+		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
+		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
+
+			switch( *i ){
+				case 'A' :
+					As++;
+					break;
+				case 'T' :
+					Ts++;
+					break;
+				case 'G' :
+					Gs++;
+					break;
+				case 'C' :
+					Cs++;
+					break;
+			}
+		}
+		if ( readSnippet.length() != (As + Ts + Gs + Cs) ) continue;
+
+		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
+		int globalPosOnRef;
+		std::string sixMerQuery = (r.basecall).substr(posOnQuery, 6);
+		std::string sixMerRef = (r.referenceSeqMappedTo).substr(posOnRef, 6);
+		if ( r.isReverse ){
+
+			globalPosOnRef = r.refEnd - posOnRef - 6;
+			sixMerQuery = reverseComplement( sixMerQuery );
+			sixMerRef = reverseComplement( sixMerRef );
+		}
+		else{
+
+			globalPosOnRef = r.refStart + posOnRef;
+		}
+
+
+		std::vector< double > eventSnippet;
+
+		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
+		unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+6] - (r.refToQuery)[posOnRef - windowLength];
+		if ( spanOnQuery > 3.5*windowLength or spanOnQuery < 2*windowLength ){
+			refPos2likelihood[globalPosOnRef] = -20000; //tag an abort based on query span
+			continue;
+		}
+
+		/*get the events that correspond to the read snippet */
+		bool first = true;
+		if ( r.isReverse ){
+
+			for ( unsigned int j = readHead; j >= 0; j-- ){
+
+				/*if an event has been aligned to a position in the window, add it */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+
+					if (first){
+						readHead = j;
+						first = false;
+						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
+					}
+
+					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+					if (ev > 1.0 and ev < 250.0){
+						eventSnippet.push_back( ev );
+					}
+				}
+
+				/*stop once we get to the end of the window */
+				if ( (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef - windowLength] ){
+
+					std::reverse(eventSnippet.begin(), eventSnippet.end());
+					break;
+				}
+			}
+		}
+		else{
+			for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
+
+				/*if an event has been aligned to a position in the window, add it */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+
+					if (first){
+						readHead = j;
+						first = false;
+						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
+					}
+
+					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+					if (ev > 1.0 and ev < 250.0){
+						eventSnippet.push_back( ev );
+					}
+				}
+
+				/*stop once we get to the end of the window */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength] ) break;
+			}
+		}
+
+		//make the BrdU call
+		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
+		size_t BrdUStart = sixOI.find('T') + windowLength - 5;
+		size_t BrdUEnd = windowLength;//sixOI.rfind('T') + windowLength;
+		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
+		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
+		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
+
+		//catch abnormally few or many events (this QC was set using results of tests/detect/hmm_falsePositives)
+		if ( eventSnippet.size() < 3.5*windowLength ){
+
+			refPos2likelihood[globalPosOnRef] = -10000;//tag an abort based on number of events
+			continue;
+		}
+
+#if TEST_LL
+double runningKL = 0.0;
+for (unsigned int s = 0; s < readSnippet.length() - 6; s++){
+	std::string sixMer = readSnippet.substr(s,6);
+	if ( BrdUStart <= s and s <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
+		runningKL += KLdivergence( thymidineModel.at(sixMer).first, thymidineModel.at(sixMer).second, analogueModel.at(sixMer).first, analogueModel.at(sixMer).second );
+	}
+}
+std::cerr << "<-------------------" << std::endl;
+std::cerr << runningKL << std::endl;
+std::cerr << spanOnQuery << std::endl;
+std::cerr << readSnippet << std::endl;
+for (auto ob = eventSnippet.begin(); ob < eventSnippet.end(); ob++){
+	std::cerr << *ob << " ";
+}
+std::cerr << std::endl;
+std::cerr << logLikelihoodRatio << std::endl;
+#endif
+
+		refPos2likelihood[globalPosOnRef] = logLikelihoodRatio;
+	}
+	return refPos2likelihood;
+}
+
+
+TF_Tensor *read2tensor(std::shared_ptr<AlignedRead> r, const TensorShape &shape){
+
+	std::vector<double> unformattedTensor = r -> makeTensor();
+
+	size_t size = unformattedTensor.size();
+	//put a check in here for size
+
+	auto output_array = std::make_unique<float[]>(size);
+	for(size_t i = 0; i < size; i++){
+		output_array[i] = unformattedTensor[i];
+	}
+
+	auto output = tf_obj_unique_ptr(TF_NewTensor(TF_FLOAT,
+												 shape.values,
+												 shape.dim,
+												 (void *)output_array.get(),
+												 size*sizeof(float),
+												 cpp_array_deallocator<float>,
+												 nullptr));
+	if(output) output_array.release();
+
+	return output.release();
+}
+
+
+std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session){
+
+	std::pair<size_t, size_t> protoShape = r -> getShape();
+	TensorShape input_shape={{1, (int64_t) protoShape.first, (int64_t) protoShape.second}, 3};
+	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
+	if(!input_values){
+		std::cerr << "Tensor creation failure." << std::endl;
+		exit (EXIT_FAILURE);
+	}
+
+	CStatus status;
+	TF_Tensor* inputs[]={input_values.get()};
+	TF_Tensor* outputs[1]={};
+
+	TF_SessionRun(*(session->session.get()), nullptr,
+		&session->inputs, inputs, 1,
+		&session->outputs, outputs, 1,
+		nullptr, 0, nullptr, status.ptr);
+
+	auto _output_holder = tf_obj_unique_ptr(outputs[0]);
+
+	if(status.failure()){
+		status.dump_error();
+		exit (EXIT_FAILURE);
+	}
+
+	TF_Tensor &output = *outputs[0];
+	if(TF_TensorType(&output) != TF_FLOAT){
+		std::cerr << "Error, unexpected output tensor type." << std::endl;
+		exit (EXIT_FAILURE);
+	}
+
+	std::string str_output;
+	unsigned int outputFields = 2;
+
+	//write the header
+	str_output += ">" + r -> getReadID() + " " + r -> getChromosome() + " " + std::to_string(r -> getMappingLower()) + " " + std::to_string(r -> getMappingUpper()) + " " + r -> getStrand() + "\n"; //header
+
+	//get positions on the read reference to write the output
+	std::vector<unsigned int> positions = r -> getPositions();
+	std::vector<std::string> sixMers = r -> getSixMers();
+
+	size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
+	assert(output_size == protoShape.first * outputFields);
+	auto output_array = (const float *)TF_TensorData(&output);
+
+	//write the output
+	unsigned int pos = 0;
+	std::vector<std::string> lines;
+	lines.reserve(positions.size());
+	std::string thisPosition = std::to_string(positions[0]);
+	std::string str_line;
+	for(size_t i = 0; i < output_size; i++){
+		if((i+1)%outputFields==0){
+
+			//only output T positions
+			if (sixMers[pos].substr(0,1) != "T"){
+				pos++;
+				continue;
+			}
+
+			str_line += thisPosition + "\t" + std::to_string(output_array[i]);
+			if (r -> getStrand() == "rev") str_line += "\t" + reverseComplement(sixMers[pos]);
+			else str_line += "\t" + sixMers[pos];
+			lines.push_back(str_line);
+			str_line = "";
+			pos++;
+		}
+		else{
+			if (i != output_size-1) thisPosition = std::to_string(positions[pos]);
+		}
+	}
+
+	if (r -> getStrand() == "rev") std::reverse(lines.begin(),lines.end());
+
+	for (auto s = lines.begin(); s < lines.end(); s++){
+		str_output += *s + "\n";
+	}
+
+	return str_output;
+}
+
+
 int detect_main( int argc, char** argv ){
 
 	Arguments args = parseDetectArguments( argc, argv );
@@ -701,11 +845,28 @@ int detect_main( int argc, char** argv ){
 	std::map< std::string, std::string > readID2path;
 	parseIndex( args.indexFilename, readID2path, bulkFast5 );
 
+	//get the neural network model path
+	std::string pathExe = getExePath();
+	std::string modelPath = pathExe + "/dnn_models/" + "BrdU_detect.pb";
+	std::shared_ptr<ModelSession> session;
+
+	if (args.useGPU) {
+		session = model_load_gpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1",args.GPUdevice,args.threads);
+	}
+	else{
+		session = model_load_cpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1",args.threads);
+
+	}
+
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
 
 	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
+
+	//write the outfile header
+	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, false, args.minQ, args.minL, args.dilation,args.useGPU);
+	outFile << outHeader;
 
 	htsFile* bam_fh;
 	hts_idx_t* bam_idx;
@@ -734,13 +895,15 @@ int detect_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	unsigned int windowLength = 10;
+	unsigned int windowLength_align = 50;
+
 	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
 	std::vector< bam1_t * > buffer;
-	if ( args.threads <= 4 ) maxBufferSize = args.threads;
-	else maxBufferSize = 4*(args.threads);
+	maxBufferSize = 16*(args.threads);
+	//if ( args.threads <= 4 ) maxBufferSize = args.threads;
+	//else maxBufferSize = 4*(args.threads);
 
 	do {
 		//initialise the record and get the record from the file iterator
@@ -749,27 +912,29 @@ int detect_main( int argc, char** argv ){
 
 		//add the record to the buffer if it passes the user's criteria, otherwise destroy it cleanly
 		int mappingQual = record -> core.qual;
-		int refStart,refEnd;		
+		int refStart,refEnd;
 		getRefEnd(record,refStart,refEnd);
 		int queryLen = record -> core.l_qseq;
-		assert(refEnd >= refStart);
-		unsigned int refSpan = refEnd - refStart;
-		if ( mappingQual >= args.minQ and refSpan >= args.minL and queryLen != 0 ){
+
+		if ( mappingQual >= args.minQ and refEnd - refStart >= args.minL and queryLen != 0 ){
+
 			buffer.push_back( record );
 		}
 		else{
 			bam_destroy1(record);
 		}
-		
+
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
+			//std::vector<std::pair<bool,std::shared_ptr<AlignedRead>>> buffer_ar(buffer.size());
+
+			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_align,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
-				read r; 
+				read r;
 
-				//get the read name (which will be the ONT readID from Albacore basecall)
+				//get the read name (which will be the ONT readID from basecall)
 				const char *queryName = bam_get_qname(buffer[i]);
 				if (queryName == NULL) continue;
 				std::string s_queryName(queryName);
@@ -785,22 +950,8 @@ int detect_main( int argc, char** argv ){
 				//open fast5 and normalise events to pA
 				r.filename = readID2path[s_queryName];
 
-				try{
-
-					if (bulkFast5) bulk_getEvents(r.filename, r.readID, r.raw);			
-					else getEvents( r.filename, r.raw );
-				}
-				catch ( BadFast5Field &bf5 ){
-
-					failed++;
-					prog++;
-					continue;
-				}
 				/*get the subsequence of the reference this read mapped to */
 				r.referenceSeqMappedTo = reference.at(r.referenceMappedTo).substr(r.refStart, r.refEnd - r.refStart);
-
-				/*pass on reads that cover a subsequences of the reference shorter than the minimum length */
-				if ( r.referenceSeqMappedTo.size() < args.minL ) continue;
 
 				//fetch the basecall from the bam file
 				r.basecall = getQuerySequence(buffer[i]);
@@ -813,7 +964,7 @@ int detect_main( int argc, char** argv ){
 					r.isReverse = true;
 				}
 
-				normaliseEvents(r);
+				normaliseEvents(r, bulkFast5);
 
 				//catch reads with rough event alignments that fail the QC
 				if ( r.eventAlignment.size() == 0 ){
@@ -823,29 +974,29 @@ int detect_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::string readOut = llAcrossRead(r, windowLength, failedEvents);
+				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, args.dilation );
+
+				if (not ar.first){
+					failed++;
+					prog++;
+					continue;
+				}
+
+				std::string readOut = runCNN(ar.second,session);
+				prog++;
 
 				#pragma omp critical
 				{
 					outFile << readOut;
-					prog++;
 					pb.displayProgress( prog, failed, failedEvents );
-
-#if TEST_ALIGNMENT
-					std::cerr << ">" << r.readID << std::endl;
-					for ( auto p_align = r.eventAlignment.begin(); p_align < r.eventAlignment.end(); p_align++ ){
-
-						std::cerr<< p_align -> first << " " << p_align -> second << std::endl;
-					}
-					r.alignmentQCs.printQCs();
-					r.printScalings();
-#endif
 				}
+
 			}
+
 			for ( unsigned int i = 0; i < buffer.size(); i++ ) bam_destroy1(buffer[i]);
 			buffer.clear();
 		}
-		pb.displayProgress( prog, failed, failedEvents );	
+		pb.displayProgress( prog, failed, failedEvents );
 	} while (result > 0);
 	sam_itr_destroy(itr);
 	std::cout << std::endl;

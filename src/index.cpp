@@ -1,7 +1,7 @@
 //----------------------------------------------------------
-// Copyright 2019 University of Oxford
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
-// This software is licensed under GPL-2.0.  You should have
+// This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
@@ -20,9 +20,9 @@
  static const char *help=
 "index: DNAscent executable that builds an index file for DNAscent detect.\n"
 "To run DNAscent index, do:\n"
-"  ./DNAscent index -f /path/to/fast5Directory\n"
+"   DNAscent index -f /path/to/fast5Directory\n"
 "Required arguments are:\n"
-"  -f,--files                path to fast5 files.\n"
+"  -f,--files                full path to fast5 files.\n"
 "Optional arguments are:\n"
 "  -o,--output               output file name (default is index.dnascent),\n"
 "  -s,--sequencing-summary   path to sequencing summary file Guppy (optional but strongly recommended).\n"
@@ -59,6 +59,8 @@ Arguments parseIndexArguments( int argc, char** argv ){
  		std::string flag( argv[ i ] );
  		if ( flag == "-f" or flag == "--files" ){
  			std::string strArg( argv[ i + 1 ] );
+			char trailing = strArg.back();
+			if (trailing == '/') strArg.pop_back();
 			args.fast5path = strArg;
 			i+=2;
 		}
@@ -86,7 +88,7 @@ void countFast5(std::string path, int &count){
 	tinydir_dir dir;
 	unsigned int i;
 	if (tinydir_open_sorted(&dir, path.c_str()) == -1){
-		std::string error = "Error opening directory "+path;
+		std::string error = "Error opening directory: "+path;
 		perror(error.c_str());
 		goto fail;
 	}
@@ -95,7 +97,7 @@ void countFast5(std::string path, int &count){
 
 		tinydir_file file;
 		if (tinydir_readfile_n(&dir, &file, i) == -1){
-			std::string error = "Error opening file in "+path;
+			std::string error = "Error opening file in: "+path;
 			perror(error.c_str());
 			goto fail;
 		}
@@ -115,6 +117,7 @@ void countFast5(std::string path, int &count){
 	tinydir_close(&dir);
 }
 
+
 const char *get_ext(const char *filename){
 
 	const char *ext = strrchr(filename, '.');
@@ -128,17 +131,16 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 	tinydir_dir dir;
 	unsigned int i;
 	if (tinydir_open_sorted(&dir, path.c_str()) == -1){
-		std::string error = "Error opening directory "+path;
+		std::string error = "Error opening directory: "+path;
 		perror(error.c_str());
 		goto fail;
 	}
 
 	for (i = 0; i < dir.n_files; i++){
-		
-		tinydir_file file;
 
+		tinydir_file file;
 		if (tinydir_readfile_n(&dir, &file, i) == -1){
-			std::string error = "Error opening file in "+path;
+			std::string error = "Error opening file in: "+path;
 			perror(error.c_str());
 			goto fail;
 		}
@@ -312,7 +314,7 @@ int index_main( int argc, char** argv ){
 				id.erase(0, id.find(prefix) + prefix.length());
 				outFile << id << "\t" << path << std::endl;
 			}
-			H5Fclose(hdf5_file);
+		
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
 		}

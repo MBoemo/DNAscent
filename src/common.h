@@ -1,7 +1,7 @@
 //----------------------------------------------------------
-// Copyright 2019 University of Oxford
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
-// This software is licensed under GPL-2.0.  You should have
+// This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
@@ -10,7 +10,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define VERSION "1.0.0"
+#define VERSION "2.0.2"
 
 #include <algorithm>
 #include <vector>
@@ -71,8 +71,10 @@ class progressBar{
 				if (_withFail){
 
 					std::cout << std::right << std::setw(2) << hours << "hr" << std::setw(2) << mins << "min" << std::setw(2) << secs << "sec  ";
-					std::cout << "fr: " << std::right << std::setw(_digits) << failed << std::setw(3);
-					std::cout << "  fe: " << std::right << std::setw(_digits) << failedEvents << std::setw(3) << "\r";
+					std::cout << "failed: " << std::right << std::setw(_digits) << failed << std::setw(3) << "\r";
+
+					//testing
+					//std::cout << "  fe: " << std::right << std::setw(_digits) << failedEvents << std::setw(3) << "\r";
 				}
 				else{
 
@@ -180,6 +182,10 @@ inline std::string complement( std::string DNAseq ){
 /*function prototypes */
 void displayProgress( int, int );
 std::vector< std::string > split( std::string, char );
-int argMin( std::vector< double > & );
+int argMin( std::vector< double > );
+int argMax( std::vector< double > );
+double vectorMean( std::vector< double > & );
+double vectorStdv( std::vector< double > &, double & );
+double vectorSum( std::vector< double > & );
 
 #endif

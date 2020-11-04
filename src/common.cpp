@@ -1,7 +1,7 @@
 //----------------------------------------------------------
-// Copyright 2019 University of Oxford
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
-// This software is licensed under GPL-2.0.  You should have
+// This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
@@ -12,6 +12,7 @@
 #include "math.h"
 #include "common.h"
 #include "error_handling.h"
+#include <math.h>
 
 
 int show_version( int, char** ){
@@ -58,7 +59,33 @@ std::vector< std::string > split( std::string s, char delim ){
 }
 
 
-int argMin( std::vector< double > &vec ){
+double vectorMean( std::vector< double > &obs ){
+
+	double total = 0.0;
+	for ( size_t i = 0; i < obs.size(); i++ ) total += obs[i];
+	return total / (double) obs.size();
+}
+
+
+double vectorStdv( std::vector< double > &obs, double &mean ){
+
+	double total = 0.0;
+	for ( size_t i = 0; i < obs.size(); i++ ){
+		total += pow(obs[i] - mean, 2.0);
+	}
+	return total / (double) obs.size();
+}
+
+
+double vectorSum( std::vector< double > &obs ){
+
+	double total = 0.0;
+	for ( size_t i = 0; i < obs.size(); i++ ) total += obs[i];
+	return total;
+}
+
+
+int argMin( std::vector< double > vec ){
 
 	double smallest = vec[0];
 	int index = 0;
@@ -68,6 +95,23 @@ int argMin( std::vector< double > &vec ){
 		if ( vec[i] < smallest ){
 
 			smallest = vec[i];
+			index = i;
+		}
+	}
+	return index;
+}
+
+
+int argMax( std::vector< double > vec ){
+
+	double highest = vec[0];
+	int index = 0;
+
+	for ( unsigned int i = 1; i < vec.size(); i++ ){
+
+		if ( vec[i] > highest ){
+
+			highest = vec[i];
 			index = i;
 		}
 	}
