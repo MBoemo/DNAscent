@@ -377,7 +377,8 @@ def parseSecondaryFile(fname, readID2directory,args):
 args = parseArguments(sys.argv[1:])
 
 #check the output 
-args.outDir = args.outDir.strip("/")
+if args.outDir[-1:] == "/":
+	args.outDir = args.outDir[:-1]
 if os.path.isdir(args.outDir):
 	print('Output directory '+args.outDir+' already exists.  Exiting.')
 	exit(0)

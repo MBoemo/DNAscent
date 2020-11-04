@@ -3,7 +3,7 @@
 Release Notes
 ===============================
 
-v2.0.0
+v2.0.2
 -----------------
 
 * Migration from HMM-based BrdU detection at every thymidine to ResNet-based detection at every thymidine,
@@ -12,7 +12,8 @@ v2.0.0
 * ``DNAscent forkSense`` to call replication origins and termination sites in both synchronously and asynchronously replicating cells at any point in S-phase,
 * ``DNAscent align`` to align nanopore signals to reference,
 * Significant increases to replication origin calling accuracy,
-* Visualisation utility for plotting output of multiple DNAscent executables as bedgraphs.
+* Visualisation utility for plotting output of multiple DNAscent executables as bedgraphs,
+* Released with `Boemo, M.A. DNAscent v2: Detecting Replication Forks in Nanopore Sequencing Data with Deep Learning. bioRxiv 2020.
 
 v1.0.0
 -----------------

@@ -18,7 +18,7 @@ Download and compile DNAscent:
 
    git clone --recursive https://github.com/MBoemo/DNAscent.git
    cd DNAscent
-   git checkout 2.0.0
+   git checkout 2.0.2
    make
    cd ..
 
