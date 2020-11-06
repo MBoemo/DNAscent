@@ -11,9 +11,9 @@ v2.0.2
 * Support for BrdU detection on GPUs,
 * ``DNAscent forkSense`` to call replication origins and termination sites in both synchronously and asynchronously replicating cells at any point in S-phase,
 * ``DNAscent align`` to align nanopore signals to reference,
-* Significant increases to replication origin calling accuracy,
+* Significant increases to replication origin calling accuracy and sensitivity,
 * Visualisation utility for plotting output of multiple DNAscent executables as bedgraphs,
-* Released with `Boemo, M.A. DNAscent v2: Detecting Replication Forks in Nanopore Sequencing Data with Deep Learning. bioRxiv 2020.
+* Released with `Boemo, MA. DNAscent v2: Detecting Replication Forks in Nanopore Sequencing Data with Deep Learning. bioRxiv 2020. <https://doi.org/10.1101/2020.11.04.368225>`_.
 
 v1.0.0
 -----------------
@@ -22,7 +22,7 @@ v1.0.0
 * Improvements to BrdU detection accuracy,
 * ``DNAscent train`` to train Guassian mixture models from nanopolish eventalign.
 
-v0.1
+v0.1.0
 -----------------
 
 * HMM-based BrdU detection at ~160 thymidine-containing 6mers,
