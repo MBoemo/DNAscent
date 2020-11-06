@@ -13,7 +13,7 @@ v2.0.2
 * ``DNAscent align`` to align nanopore signals to reference,
 * Significant increases to replication origin calling accuracy and sensitivity,
 * Visualisation utility for plotting output of multiple DNAscent executables as bedgraphs,
-* Released with `Boemo, MA. DNAscent v2: Detecting Replication Forks in Nanopore Sequencing Data with Deep Learning. bioRxiv 2020. <https://doi.org/10.1101/2020.11.04.368225>`_.
+* Released with `Boemo, MA. DNAscent v2: Detecting Replication Forks in Nanopore Sequencing Data with Deep Learning. bioRxiv 2020 <https://doi.org/10.1101/2020.11.04.368225>`_.
 
 v1.0.0
 -----------------
