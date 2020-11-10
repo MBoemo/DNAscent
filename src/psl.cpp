@@ -157,6 +157,7 @@ Arguments parsePslArguments( int argc, char** argv ){
 
 	while ( std::getline( inFile, line ) ){
 
+		if (line.substr(0,1) == "#") continue; //ignore header
  		if ( line.substr(0,1) == ">" ){
 
  			if ( buffer.size() >= 10 ){
