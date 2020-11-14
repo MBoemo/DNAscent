@@ -915,8 +915,16 @@ int sense_main( int argc, char** argv ){
 	}
 
 	//empty the buffer at the end
-	emptyBuffer(readBuffer, args, session, outFile, originFile, termFile, leftForkFile, rightForkFile, trimFactor);
+	if (readBuffer.size() > 0){
 
+		bool longEnough = checkReadLength( readBuffer.back().positions.size() );
+		if (not longEnough){
+			failed++;
+			readBuffer.pop_back();
+		}
+	}
+	emptyBuffer(readBuffer, args, session, outFile, originFile, termFile, leftForkFile, rightForkFile, trimFactor);
+	pb.displayProgress( progress, failed, 0 );
 	inFile.close();
 	outFile.close();
 	if (args.markTerms) termFile.close();
