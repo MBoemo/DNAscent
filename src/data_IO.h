@@ -40,9 +40,9 @@ class EventAlignment{
 		}
 		void printQCs(void){
 			assert(set);
-			std::cerr << "avg_log_emission" << " " << avg_log_emission << std::endl;
-			std::cerr << "spanned" << " " << spanned << std::endl;
-			std::cerr << "maxGap" << " " << maxGap << std::endl;
+			std::cerr << "avg_log_emission: " << avg_log_emission << std::endl;
+			std::cerr << "spanned: " << spanned << std::endl;
+			std::cerr << "maxGap: " << maxGap << std::endl;
 		}
 };
 
@@ -60,10 +60,28 @@ struct read{
 	public:
 		void printScalings(void){
 
-			std::cerr << "shift" << " " << scalings.shift << std::endl;
-			std::cerr << "drift" << " " << scalings.drift << std::endl;
-			std::cerr << "scale" << " " << scalings.scale << std::endl;
-			std::cerr << "var" << " " << scalings.var << std::endl;
+			std::cerr << "(Scalings) Shift: " << scalings.shift << std::endl;
+			std::cerr << "(Scalings) Drift: " << scalings.drift << std::endl;
+			std::cerr << "(Scalings) Scale: " << scalings.scale << std::endl;
+			std::cerr << "(Scalings) Var: " << scalings.var << std::endl;
+		}
+		void printDiagnostics(void){
+
+			std::cerr << "ReadID: " << readID << std::endl;
+			std::cerr << "Reference: " << referenceMappedTo << std::endl;
+			std::cerr << "Reference Mapping Start: " << refStart << std::endl;
+			std::cerr << "Reference Mapping End: " << refEnd << std::endl;
+			std::cerr << "Maps to reverse?: " << isReverse << std::endl;
+			std::cerr << "Len Reference Seq Mapped To: " << referenceSeqMappedTo.length() << std::endl;
+			std::cerr << "Basecall Length: " << basecall.length() << std::endl;
+			std::cerr << "Raw Length: " << raw.size() << std::endl;
+			std::cerr << "Normalised Events Length: " << normalisedEvents.size() << std::endl;
+			std::cerr << "Event Alignment Length: " << eventAlignment.size() << std::endl;
+			std::cerr << "(Scalings) Shift: " << scalings.shift << std::endl;
+			std::cerr << "(Scalings) Drift: " << scalings.drift << std::endl;
+			std::cerr << "(Scalings) Scale: " << scalings.scale << std::endl;
+			std::cerr << "(Scalings) Var: " << scalings.var << std::endl;
+			alignmentQCs.printQCs();
 		}
 };
 

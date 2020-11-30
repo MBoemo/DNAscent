@@ -689,6 +689,16 @@ std::string eventalign( read &r,
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
 
+			if (scaledEvent <= 0.0){
+				std::cerr << scaledEvent << std::endl;
+				std::cerr << evIdx << std::endl;
+				std::cerr << eventSnippet[evIdx] << std::endl;
+				std::cerr << r.scalings.shift << std::endl;
+				std::cerr << r.scalings.scale << std::endl;
+				std::cerr << eventSnippet.size() << std::endl;
+				std::cerr << stateLabels.size() << std::endl;
+				r.printDiagnostics();
+			}
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
@@ -864,6 +874,16 @@ std::string eventalign( read &r,
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
 
+			if (scaledEvent <= 0.0){
+				std::cerr << scaledEvent << std::endl;
+				std::cerr << evIdx << std::endl;
+				std::cerr << eventSnippet[evIdx] << std::endl;
+				std::cerr << r.scalings.shift << std::endl;
+				std::cerr << r.scalings.scale << std::endl;
+				std::cerr << eventSnippet.size() << std::endl;
+				std::cerr << stateLabels.size() << std::endl;
+				r.printDiagnostics();
+			}
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
@@ -1054,6 +1074,16 @@ std::string eventalign_train( read &r,
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
 
+			if (scaledEvent <= 0.0){
+				std::cerr << scaledEvent << std::endl;
+				std::cerr << evIdx << std::endl;
+				std::cerr << eventSnippet[evIdx] << std::endl;
+				std::cerr << r.scalings.shift << std::endl;
+				std::cerr << r.scalings.scale << std::endl;
+				std::cerr << eventSnippet.size() << std::endl;
+				std::cerr << stateLabels.size() << std::endl;
+				r.printDiagnostics();
+			}
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
@@ -1222,6 +1252,16 @@ std::string eventalign_train( read &r,
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
 
+			if (scaledEvent <= 0.0){
+				std::cerr << scaledEvent << std::endl;
+				std::cerr << evIdx << std::endl;
+				std::cerr << eventSnippet[evIdx] << std::endl;
+				std::cerr << r.scalings.shift << std::endl;
+				std::cerr << r.scalings.scale << std::endl;
+				std::cerr << eventSnippet.size() << std::endl;
+				std::cerr << stateLabels.size() << std::endl;
+				r.printDiagnostics();
+			}
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
@@ -1423,6 +1463,16 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
 
+			if (scaledEvent <= 0.0){
+				std::cerr << scaledEvent << std::endl;
+				std::cerr << evIdx << std::endl;
+				std::cerr << eventSnippet[evIdx] << std::endl;
+				std::cerr << r.scalings.shift << std::endl;
+				std::cerr << r.scalings.scale << std::endl;
+				std::cerr << eventSnippet.size() << std::endl;
+				std::cerr << stateLabels.size() << std::endl;
+				r.printDiagnostics();
+			}
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
@@ -1597,6 +1647,16 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
 
+			if (scaledEvent <= 0.0){
+				std::cerr << scaledEvent << std::endl;
+				std::cerr << evIdx << std::endl;
+				std::cerr << eventSnippet[evIdx] << std::endl;
+				std::cerr << r.scalings.shift << std::endl;
+				std::cerr << r.scalings.scale << std::endl;
+				std::cerr << eventSnippet.size() << std::endl;
+				std::cerr << stateLabels.size() << std::endl;
+				r.printDiagnostics();
+			}
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
