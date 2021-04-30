@@ -179,6 +179,18 @@ std::pair< double, double > twoMeans( std::vector< double > &observations ){
 			else C2_points_new.push_back(C2_points_old[i]);
 		}	
 
+		//guard against either C1 or C2 being empty
+		if (C1_points_new.size() == 0){
+
+			C2_new = vectorMean(C2_points_new);
+			return std::make_pair(0,C2_new);
+		}
+		else if (C2_points_new.size() == 0){
+
+			C1_new = vectorMean(C1_points_new);
+			return std::make_pair(C1_new,0);
+		}
+
 		C1_new = vectorMean(C1_points_new);
 		C2_new = vectorMean(C2_points_new);
 
@@ -323,10 +335,12 @@ void regionsCNN(Arguments args){
 				calls = 0, attempts = 0, gap = 0, startingPos = -1;
 			}
 		}
+
 		std::cout << std::endl << "Done." << std::endl;
 		double k1,k2;
 		std::tie(k1,k2) = twoMeans( callFractions );
 		p = std::max(k1,k2);
+
 #if !TEST_CLUSTERING
 		std::cerr << "Estimated fraction of analogue substitution in analogue-positive regions: " << p << std::endl;
 #endif
@@ -369,7 +383,7 @@ void regionsCNN(Arguments args){
 				if ( gap > args.resolution and attempts >= args.resolution / 10 ){
 
 					double score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
-					allZScores.push_back(score);
+					allZScores.push_back(score); 
 					calls = 0, attempts = 0, gap = 0, startingPos = -1;
 				}
 			}
@@ -501,6 +515,17 @@ void regionsCNN(Arguments args){
 	inFile.close();
 	outFile.close();
 	std::cout << std::endl << "Done." << std::endl;
+
+	if (p < 0.1){
+		std::cerr << "WARNING: Analogue incorporation is estimated to be low: " << p << std::endl;
+		std::cerr << "   Samples may not have analogue in them; DNAscent regions assumes there are both analogue-positive and analogue-negative regions in the sample." << std::endl;
+		std::cerr << "   The DNAscent regions results may be unreliable. See https://dnascent.readthedocs.io/en/latest/regions.html for details." << std::endl;
+	}
+	else if (p > 0.7){
+		std::cerr << "WARNING: Analogue incorporation is estimated to be high: " << p << std::endl;
+		std::cerr << "   Samples may be saturated; DNAscent regions assumes there are both analogue-positive and analogue-negative regions in the sample." << std::endl;
+		std::cerr << "   The DNAscent regions results may be unreliable. See https://dnascent.readthedocs.io/en/latest/regions.html for details." << std::endl;
+	}
 }
 
 
