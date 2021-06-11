@@ -21,7 +21,7 @@ Please see the [documentation](https://dnascent.readthedocs.io) for detailed usa
 
 ## Citation
 Please cite the following if you use DNAscent for your research:
-- Boemo, MA. DNAscent v2: Detecting Replication Forks in Nanopore Sequencing Data with Deep Learning. *bioRxiv* 2020. [[Preprint Link](https://doi.org/10.1101/2020.11.04.368225)]
+- Boemo, MA. DNAscent v2: Detecting replication forks in nanopore sequencing data with deep learning. *BMC Genomics* 2021;22:430. [[Journal Link](https://doi.org/10.1186/s12864-021-07736-6)]
 - Muller CA, Boemo MA, Spingardi P, Kessler BM, Kriaucionis S, Simpson JT, Nieduszynski CA. Capturing the dynamics of genome replication on individual ultra-long nanopore sequence reads. *Nature Methods* 2019;16:429-436. [[Journal Link](https://www.nature.com/articles/s41592-019-0394-y)]
 
 ## Questions and Bugs
