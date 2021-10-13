@@ -314,7 +314,9 @@ int index_main( int argc, char** argv ){
 				id.erase(0, id.find(prefix) + prefix.length());
 				outFile << id << "\t" << path << std::endl;
 			}
-		
+
+			H5Fclose(hdf5_file);
+
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
 		}
