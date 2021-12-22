@@ -56,7 +56,11 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 
 	//open the file
 	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-	if (hdf5_file < 0) throw IOerror(fast5Filename.c_str());
+	if (hdf5_file < 0){
+		std::cerr << "ReadID " << readID << " is in the bam file but possibly not in the DNAscent index file." << std::endl;
+		std::cerr << "Ensure fast5 files were not renamed after indexing and that all basecalled fast5 files were indexed." << std::endl;
+		throw IOerror(fast5Filename.c_str());
+	}
 
 	//get the channel parameters
 	std::string scaling_path = "/read_" + readID + "/channel_id";
@@ -99,11 +103,15 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 }
 
 
-void getEvents( std::string fast5Filename, std::vector<double> &raw, float &sample_rate ){
+void getEvents( std::string fast5Filename, std::string readID, std::vector<double> &raw, float &sample_rate ){
 
 	//open the file
 	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-	if (hdf5_file < 0) throw IOerror(fast5Filename.c_str());
+	if (hdf5_file < 0){
+		std::cerr << "ReadID " << readID << " is in the bam file but possibly not in the DNAscent index file." << std::endl;
+		std::cerr << "Ensure fast5 files were not renamed after indexing and that all basecalled fast5 files were indexed." << std::endl;
+		throw IOerror(fast5Filename.c_str());
+	}
 
 	//get the channel parameters
 	const char *scaling_path = "/UniqueGlobalKey/channel_id";
@@ -623,7 +631,7 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	try{
 
 		if (bulkFast5) bulk_getEvents(r.filename, r.readID, r.raw, sample_rate);
-		else getEvents( r.filename, r.raw, sample_rate);
+		else getEvents( r.filename, r.readID, r.raw, sample_rate);
 	}
 	catch ( BadFast5Field &bf5 ){
 

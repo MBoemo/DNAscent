@@ -22,10 +22,11 @@
 "To run DNAscent index, do:\n"
 "   DNAscent index -f /path/to/fast5Directory\n"
 "Required arguments are:\n"
-"  -f,--files                full path to fast5 files.\n"
+"  -f,--files                full path to fast5 files,\n"
+"  -s,--sequencing-summary   path to sequencing summary file Guppy.\n"
 "Optional arguments are:\n"
 "  -o,--output               output file name (default is index.dnascent),\n"
-"  -s,--sequencing-summary   path to sequencing summary file Guppy (optional but strongly recommended).\n"
+"     --GridION              account for the different sequencing summary format used by in-built GridION basecalling.\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -33,7 +34,7 @@
 	std::string fast5path;
 	std::string ssPath;
 	std::string outfile;
-	bool gaveSeqSummary = false;
+	bool GridION = false;
 };
 
 
@@ -68,7 +69,6 @@ Arguments parseIndexArguments( int argc, char** argv ){
 
 			std::string strArg( argv[ i + 1 ] );
 			args.ssPath = strArg;
-			args.gaveSeqSummary = true;
 			i+=2;
 		}
 		else if ( flag == "-o" or flag == "--output" ){
@@ -76,6 +76,11 @@ Arguments parseIndexArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			args.outfile = strArg;
 			i+=2;
+		}
+		else if ( flag == "--GridION" ){
+
+			args.GridION = true;
+			i+=1;
 		}
 		else throw InvalidOption( flag );
 	}
@@ -216,7 +221,7 @@ std::vector<std::string> fast5_get_multi_read_groups(hid_t &hdf5_file){
 }
 
 
-std::map<std::string,std::string> parseSequencingSummary(std::string path, bool &bulk){
+std::map<std::string,std::string> parseSequencingSummary(std::string path, bool &bulk, bool &useGridION){
 
 	std::map<std::string,std::string> readID2fast5;
 	std::map<std::string,std::vector<std::string>> fast52readID;
@@ -233,11 +238,21 @@ std::map<std::string,std::string> parseSequencingSummary(std::string path, bool 
 		std::string readID, fast5, column;
 		std::stringstream ssLine(line);
 		int cIndex = 0;
+		
 		while( std::getline( ssLine, column, '\t' ) ){
+		
+			if (useGridION){
 
-			if (cIndex == 0) fast5 = column;
-			else if (cIndex == 1) readID = column;
-			else if (cIndex > 1) break;
+				if (cIndex == 1) fast5 = column;
+				else if (cIndex == 2) readID = column;
+				else if (cIndex > 2) break;
+			}
+			else{
+			
+				if (cIndex == 0) fast5 = column;
+				else if (cIndex == 1) readID = column;
+				else if (cIndex > 1) break;
+			}
 			cIndex++;
 		}
 		readID2fast5[readID] = fast5;
@@ -274,53 +289,33 @@ int index_main( int argc, char** argv ){
 	std::map<std::string,std::string> fast52fullpath;
 	readDirectory(args.fast5path.c_str(), fast52fullpath);
 
-	//if we have a sequencing summary file, use it to build a readID to fast5 map
-	if (args.gaveSeqSummary){
+	bool isBulkFast5;
+	std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args.ssPath, isBulkFast5, args.GridION);
 
-		bool isBulkFast5;
-		std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args.ssPath, isBulkFast5);
+	if (isBulkFast5) outFile << "#bulk" << std::endl;
+	else outFile << "#individual" << std::endl;
 
-		if (isBulkFast5) outFile << "#bulk" << std::endl;
-		else outFile << "#individual" << std::endl;
+	for (auto idpair = readID2fast5.begin(); idpair != readID2fast5.end(); idpair++){
 
-		for (auto idpair = readID2fast5.begin(); idpair != readID2fast5.end(); idpair++){
-
-			//check that the path we need is in the map and exit gracefully if not
-			if ( fast52fullpath.count(idpair->second) == 0 ) throw MissingFast5(idpair->second);
-
-			outFile << idpair->first << "\t" << fast52fullpath.at(idpair->second) << std::endl;
-			progress++;
-			pb.displayProgress( progress, 0, 0 );
-		}
-	}
-	else{ //otherwise we're going to have to brute force open each fast5 file and pull out the readID
-
-		std::cout << "Warning: No sequencing summary file specified.  Specifying a sequencing summary will make indexing much faster." << std::endl;
-
-		outFile << "#bulk" << std::endl;
-
-		for ( auto pathpair = fast52fullpath.begin(); pathpair != fast52fullpath.end(); pathpair++ ){
-
-			std::string path = pathpair -> second;
-
-			hid_t hdf5_file = H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-			if (hdf5_file < 0) throw IOerror(path.c_str());
-			std::vector<std::string> readIDs = fast5_get_multi_read_groups(hdf5_file);
+		//check that the path we need is in the map and exit gracefully if not
+		if ( fast52fullpath.count(idpair->second) == 0 ){
 		
-			std::string prefix = "read_";
-			for ( auto rawid = readIDs.begin(); rawid < readIDs.end(); rawid++ ){
-
-				std::string id = *rawid;
-				id.erase(0, id.find(prefix) + prefix.length());
-				outFile << id << "\t" << path << std::endl;
+			const char *ext = get_ext((idpair->second).c_str());
+			if (strcmp(ext,"fast5") != 0){
+		
+				std::cerr << "This doesn't look like a fast5 file: " << idpair->second << std::endl;
+				std::cerr << "- Ensure all files are decompressed." << std::endl;
+				std::cerr << "- Use the --GridION flag if the sequencing summary file was generated by a GridION." << std::endl;
 			}
-
-			H5Fclose(hdf5_file);
-
-			progress++;
-			pb.displayProgress( progress, 0, 0 );
+		
+			throw MissingFast5(idpair->second);
 		}
+
+		outFile << idpair->first << "\t" << fast52fullpath.at(idpair->second) << std::endl;
+		progress++;
+		pb.displayProgress( progress, 0, 0 );
 	}
+
 	outFile.close();
 	std::cout << std::endl;
  	return 0;
