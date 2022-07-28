@@ -26,8 +26,8 @@
 #include "../htslib/htslib/sam.h"
 #include "../tensorflow/include/tensorflow/c/eager/c_api.h"
 #include "htsInterface.h"
-#include "tensor.h"
-#include "alignment.h"
+//#include "tensor.h"
+//#include "alignment.h"
 #include "error_handling.h"
 #include <omp.h>
 
@@ -350,29 +350,6 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, int windowLength ){
 }
 
 
-std::string methylateSequence( std::string &inSeq ){
-
-	std::string outSeq = inSeq;
-
-	for ( unsigned int i = 0; i < inSeq.size(); i++ ){
-
-		//CpG
-		if ( inSeq.substr(i,2) == "CG" ) outSeq.replace(i,1,"M");
-
-		//GpC
-		//if ( inSeq.substr(i,2) == "GC" ) outSeq.replace(i+1,1,"M");
-
-		//Dam methylation (methyl-adenine in GATC)
-		//if ( inSeq.substr(i,4) == "GATC" ) outSeq.replace(i+1,1,"M");
-
-		//Dcm methylation (methyl-cytosine second cytonsine of CCAGG and CCTGG)
-		//if ( inSeq.substr(i,5) == "CCAGG" ) outSeq.replace(i+1,1,"M");
-		//if ( inSeq.substr(i,5) == "CCTGG" ) outSeq.replace(i+1,1,"M");
-	}
-	return outSeq;
-}
-
-
 std::string llAcrossRead( read &r,
                           unsigned int windowLength,
                           int &failedEvents,
@@ -517,7 +494,7 @@ std::string llAcrossRead( read &r,
 		std::string sixMerRef = (r.referenceSeqMappedTo).substr(posOnRef, 6);
 		if ( r.isReverse ){
 
-			globalPosOnRef = r.refEnd - posOnRef - 6;
+			globalPosOnRef = r.refEnd - posOnRef - 1;
 			sixMerQuery = reverseComplement( sixMerQuery );
 			sixMerRef = reverseComplement( sixMerRef );
 		}
@@ -728,83 +705,92 @@ std::cerr << logLikelihoodRatio << std::endl;
 }
 
 
-TF_Tensor *read2tensor(std::shared_ptr<AlignedRead> r, const TensorShape &shape){
+void read2tensor(std::shared_ptr<AlignedRead> r, const TensorShape &shape, TF_Tensor *t){
 
-	std::vector<double> unformattedTensor = r -> makeTensor();
+	std::vector<float> unformattedTensor = r -> makeTensor();
 
 	size_t size = unformattedTensor.size();
 	//put a check in here for size
 
-	auto output_array = std::make_unique<float[]>(size);
+	//auto output_array = std::make_unique<float[]>(size);
+	std::cout << "mark1" << std::endl;
+	float *output_array = (float *)malloc(size*sizeof(float));
 	for(size_t i = 0; i < size; i++){
 		output_array[i] = unformattedTensor[i];
 	}
+	std::cout << "mark2" << std::endl;
 
-	auto output = tf_obj_unique_ptr(TF_NewTensor(TF_FLOAT,
-												 shape.values,
-												 shape.dim,
-												 (void *)output_array.get(),
-												 size*sizeof(float),
-												 cpp_array_deallocator<float>,
-												 nullptr));
-	if(output) output_array.release();
-
-	return output.release();
+	t = TF_NewTensor(TF_FLOAT,
+		shape.values,
+		shape.dim,
+		(void *)output_array,
+		size*sizeof(float),
+		cpp_array_deallocator<float>,
+		nullptr);
+	std::cout << "mark3" << std::endl;
+	free(output_array);
 }
 
 
 std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session){
 
-	std::pair<size_t, size_t> protoShape = r -> getShape();
-	TensorShape input_shape={{1, (int64_t) protoShape.first, (int64_t) protoShape.second}, 3};
-	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
-	if(!input_values){
-		std::cerr << "Tensor creation failure." << std::endl;
-		exit (EXIT_FAILURE);
+	int NumInputs = 1;
+	int NumOutputs = 1;
+
+	std::vector<size_t> protoShape = r -> getShape();
+	TensorShape input_shape={{1, (int64_t) protoShape[0], (int64_t) protoShape[1]}, 3};
+
+	std::vector<float> unformattedTensor = r -> makeTensor();
+
+	size_t size = unformattedTensor.size();
+	assert(size > 0);
+
+	float *tmp_array = (float *)malloc(size*sizeof(float));
+	for(size_t i = 0; i < size; i++){
+		tmp_array[i] = unformattedTensor[i];
 	}
 
+	TF_Tensor* InputValues = TF_NewTensor(TF_FLOAT,
+		input_shape.values,
+		input_shape.dim,
+		(void *)tmp_array,
+		size*sizeof(float),
+		cpp_array_deallocator<float>,
+		nullptr);
+
+	TF_Tensor* OutputValues;
+
+	//Run the Session
 	CStatus status;
-	TF_Tensor* inputs[]={input_values.get()};
-	TF_Tensor* outputs[1]={};
+	TF_SessionRun(*(session->session.get()), NULL, &session->inputs, &InputValues, NumInputs, &session->outputs, &OutputValues, NumOutputs, NULL, 0, NULL, status.ptr);
 
-	TF_SessionRun(*(session->session.get()), nullptr,
-		&session->inputs, inputs, 1,
-		&session->outputs, outputs, 1,
-		nullptr, 0, nullptr, status.ptr);
-
-	auto _output_holder = tf_obj_unique_ptr(outputs[0]);
-
-	if(status.failure()){
-		status.dump_error();
-		exit (EXIT_FAILURE);
+	if(TF_GetCode(status.ptr) != TF_OK)
+	{
+		printf("%s",TF_Message(status.ptr));
 	}
 
-	TF_Tensor &output = *outputs[0];
-	if(TF_TensorType(&output) != TF_FLOAT){
+	if(TF_TensorType(OutputValues) != TF_FLOAT){
 		std::cerr << "Error, unexpected output tensor type." << std::endl;
 		exit (EXIT_FAILURE);
 	}
 
-	std::string str_output;
-	unsigned int outputFields = 2;
-
-	//write the header
-	str_output += ">" + r -> getReadID() + " " + r -> getChromosome() + " " + std::to_string(r -> getMappingLower()) + " " + std::to_string(r -> getMappingUpper()) + " " + r -> getStrand() + "\n"; //header
+	unsigned int outputFields = 3;
 
 	//get positions on the read reference to write the output
 	std::vector<unsigned int> positions = r -> getPositions();
 	std::vector<std::string> sixMers = r -> getSixMers();
 
-	size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
-	assert(output_size == protoShape.first * outputFields);
-	auto output_array = (const float *)TF_TensorData(&output);
+	size_t output_size = TF_TensorByteSize(OutputValues) / sizeof(float);
+	assert(output_size == protoShape[0] * outputFields);
+	float *output_array = (float *)TF_TensorData(OutputValues);
 
 	//write the output
 	unsigned int pos = 0;
 	std::vector<std::string> lines;
 	lines.reserve(positions.size());
 	std::string thisPosition = std::to_string(positions[0]);
-	std::string str_line;
+	std::string str_line, str_output;
+	str_output += ">" + r -> getReadID() + " " + r -> getChromosome() + " " + std::to_string(r -> getMappingLower()) + " " + std::to_string(r -> getMappingUpper()) + " " + r -> getStrand() + "\n"; //header
 	for(size_t i = 0; i < output_size; i++){
 		if((i+1)%outputFields==0){
 
@@ -814,7 +800,7 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 				continue;
 			}
 
-			str_line += thisPosition + "\t" + std::to_string(output_array[i]);
+			str_line += thisPosition + "\t" + std::to_string(output_array[i])+ "\t" + std::to_string(output_array[i-1]);
 			if (r -> getStrand() == "rev") str_line += "\t" + reverseComplement(sixMers[pos]);
 			else str_line += "\t" + sixMers[pos];
 			lines.push_back(str_line);
@@ -826,6 +812,9 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 		}
 	}
 
+	TF_DeleteTensor(OutputValues);
+	TF_DeleteTensor(InputValues);
+
 	if (r -> getStrand() == "rev") std::reverse(lines.begin(),lines.end());
 
 	for (auto s = lines.begin(); s < lines.end(); s++){
@@ -833,6 +822,87 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 	}
 
 	return str_output;
+}
+
+
+std::map<unsigned int, std::pair<double,double>> runCNN_training(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session){
+
+	int NumInputs = 1;
+	int NumOutputs = 1;
+
+	std::map<unsigned int, std::pair<double,double>> analogueCalls;
+
+	std::vector<size_t> protoShape = r -> getShape();
+	TensorShape input_shape={{1, (int64_t) protoShape[0], (int64_t) protoShape[1]}, 3};
+
+	std::vector<float> unformattedTensor = r -> makeTensor();
+
+	size_t size = unformattedTensor.size();
+	assert(size > 0);
+
+	float *tmp_array = (float *)malloc(size*sizeof(float));
+	for(size_t i = 0; i < size; i++){
+		tmp_array[i] = unformattedTensor[i];
+	}
+
+	TF_Tensor* InputValues = TF_NewTensor(TF_FLOAT,
+		input_shape.values,
+		input_shape.dim,
+		(void *)tmp_array,
+		size*sizeof(float),
+		cpp_array_deallocator<float>,
+		nullptr);
+
+	TF_Tensor* OutputValues;
+
+	//Run the Session
+	CStatus status;
+	TF_SessionRun(*(session->session.get()), NULL, &session->inputs, &InputValues, NumInputs, &session->outputs, &OutputValues, NumOutputs, NULL, 0, NULL, status.ptr);
+
+	if(TF_GetCode(status.ptr) != TF_OK)
+	{
+		printf("%s",TF_Message(status.ptr));
+	}
+
+	if(TF_TensorType(OutputValues) != TF_FLOAT){
+		std::cerr << "Error, unexpected output tensor type." << std::endl;
+		exit (EXIT_FAILURE);
+	}
+
+	unsigned int outputFields = 3;
+
+	//get positions on the read reference to write the output
+	std::vector<unsigned int> positions = r -> getPositions();
+	std::vector<std::string> sixMers = r -> getSixMers();
+
+	size_t output_size = TF_TensorByteSize(OutputValues) / sizeof(float);
+	assert(output_size == protoShape[0] * outputFields);
+	float *output_array = (float *)TF_TensorData(OutputValues);
+
+	//write the output
+	unsigned int pos = 0;
+	unsigned int thisPosition = positions[0];
+	for(size_t i = 0; i < output_size; i++){
+		if((i+1)%outputFields==0){
+
+			//only output T positions
+			if (sixMers[pos].substr(0,1) != "T"){
+				pos++;
+				continue;
+			}
+
+			analogueCalls[thisPosition] = std::make_pair(output_array[i],output_array[i-1]);
+			pos++;
+		}
+		else{
+			if (i != output_size-1) thisPosition = positions[pos];
+		}
+	}
+
+	TF_DeleteTensor(OutputValues);
+	TF_DeleteTensor(InputValues);
+
+	return analogueCalls;
 }
 
 
@@ -847,15 +917,16 @@ int detect_main( int argc, char** argv ){
 
 	//get the neural network model path
 	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "/dnn_models/" + "BrdU_detect.pb";
+	std::string modelPath = pathExe + "dnn_models/detect_model_BrdUEdU/";
+	std::string input_layer_name = "serving_default_input_1";
+
 	std::shared_ptr<ModelSession> session;
 
-	if (args.useGPU) {
-		session = model_load_gpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1",args.GPUdevice,args.threads);
+	if (not args.useGPU){
+		session = model_load_cpu(modelPath.c_str(), args.threads, input_layer_name.c_str());
 	}
 	else{
-		session = model_load_cpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1",args.threads);
-
+		session = model_load_gpu(modelPath.c_str(), args.GPUdevice, args.threads, input_layer_name.c_str());
 	}
 
 	//import fasta reference
@@ -865,7 +936,7 @@ int detect_main( int argc, char** argv ){
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
 	//write the outfile header
-	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, false, args.minQ, args.minL, args.dilation,args.useGPU);
+	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, false, args.minQ, args.minL, args.dilation, args.useGPU);
 	outFile << outHeader;
 
 	htsFile* bam_fh;
@@ -902,6 +973,7 @@ int detect_main( int argc, char** argv ){
 	unsigned int maxBufferSize;
 	std::vector< bam1_t * > buffer;
 	maxBufferSize = 16*(args.threads);
+	//maxBufferSize = args.threads;
 	//if ( args.threads <= 4 ) maxBufferSize = args.threads;
 	//else maxBufferSize = 4*(args.threads);
 
@@ -927,9 +999,7 @@ int detect_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			//std::vector<std::pair<bool,std::shared_ptr<AlignedRead>>> buffer_ar(buffer.size());
-
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_align,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_align,analogueModel,thymidineModel,args,prog,failed,session) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r;
@@ -983,13 +1053,16 @@ int detect_main( int argc, char** argv ){
 				}
 
 				std::string readOut = runCNN(ar.second,session);
-				prog++;
 
+				prog++;
+				pb.displayProgress( prog, failed, failedEvents );
+				
 				#pragma omp critical
 				{
 					outFile << readOut;
 					pb.displayProgress( prog, failed, failedEvents );
 				}
+				
 
 			}
 

@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2019-2020 University of Oxford
+// Copyright 2020 University of Cambridge
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
@@ -98,7 +98,7 @@ template<class T> typename TFObjMeta<T>::UniquePtr tf_obj_unique_ptr(T *obj){
 class ModelSession{
 	public:
 		std::shared_ptr<TF_Graph*> graph;
-		std::shared_ptr<TF_Session*>	session;
+		std::shared_ptr<TF_Session*> session;
 		TF_Output inputs, outputs;
 };
 
@@ -128,8 +128,8 @@ struct TensorShape{
 //end adapted from https://github.com/aljabr0/from-keras-to-c
 
 
-std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *input_name, const char *output_name, unsigned int threads);
-std::shared_ptr<ModelSession> model_load_gpu(const char *filename, const char *input_name, const char *output_name, unsigned char device, unsigned int threads);
+std::shared_ptr<ModelSession> model_load_cpu(const char *filename, unsigned int threads, const char *);
+std::shared_ptr<ModelSession> model_load_gpu(const char *filename, unsigned char device, unsigned int threads, const char *);
 
 
 #endif

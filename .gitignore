@@ -16,6 +16,7 @@ examples/
 hdf5-1.8.14/
 tensorflow/
 hdf5-1.8.14.tar.gz
+htslib/
 
 #generated
 .depend
@@ -26,8 +27,9 @@ hdf5-1.8.14.tar.gz
 .pydevproject
 .settings/*
 
-#commit log file
+#commit log file and path
 src/gitcommit.h
+src/softwarepath.h
 
 #plots
 *.png

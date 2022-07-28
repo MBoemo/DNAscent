@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2019-2020 University of Oxford
+// Copyright 2020 University of Cambridge
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
@@ -11,37 +11,156 @@
 
 #include <cassert>
 #include <vector>
+#include <iostream>
+#include <fstream>
 #include "error_handling.h"
 
-/*function prototypes */
 int sense_main( int argc, char** argv );
+
+struct ReadSegment{
+	int leftmostCoord = 0;
+	int leftmostIdx = 0;
+	int rightmostCoord = 0;
+	int rightmostIdx = 0;
+	int partners = 0;
+};
+
+
+struct KMeansResult{
+	double centroid_1;
+	double centroid_1_stdv;
+	double centroid_2;
+	double centroid_2_stdv;
+};
+
+struct forkSenseArgs {
+
+	std::string detectFilename;
+	std::string outputFilename;
+	std::string analogueOrder;
+	bool markOrigins = false;
+	bool markTerms = false;
+	bool markForks = false;
+	bool markAnalogues = false;
+	unsigned int threads = 1;
+};
+
+class AnalogueScore{
+
+	private:
+		double _score = 0.0;
+		bool _isSet = false;
+	public:
+		void set(double s){
+			_score = s;
+			_isSet = true;
+		}
+		double get(void){
+			assert(_isSet);
+			return _score;
+		}
+};
 
 class DetectedRead{
 
 	public:
-		std::vector< unsigned int > positions;
-		std::vector< double > brduCalls;
+		std::vector< int > positions;
+		std::vector< double > brduCalls, eduCalls;
 		std::string readID, chromosome, strand, header;
 		int mappingLower, mappingUpper;
-		std::vector<std::vector<float>> probabilities;
-		std::vector<std::pair<int,int>> origins;
-		std::vector<std::pair<int,int>> terminations;
-		std::vector<float> tensorInput;
-		void trim(unsigned int trimFactor){
-			
-			assert(positions.size() > trimFactor and brduCalls.size() > trimFactor and positions.size() == brduCalls.size());
-			unsigned int cropFromEnd = positions.size() % trimFactor;
-			brduCalls.erase(brduCalls.end() - cropFromEnd, brduCalls.end());
-			positions.erase(positions.end() - cropFromEnd, positions.end());
-			assert(positions.size() % trimFactor == 0 and brduCalls.size() % trimFactor == 0);
-		}
-		void generateInput(void){
+		std::vector< int > EdU_segment_label, BrdU_segment_label, thymidine_segment_label, contested_segment_label;
+		std::vector<ReadSegment> EdU_segment, BrdU_segment;
+		std::vector<ReadSegment> origins, terminations, leftForks, rightForks;
+		std::vector<double> tensorInput;
+		int64_t inputSize;
+};
 
-			for (size_t i = 0; i < positions.size(); i++){
-				tensorInput.push_back(brduCalls[i]);
+
+std::string writeForkSenseHeader(forkSenseArgs &, KMeansResult );
+std::string writeBedHeader( forkSenseArgs & );
+
+class fs_fileManager{
+
+	protected:
+	
+		forkSenseArgs inputArgs;
+		std::ofstream outFile, originFile, termFile, leftForkFile, rightForkFile, EdUFile, BrdUFile;
+
+	public:
+	
+		fs_fileManager( forkSenseArgs &args , KMeansResult analogueIncorporation){
+		
+			inputArgs = args;
+		
+			//main output file
+		 	outFile.open( args.outputFilename );
+			if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
+			std::string outHeader = writeForkSenseHeader(args, analogueIncorporation);
+			outFile << outHeader;
+			
+			//aux bed files
+			if (args.markTerms){
+
+				termFile.open("terminations_DNAscent_forkSense.bed");
+				termFile << writeBedHeader(args);
+				if ( not termFile.is_open() ) throw IOerror( "terminations_DNAscent_forkSense.bed" );
+			}
+			if (args.markOrigins){
+
+				originFile.open("origins_DNAscent_forkSense.bed");
+				originFile << writeBedHeader(args);
+				if ( not originFile.is_open() ) throw IOerror( "origins_DNAscent_forkSense.bed" );
+			}
+			if (args.markForks){
+
+				leftForkFile.open("leftForks_DNAscent_forkSense.bed");
+				leftForkFile << writeBedHeader(args);
+				if ( not leftForkFile.is_open() ) throw IOerror( "leftForks_DNAscent_forkSense.bed" );
+
+				rightForkFile.open("rightForks_DNAscent_forkSense.bed");
+				rightForkFile << writeBedHeader(args);
+				if ( not rightForkFile.is_open() ) throw IOerror( "rightForks_DNAscent_forkSense.bed" );
+			}
+			if (args.markAnalogues){
+
+				BrdUFile.open("BrdU_DNAscent_forkSense.bed");
+				BrdUFile << writeBedHeader(args);
+				if ( not BrdUFile.is_open() ) throw IOerror( "BrdU_DNAscent_forkSense.bed" );
+
+				EdUFile.open("EdU_DNAscent_forkSense.bed");
+				EdUFile << writeBedHeader(args);
+				if ( not EdUFile.is_open() ) throw IOerror( "EdU_DNAscent_forkSense.bed" );
+			}
+		}
+		void writeOutput(std::string &readOutput,
+				std::string &termOutput,
+				std::string &originOutput,		
+				std::string &leftForkOutput,		
+				std::string &rightForkOutput,		
+				std::string &BrdUOutput,		
+				std::string &EdUOutput	){
+		
+			outFile << readOutput;
+			if (inputArgs.markTerms and termOutput.size() > 0) termFile << termOutput;
+			if (inputArgs.markOrigins and originOutput.size() > 0) originFile << originOutput;
+			if (inputArgs.markForks and leftForkOutput.size() > 0) leftForkFile << leftForkOutput;
+			if (inputArgs.markForks and rightForkOutput.size() > 0) rightForkFile << rightForkOutput;
+			if (inputArgs.markAnalogues and BrdUOutput.size() > 0) BrdUFile << BrdUOutput;
+			if (inputArgs.markAnalogues and EdUOutput.size() > 0) EdUFile << EdUOutput;
+		}
+		void closeAll(){
+			outFile.close();
+			if (inputArgs.markTerms) termFile.close();
+			if (inputArgs.markOrigins) originFile.close();
+			if (inputArgs.markAnalogues){
+				BrdUFile.close();
+				EdUFile.close();
 			}
 		}
 };
+
+KMeansResult twoMeans_fs( std::vector< double > & );
+std::pair<int, int> segmentationTrim(std::vector< int > &, std::vector< double > &, std::vector< double > &, int , int );
 
 #endif
 

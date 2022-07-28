@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2019-2020 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
@@ -73,7 +73,7 @@ double vectorStdv( std::vector< double > &obs, double &mean ){
 	for ( size_t i = 0; i < obs.size(); i++ ){
 		total += pow(obs[i] - mean, 2.0);
 	}
-	return total / (double) obs.size();
+	return sqrt(total / (double) obs.size());
 }
 
 
@@ -102,7 +102,58 @@ int argMin( std::vector< double > vec ){
 }
 
 
-int argMax( std::vector< double > vec ){
+double logistic(double input, double slope, double centre){
+
+	return 1/(1 + exp (-slope*(abs(input)-centre))); 
+}
+
+
+std::vector<double> movingAvgFilter( std::vector<double> &input, unsigned int filterSize){
+
+	std::vector<double> out;
+	
+	for (size_t i = filterSize/2; i < input.size() - filterSize/2; i++){
+	
+		double sum = 0.;
+		for (size_t j = i - filterSize/2; j < i + filterSize/2; j++){
+			sum += input[j];
+		}
+		out.push_back( sum / (double) filterSize );
+	}
+	return out;
+}
+
+
+std::vector<double> movingAvgFilterLogistic( std::vector<double> &input, unsigned int filterSize){
+
+	std::vector<double> out;
+	
+	for (size_t i = filterSize/2; i < input.size() - filterSize/2; i++){
+	
+		double sum = 0.;
+		for (size_t j = i - filterSize/2; j < i + filterSize/2; j++){
+			sum += input[j];
+		}
+		out.push_back( logistic( sum / (double) filterSize, 20, 0.2));
+	}
+	return out;
+}
+
+
+std::vector<double> normVectorSum(std::vector<double> input){
+
+	double sum = vectorSum(input);
+
+	std::vector<double> output;
+	for (size_t i = 0; i < input.size(); i++){
+	
+		output.push_back(input[i]/sum);
+	}
+	return output;
+}
+
+
+int argMax(std::vector< double > vec){
 
 	double highest = vec[0];
 	int index = 0;

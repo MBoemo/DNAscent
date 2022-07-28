@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2019-2020 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
@@ -136,7 +136,7 @@ std::vector<int> findNeighbours( std::vector<double> &events, double ev, double 
 }
 
 
-std::map<int,int> DBSCAN( std::vector< double > events, double epsilon, unsigned int minPoints ){
+std::map<int,int> DBSCAN( std::vector< double > &events, double epsilon, unsigned int minPoints ){
 
 	//labels
 	//-2 := undefined
@@ -425,7 +425,7 @@ int train_main( int argc, char** argv ){
 
 		std::istringstream ss( line );
 		std::string sixMer, entry;
-		double eventMean = 0.0, eventLength = 0.0;
+		double eventMean = 0.0;
 
 		int col = 0;
 		while ( std::getline( ss, entry, '\t' ) ){
@@ -439,16 +439,12 @@ int train_main( int argc, char** argv ){
 
 				eventMean = atof( entry.c_str() );
 			}
-			else if ( col == 3 ){
-
-				eventLength = atof( entry.c_str() );
-			}
 			col++;
 		}
 
-		assert (eventMean != 0.0 and eventLength != 0.0);
+		assert (eventMean != 0.0);
 
-		if ( eventLength >= 0.002 and importedEvents[sixMer2index(sixMer)].size() < trainArgs.maxEvents ){
+		if ( importedEvents[sixMer2index(sixMer)].size() < trainArgs.maxEvents ){
 
 			importedEvents[sixMer2index(sixMer)].push_back( eventMean );
 		}

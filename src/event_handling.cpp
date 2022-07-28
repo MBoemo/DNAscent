@@ -56,11 +56,7 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 
 	//open the file
 	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-	if (hdf5_file < 0){
-		std::cerr << "ReadID " << readID << " is in the bam file but possibly not in the DNAscent index file." << std::endl;
-		std::cerr << "Ensure fast5 files were not renamed after indexing and that all basecalled fast5 files were indexed." << std::endl;
-		throw IOerror(fast5Filename.c_str());
-	}
+	if (hdf5_file < 0) throw IOerror(fast5Filename.c_str());
 
 	//get the channel parameters
 	std::string scaling_path = "/read_" + readID + "/channel_id";
@@ -103,15 +99,11 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 }
 
 
-void getEvents( std::string fast5Filename, std::string readID, std::vector<double> &raw, float &sample_rate ){
+void getEvents( std::string fast5Filename, std::vector<double> &raw, float &sample_rate ){
 
 	//open the file
 	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-	if (hdf5_file < 0){
-		std::cerr << "ReadID " << readID << " is in the bam file but possibly not in the DNAscent index file." << std::endl;
-		std::cerr << "Ensure fast5 files were not renamed after indexing and that all basecalled fast5 files were indexed." << std::endl;
-		throw IOerror(fast5Filename.c_str());
-	}
+	if (hdf5_file < 0) throw IOerror(fast5Filename.c_str());
 
 	//get the channel parameters
 	const char *scaling_path = "/UniqueGlobalKey/channel_id";
@@ -565,7 +557,6 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 			double yi = (event - rescale.shift - rescale.scale*mu);
 			rescale.var += yi * yi / (stdv * stdv);
-			//nNormalised++;
 		}
 		rescale.var /= raw.size();//(double) nNormalised;
 		rescale.var = sqrt(rescale.var);
@@ -631,7 +622,7 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	try{
 
 		if (bulkFast5) bulk_getEvents(r.filename, r.readID, r.raw, sample_rate);
-		else getEvents( r.filename, r.readID, r.raw, sample_rate);
+		else getEvents( r.filename, r.raw, sample_rate);
 	}
 	catch ( BadFast5Field &bf5 ){
 
@@ -646,14 +637,32 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	//get the event mean and length
 	r.normalisedEvents.reserve(et.n);
 	r.eventLengths.reserve(et.n);
+	unsigned int rawStart = 0;
 	for ( unsigned int i = 0; i < et.n; i++ ){
 
 		if (et.event[i].mean > 1.0) {
+
+			if (i > 0) r.eventIdx2rawIdx[i-1] = std::make_pair(rawStart,et.event[i].start-1);
+
 			r.normalisedEvents.push_back( et.event[i].mean );
 			r.eventLengths.push_back(et.event[i].length / sample_rate);
+
+			rawStart = et.event[i].start;
 		}
 	}
+	r.eventIdx2rawIdx[et.n-1] = std::make_pair(rawStart,r.raw.size()-1);
 	free(et.event);
+
+	//testing - print the event and the raw signals that were used to make it
+	/*
+	for (auto e = r.eventIdx2rawIdx.begin(); e != r.eventIdx2rawIdx.end(); e++ ){
+
+		std::cout << r.normalisedEvents[e -> first] << std::endl;
+		for (unsigned int e1 = (e->second).first; e1 <= (e->second).second; e1++){
+			std::cout << "<" << r.raw[e1] << std::endl;
+		}
+	}
+	*/
 
 	// Precompute k-mer ranks for rough rescaling and banded alignment
 	size_t k = 6;

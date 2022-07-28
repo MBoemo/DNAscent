@@ -3,7 +3,7 @@
 forkSense
 ===============================
 
-``DNAscent forkSense`` is a ``DNAscent`` subprogram that provides a probability estimate at each thymidine that a leftward- or rightward-moving fork moved through that position during the BrdU pulse.
+``DNAscent forkSense`` is a ``DNAscent`` subprogram that interprets the pattern of BrdU and EdU incorporation on each molecule, segmenting the read to show where leftward- or rightward-moving forks were moving during the BrdU and EdU pulses.
 
 Usage
 -----
@@ -11,82 +11,82 @@ Usage
 .. code-block:: console
 
    To run DNAscent forkSense, do:
-      DNAscent forkSense -d /path/to/BrdUCalls.detect -o /path/to/output.forkSense
+      DNAscent forkSense -d /path/to/BrdUCalls.detect -o /path/to/output.forkSense --order EdU,BrdU
    Required arguments are:
      -d,--detect               path to output file from DNAscent detect,
-     -o,--output               path to output file for forkSense.
+     -o,--output               path to output file for forkSense,
+        --order                order in which the analogues were pulsed (EdU,BrdU or BrdU,EdU).
    Optional arguments are:
      -t,--threads              number of threads (default: 1 thread),
+        --markAnalogues           writes analogue incorporation locations to a bed file (default: off),
         --markOrigins             writes replication origin locations to a bed file (default: off),
         --markTerminations        writes replication termination locations to a bed file (default: off),
         --markForks               writes replication fork locations to a bed file (default: off).
 
 
-The only required input of ``DNAscent forkSense`` is the output file produced by ``DNAscent detect``.  Note that the detect file must have been produced using the v2.0 ResNet algorithm; ``DNAscent forkSense`` is not compatible with legacy HMM-based detection.
+The required inputs of ``DNAscent forkSense`` are the output file produced by ``DNAscent detect``, a new output file name for ``DNAscent forkSense`` to write on, and the order in which the analogues were pulsed.  In the example command above, the ``--order`` flag indicates that EdU was pulsed first, and BrdU was pulsed second.  The order of the pulses is important for determining fork direction and differentiating between origins and termination sites, but no information about the pulse length is needed.  Note that the detect file must have been produced using the >v3.0.0 ResNet algorithm; ``DNAscent forkSense`` is not compatible with legacy HMM-based detection. Note further that >v3.0.0 ``DNAscent forkSense`` is not back compatible with the previous BrdU-only protocol, as it relies on the incorporation of both BrdU and EdU to determine fork direction. Users with data from a BrdU-only pulse-chase protocol should use DNAscent v2.0.2.
 
-If the ``--markOrigins`` flag is passed, ``DNAscent forkSense`` will use detected leftward- and rightward-moving forks to infer the locations of fired replication origins and write these to a bed file called ``origins_DNAscent_forkSense.bed`` in the working directory.  Likewise, if the ``--markTerminations`` flag is passed, termination sites will be recorded in a bed file called ``terminations_DNAscent_forkSense.bed``.
 
 Output
 ------
 
-If ``--markOrigins`` and/or ``--markTerminations`` were used, the resulting bed files has one called origin (for origins_DNAscent_forkSense.bed) or termination site (for terminations_DNAscent_forkSense.bed) per line and, in accordance with bed format, have the following space-separated columns:
+Main Output File
+^^^^^^^^^^^^^^^^
 
-* chromosome name,
-* 5' boundary of the origin (or terminiation site),
-* 3' boundary of the origin (or terminiation site),
-* read header of the read that the call came from (similar to those in the output file of ``DNAscent detect``).
-
-Note that the "resolution" of the calls (i.e., the third column minus the second column) will depend on your experimental setup.  In synchronised early S-phase cells, this difference for origin calls is likely to be small as the leftward- and rightward-moving forks from a fired origin are nearby one another.  In asynchronous or mid/late S-phase cells, the difference is likely to be larger as the forks from a single origin will have travelled some distance before the BrdU pulse.  The bed files only specify the region between matching leftward- and rightward-moving forks.  Any subsequent assumptions (such as assuming uniform fork speed and placing the origin in the middle of that region) are left to the user.
-
-The output of ``DNAscent forkSense`` is a file with similar formatting to that of ``DNAscent detect``.  The format for the read headers is the same.  From left to right, the tab-delimited columns indicate:
-
-* the coordinate on the reference,
-* probability that a leftward-moving fork passed through that coordinate during a BrdU pulse,
-* probability that a rightward-moving fork passed through that coordinate during a BrdU pulse.
-
-A low probability in both the second and third columns suggests it was unlikely that a fork passed through that position during the pulse.
-
-The following example output shows the end of a read that was passed through by a leftward-moving fork:
+``DNAscent forkSense`` will produce a human-readable output file with the name and location that you specified using the ``-o`` flag.  Like the output of ``DNAscent detect``, this file starts with a short header:
 
 .. code-block:: console
 
-   >22c8a674-ed0e-475f-9c54-cb185299d923 chrII 173332 210452 fwd
-   173339  0.687217        0.062620
-   173341  0.687217        0.062620
-   173342  0.687217        0.062620
-   173345  0.687217        0.062620
-   173347  0.687217        0.062620
-   173348  0.687217        0.062620
-   173349  0.743986        0.045767
-   173358  0.743986        0.045767
-   173375  0.743986        0.045767
-   173377  0.743986        0.045767
-   173378  0.743986        0.045767
-   173381  0.743986        0.045767
-   173382  0.806924        0.038138
-   173383  0.806924        0.038138
-   173387  0.806924        0.038138
-   173390  0.806924        0.038138
-   173392  0.806924        0.038138
-   173393  0.806924        0.038138
-   173398  0.846875        0.032027
-   173402  0.846875        0.032027
-   173404  0.846875        0.032027
-   173406  0.846875        0.032027
-   173407  0.846875        0.032027
-   173417  0.846875        0.032027
-   173418  0.906748        0.028587
-   173419  0.906748        0.028587
-   173423  0.906748        0.028587
-   173425  0.906748        0.028587
-   173426  0.906748        0.028587
-   173428  0.906748        0.028587
-   173441  0.909755        0.029341
-   173445  0.909755        0.029341
-   173446  0.909755        0.029341
-   173449  0.909755        0.029341
-   173450  0.909755        0.029341
-   173451  0.909755        0.029341
-   173454  0.907803        0.029983
+   #DetectFile /path/to/DNAscent.detect
+   #Threads 1
+   #Compute CPU
+   #SystemStartTime 10/06/2022 13:04:33
+   #Software /path/to/DNAscent
+   #Version 3.0.0
+   #Commit b9598a9e5bfa5f8314f92ba0f4fed39be1aee0be
+   #EstimatedRegionBrdU 0.559506
+   #EstimatedRegionEdU 0.202767
+
+The fields in this header are analagous to the header from ``DNAscent detect``, but it includes two additional lines with an estimate of the thymidine-to-BrdU substitution rate in BrdU-positive regions and an estimate of the thymidine-to-EdU substitution rate in EdU-positive regions. In the example above, approximately 56% of thymidines are substituted for BrdU in BrdU-positive regions.
+
+The rest of this file has similar formatting to that of ``DNAscent detect``.  The format for the read headers is the same.  From left to right, the tab-delimited columns indicate:
+
+* the coordinate on the reference,
+* a Boolean (0 or 1) indicating whether that position is in an EdU-positive region,
+* a Boolean (0 or 1) indicating whether that position is in an BrdU-positive region.
+
+The following example output shows an example:
+
+.. code-block:: console
+
+   >806d1f69-1054-4b74-8356-d935a282a22e 11 1089865 1130164 fwd
+   1089873 0       0
+   1089874 0       0
+   1089877 0       0
+   1089878 0       0
+   1089879 0       0
+   1089880 0       0
+   1089882 0       0
+   1089895 0       0
+   1089899 0       0
+
+Only reads that have at least one BrdU-positive or EdU-positive segment are written to this file. Reads with no base analogue segments called on them are omitted from this file, as 0's everywhere across these reads is implied. Note that the format of this file has changed substantially from DNAscent v2.*. This design decision stems from a shift in the algorithm used, as well as the desire to avoid using excess disk space with redundant information.
 
 
+Bed Files
+^^^^^^^^^
+
+If the ``--markOrigins`` flag is passed, ``DNAscent forkSense`` will write the genomic region between matched leftward- and rightward-moving forks to a bed file called ``origins_DNAscent_forkSense.bed`` in the working directory.  Likewise, if the ``--markTerminations`` flag is passed, the genomic region between leftward- and rightward-moving forks moving towards each other will be recorded in a bed file called ``terminations_DNAscent_forkSense.bed``. The flag ``--markAnalogues`` will create two separate bed files: one containing the genomic location of BrdU-positive segments, and another containing the genomic location of EdU-positive segments.
+
+If the ``--markForks`` flag is passed, two bed files will be created in the working directory. The genomic location of leftward- and rightward-moving forks will be written to separate bed files called ``leftForks_DNAscent_forkSense.bed`` and ``rightForks_DNAscent_forkSense.bed``.
+
+All output bed files have the following space-separated columns:
+
+* chromosome name,
+* 5' boundary of the origin (or terminiation site, or fork),
+* 3' boundary of the origin (or terminiation site, or fork),
+* read header of the read that the call came from (similar to those in the output file of ``DNAscent detect``).
+
+For origins and termination sites, the "resolution" of the calls (i.e., the third column minus the second column) will depend on your experimental setup.  In synchronised early S-phase cells, the genomic distance between the 5' and 3' boundaries likely to be small for origins and large for termination sites, as the leftward- and rightward-moving forks should be together near the origin.  In asynchronous or mid/late S-phase cells, the origin calls may appear to be a "lower'' resolution (i.e., larger differences between the 5' and 3' boundaries) as the forks from a single origin will have travelled some distance before the pulses.  When both forks are together at an origin, the origin bed file will record the midpoint of the analogue segment for the analogue that was pulsed first.
+
+The bed files created by ``DNAscent forkSense`` can be opened directly with a genome browser.

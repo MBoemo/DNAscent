@@ -53,6 +53,7 @@ struct read{
 	std::vector< double > raw, normalisedEvents, eventLengths;
 	std::map< unsigned int, unsigned int > refToQuery;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
+	std::map< unsigned int, std::pair< unsigned int, unsigned int >> eventIdx2rawIdx;
 	std::map<unsigned int, double> posToScore;
 	EventAlignment alignmentQCs;
 	int refStart, refEnd;
@@ -73,9 +74,9 @@ std::map< std::string, std::string > import_reference( std::string );
 std::map< std::string, std::string > import_reference_pfasta( std::string );
 std::vector< std::pair< double, double > > import_poreModel( std::string );
 std::string getExePath(void);
+std::string getGitCommit(void);
 std::string writeDetectHeader(std::string, std::string, std::string, int, bool, unsigned int, unsigned int, double, bool);
 std::string writeRegionsHeader(std::string, double, bool, unsigned int, unsigned int, double, double);
-std::string writeForkSenseHeader(std::string detectFile, int threads);
 unsigned int sixMer2index(std::string &);
 
 

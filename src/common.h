@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2019-2020 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
@@ -10,7 +10,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define VERSION "2.0.3"
+#define VERSION "3.0.2"
 
 #include <algorithm>
 #include <vector>
@@ -187,5 +187,8 @@ int argMax( std::vector< double > );
 double vectorMean( std::vector< double > & );
 double vectorStdv( std::vector< double > &, double & );
 double vectorSum( std::vector< double > & );
+std::vector<double> movingAvgFilter(std::vector<double> &, unsigned int);
+std::vector<double> movingAvgFilterLogistic(std::vector<double> &, unsigned int);
+std::vector<double> normVectorSum(std::vector<double>);
 
 #endif

@@ -25,10 +25,11 @@
 #include "alignment.h"
 #include "htsInterface.h"
 #include "error_handling.h"
+#include "tensor.h"
 
 
 static const char *help=
-"trainCNN: DNAscent executable that generates HMM bootstrapped calls to build training data for DNAscent ResNet training.\n"
+"trainCNN: DNAscent executable that generates HMM or CNN bootstrapped calls to build training data for DNAscent ResNet training.\n"
 "Note: This executable is geared towards developers and advanced users.\n"
 "To run DNAscent trainCNN, do:\n"
 "   DNAscent trainCNN -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
@@ -41,7 +42,10 @@ static const char *help=
 "  -t,--threads              number of threads (default is 1 thread),\n"
 "  -m,--maxReads             maximum number of reads to consider,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
-"  -l,--length               minimum read length in bp (default is 100).\n"
+"  -l,--length               minimum read length in bp (default is 100),\n"
+"     --HMM                  use HMM bootstrapping (default is CNN),\n"
+"     --useRaw               write raw signal instead of events.\n"
+
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -50,7 +54,7 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool methylAware, capReads;
+	bool methylAware, capReads, useRaw, useHMM;
 	double divergence;
 	int minQ, maxReads;
 	int minL;
@@ -86,8 +90,10 @@ Arguments parseDataArguments( int argc, char** argv ){
 	args.methylAware = false;
 	args.divergence = 0;
 	args.capReads = false;
+	args.useRaw = false;
 	args.maxReads = 0;
 	args.dilation = 1.0;
+	args.useHMM = false;
 
 	/*parse the command line arguments */
 
@@ -161,6 +167,16 @@ Arguments parseDataArguments( int argc, char** argv ){
 			args.methylAware = true;
 			i+=1;
 		}
+		else if ( flag == "--HMM" ){
+
+			args.useHMM = true;
+			i+=1;
+		}
+		else if ( flag == "--useRaw" ){
+
+			args.useRaw = true;
+			i+=1;
+		}
 		else throw InvalidOption( flag );
 	}
 	if (args.outputFilename == args.indexFilename or args.outputFilename == args.referenceFilename or args.outputFilename == args.bamFilename) throw OverwriteFailure();
@@ -174,6 +190,13 @@ int data_main( int argc, char** argv ){
 
 	Arguments args = parseDataArguments( argc, argv );
 	bool bulkFast5;
+
+	//get the neural network model path
+	std::string pathExe = getExePath();
+	std::string modelPath = pathExe + "dnn_models/detect_model_BrdUEdU/";
+	std::string input_layer_name = "serving_default_input_1";
+
+	std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), args.threads, input_layer_name.c_str());
 
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
@@ -212,7 +235,6 @@ int data_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	unsigned int windowLength = 10;
 	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
@@ -242,7 +264,7 @@ int data_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r; 
@@ -287,8 +309,18 @@ int data_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::map<unsigned int, double> BrdUCalls = llAcrossRead_forTraining( r, windowLength);
-				std::string readOut = eventalign_train( r, 100, BrdUCalls, args.dilation);
+				std::map<unsigned int, std::pair<double,double>> analogueCalls;
+
+				unsigned int windowLength_align = 50;
+				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, 1.0 );
+				if (not ar.first){
+					failed++;
+					prog++;
+					continue;
+				}
+				analogueCalls = runCNN_training(ar.second,session);
+				
+				std::string readOut = eventalign_train( r, 100, analogueCalls, args.dilation, args.useRaw);
 
 				#pragma omp critical
 				{

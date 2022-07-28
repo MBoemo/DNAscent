@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2019-2020 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
@@ -11,8 +11,6 @@
 #include <map>
 #include <functional>
 #include "detect.h"
-#include "regions.h"
-#include "psl.h"
 #include "forkSense.h"
 #include "index.h"
 #include "common.h"
@@ -29,8 +27,6 @@ static std::map< std::string, std::function< int( int, char** ) > > executables 
 	{"index", 	index_main},
 	{"detect", 	detect_main},
 	{"forkSense", 	sense_main},
-	{"psl", 	psl_main},
-	{"regions", 	regions_main},
 	{"align", 	align_main},
 	{"trainCNN", 	data_main},
 	{"trainGMM", 	train_main},
@@ -64,20 +60,6 @@ std::vector< std::pair< double, double > > thymidineModel;
 
 /*main DNAscent executable that will link to other executables */
 int main( int argc, char** argv ){
-
-	/* suppresses tensorflow warnings
-	int env = setenv("TF_CPP_MIN_LOG_LEVEL", "2", 1);
-	if (env == -1){
-		std::cerr << "Suppression of Tensorflow logs and warnings failed." << std::endl;
-	}
-	*/
-
-	/* suppresses tensorflow warnings
-	int env = setenv("CUDA_VISIBLE_DEVICES", "", 1);
-	if (env == -1){
-		std::cerr << "Suppression of Tensorflow logs and warnings failed." << std::endl;
-	}
-	*/
 
 	//load pore models
 	thymidineModel = import_poreModel("template_median68pA.6mer.model");

@@ -55,28 +55,26 @@ class AlignedPosition{
 
 			return refPos;
 		}
-		std::vector<double> makeFeature(void){
+		std::vector<float> makeFeature(void){
 
 			assert(events.size() > 0 && events.size() == lengths.size());
 			assert(sixMer.substr(0,1) == "A" || sixMer.substr(0,1) == "T" || sixMer.substr(0,1) == "G" || sixMer.substr(0,1) == "C");
 
+
 			//one-hot encode bases
-			std::vector<double> feature = {0., 0., 0., 0.};
+			std::vector<float> feature = {0., 0., 0., 0.};
 			if (sixMer.substr(0,1) == "A") feature[0] = 1.;
 			else if (sixMer.substr(0,1) == "T") feature[1] = 1.;
 			else if (sixMer.substr(0,1) == "G") feature[2] = 1.;
 			else if (sixMer.substr(0,1) == "C") feature[3] = 1.;
-
-			//events
-			double eventMean = vectorMean(events);
-			feature.push_back(eventMean);
-
-			//event lengths
-			double lengthsSum = vectorSum(lengths);
-			feature.push_back(lengthsSum);
-
-			//pore model
+			
 			std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+			
+			//event means
+			double eventMean = vectorMean(events);
+			double lengthsSum = vectorSum(lengths);
+			feature.push_back(eventMean);
+			feature.push_back(lengthsSum);
 			feature.push_back(meanStd.first);
 			feature.push_back(meanStd.second);
 
@@ -139,17 +137,17 @@ class AlignedRead{
 		unsigned int getMappingUpper(void){
 			return mappingUpper;
 		}
-		std::vector<double> makeTensor(void){
+		std::vector<float> makeTensor(void){
 
 			assert(strand == "fwd" || strand == "rev");
-			std::vector<double> tensor;
+			std::vector<float> tensor;
 			tensor.reserve(NFEATURES * positions.size());
 
 			if (strand == "fwd"){
 
 				for (auto p = positions.begin(); p != positions.end(); p++){
 
-					std::vector<double> feature = (p -> second) -> makeFeature();
+					std::vector<float> feature = (p -> second) -> makeFeature();
 					tensor.insert(tensor.end(), feature.begin(), feature.end());
 				}
 			}
@@ -157,7 +155,7 @@ class AlignedRead{
 
 				for (auto p = positions.rbegin(); p != positions.rend(); p++){
 
-					std::vector<double> feature = (p -> second) -> makeFeature();
+					std::vector<float> feature = (p -> second) -> makeFeature();
 					tensor.insert(tensor.end(), feature.begin(), feature.end());
 				}
 			}
@@ -181,6 +179,62 @@ class AlignedRead{
 			}
 			return out;
 		}
+		std::string getCigar(void){
+
+			std::vector<std::pair<int,int>> cigarTuples;
+			if (strand == "fwd"){
+
+				int matchRun = 0;
+
+				for (auto p = std::next(positions.begin()); p != positions.end(); p++){
+
+					//deletion
+					if ((p -> first) - (std::prev(p) -> first) != 1){
+
+						if (matchRun > 0) cigarTuples.push_back(std::make_pair(1,matchRun));
+						matchRun = 0;
+						cigarTuples.push_back(std::make_pair(0,(p -> first) - (std::prev(p) -> first)-1));
+					}
+					else{
+						matchRun++;
+					}
+				}
+				if (matchRun > 0) cigarTuples.push_back(std::make_pair(1,matchRun));
+
+			}
+			else{
+
+				int matchRun = 0;
+
+				for (auto p = std::next(positions.rbegin()); p != positions.rend(); p++){
+
+					//deletion
+					if ((p -> first) - (std::prev(p) -> first) != 1){
+
+						if (matchRun > 0) cigarTuples.push_back(std::make_pair(1,matchRun));
+						matchRun = 0;
+						cigarTuples.push_back(std::make_pair(0,(p -> first) - (std::prev(p) -> first)-1));
+					}
+					else{
+						matchRun++;
+					}
+				}
+				if (matchRun > 0) cigarTuples.push_back(std::make_pair(1,matchRun));
+			}
+
+			//convert to string
+			std::string cigarString;
+			for (auto c = cigarTuples.begin(); c < cigarTuples.end(); c++){
+
+				//deletion
+				if (c -> first == 0) cigarString += std::to_string(c -> second) + "D";
+
+				//match
+				if (c -> first == 1) cigarString +=  std::to_string(c -> second) + "M";
+			}
+
+			return cigarString;
+		}
 		std::vector<std::string> getSixMers(void){
 
 			std::vector<std::string> out;
@@ -199,16 +253,16 @@ class AlignedRead{
 			}
 			return out;
 		}
-		std::pair<size_t, size_t> getShape(void){
+		std::vector<size_t> getShape(void){
 
-			return std::make_pair(positions.size(), NFEATURES);
+			return {positions.size(), NFEATURES};
 		}
 };
 
 
 /*function prototypes */
 int align_main( int argc, char** argv );
-std::string eventalign_train( read &, unsigned int , std::map<unsigned int, double> &, double);
+std::string eventalign_train( read &, unsigned int , std::map<unsigned int, std::pair<double,double>> &, double, bool);
 std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &, unsigned int, double );
 
 #endif

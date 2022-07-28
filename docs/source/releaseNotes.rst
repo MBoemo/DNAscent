@@ -3,7 +3,18 @@
 Release Notes
 ===============================
 
-v2.0.2
+v3.0.2
+-----------------
+
+* ``DNAscent detect`` now detects two different thymidine analogues, BrdU and EdU, in the same molecule,
+* ``DNAscent forkSense`` now uses the spatial patterning of EdU and BrdU to determine fork direction as in DNA fibre,
+* dnascent2bedgraph utility updated to plot both EdU and BrdU tracks in genome browsers,
+* ``DNAscent regions`` is now deprecated and has been fully superceded by ``DNAscent forkSense``,
+* ``DNAscent psl`` is now deprecated as reads can be more comprehensively plotted using the dnascent2bedgraph utility,
+* Migration from Tensorflow 1.14 to 2.4.1 and, correspondingly, GPU usage now requires CUDA 11 and cuDNN 8,
+* Released with `Totanes FIG,  Gockel J,  Chapman SE, Bartfai R, Boemo MA, Merrick CJ. Replication origin mapping in the malaria parasite Plasmodium falciparum. bioRxiv <https://doi.org/10.1101/2022.07.27.501677>`_.
+
+v2.0.0
 -----------------
 
 * Migration from HMM-based BrdU detection at every thymidine to ResNet-based detection at every thymidine,
@@ -11,9 +22,9 @@ v2.0.2
 * Support for BrdU detection on GPUs,
 * ``DNAscent forkSense`` to call replication origins and termination sites in both synchronously and asynchronously replicating cells at any point in S-phase,
 * ``DNAscent align`` to align nanopore signals to reference,
-* Significant increases to replication origin calling accuracy and sensitivity,
+* Significant increases to replication origin calling accuracy,
 * Visualisation utility for plotting output of multiple DNAscent executables as bedgraphs,
-* Released with `Boemo, MA. DNAscent v2: Detecting Replication Forks in Nanopore Sequencing Data with Deep Learning. bioRxiv 2020 <https://doi.org/10.1101/2020.11.04.368225>`_.
+* Released with `Boemo, MA. DNAscent v2: Detecting replication forks in nanopore sequencing data with deep learning. BMC Genomics 2021;22:430 <https://doi.org/10.1186/s12864-021-07736-6>`_.
 
 v1.0.0
 -----------------
@@ -22,7 +33,7 @@ v1.0.0
 * Improvements to BrdU detection accuracy,
 * ``DNAscent train`` to train Guassian mixture models from nanopolish eventalign.
 
-v0.1.0
+v0.1
 -----------------
 
 * HMM-based BrdU detection at ~160 thymidine-containing 6mers,

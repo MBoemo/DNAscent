@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2019-2020 University of Oxford
+// Copyright 2019 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
@@ -15,16 +15,18 @@
 #include <unistd.h>
 #include <libgen.h>
 #include <iostream>
+#include <ctime>
 #include <random>
 #include <algorithm>
 #include <fstream>
 #include <sstream>
 #include "data_IO.h"
-#include "error_handling.h"
 #include "pfasta/pfasta.h"
 #include "poreModels.h"
 #include "gitcommit.h"
 #include "common.h"
+#include "softwarepath.h"
+#include "forkSense.h"
 
 std::string writeDetectHeader(std::string alignmentFilename,
 		                std::string refFilename,
@@ -42,6 +44,12 @@ std::string writeDetectHeader(std::string alignmentFilename,
 	if (useGPU) compMode = "GPU";
 	else compMode = "CPU";
 
+	auto t = std::time(nullptr);
+	auto tm = *std::localtime(&t);
+	std::ostringstream oss;
+	oss << std::put_time(&tm, "%d/%m/%Y %H:%M:%S");
+	auto str = oss.str();
+
 	std::string out;
 	out += "#Alignment " + alignmentFilename + "\n";
 	out += "#Genome " + refFilename + "\n";
@@ -51,7 +59,8 @@ std::string writeDetectHeader(std::string alignmentFilename,
 	out += "#Mode " + detMode + "\n";
 	out += "#MappingQuality " + std::to_string(quality) + "\n";
 	out += "#MappingLength " + std::to_string(length) + "\n";
-	out += "#SignalDilation " + std::to_string(dilation) + "\n";
+	out += "#SystemStartTime " + str + "\n";
+	out += "#Software " + std::string(executablePath) + "\n";
 	out += "#Version " + std::string(VERSION) + "\n";
 	out += "#Commit " + std::string(gitcommit) + "\n";
 
@@ -70,6 +79,12 @@ std::string writeRegionsHeader(std::string detectFile,
 	if (useHMM) detMode = "HMM";
 	else detMode = "CNN";
 
+	auto t = std::time(nullptr);
+	auto tm = *std::localtime(&t);
+	std::ostringstream oss;
+	oss << std::put_time(&tm, "%d/%m/%Y %H:%M:%S");
+	auto str = oss.str();
+
 	std::string out;
 	out += "#DetectFile " + detectFile + "\n";
 	out += "#Mode " + detMode + "\n";
@@ -78,18 +93,8 @@ std::string writeRegionsHeader(std::string detectFile,
 	out += "#Resolution " + std::to_string(resolution) + "\n";
 	out += "#Probability " + std::to_string(probability) + "\n";
 	out += "#ZScore " + std::to_string(zscore) + "\n";
-	out += "#Version " + std::string(VERSION) + "\n";
-	out += "#Commit " + std::string(gitcommit) + "\n";
-
-	return out;
-}
-
-std::string writeForkSenseHeader(std::string detectFile,
-		                int threads){
-
-	std::string out;
-	out += "#DetectFile " + detectFile + "\n";
-	out += "#Threads " + std::to_string(threads) + "\n";
+	out += "#SystemStartTime " + str + "\n";
+	out += "#Software " + std::string(executablePath) + "\n";
 	out += "#Version " + std::string(VERSION) + "\n";
 	out += "#Commit " + std::string(gitcommit) + "\n";
 
@@ -183,15 +188,14 @@ std::map< std::string, std::string > import_reference_pfasta( std::string fastaF
 
 std::string getExePath(void){
 
-	int PATH_MAX=1000;
-	char result[ PATH_MAX ];
-	ssize_t count = readlink( "/proc/self/exe", result, PATH_MAX );
-	const char *path;
+	std::string s(executablePath);
+	return s;
+}
 
-	if (count != -1) path = dirname(dirname(result));
-	else throw MissingModelPath();
 
-	std::string s(path);
+std::string getGitCommit(void){
+
+	std::string s(gitcommit);
 	return s;
 }
 

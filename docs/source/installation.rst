@@ -16,7 +16,7 @@ The DNAscent directory will appear in your current directory. Switch to the late
 .. code-block:: console
 
    cd DNAscent
-   git checkout 2.0.2
+   git checkout 3.0.0
    make
 
 This will put the DNAscent executable into the DNAscent/bin directory. Compilation requires a version of gcc that supports C++14, and a typical compile time for DNAscent and all of its dependencies is 5-7 minutes.
@@ -32,35 +32,12 @@ Cloning the repository recursively (see above) will provide all the required dep
 
 Please note that the high throughput sequencing library (htslib) requires bzlib and lzma for compression. While these are common on most systems, if you don't have these, apt-get lzma-dev, liblzma-dev, and libbz2-dev. In addition, pfasta requires libbsd on Linux.
 
-VBZ Fast5 Compression
----------------------
-
-In new versions of MinKNOW, the fast5 files are compressed with VBZ Compression (see https://github.com/nanoporetech/vbz_compression).  To use DNAscent on these compressed fast5 files, do the following (N.B., we're assuming you don't have root permissions):
-
-#. Go to https://github.com/nanoporetech/vbz_compression/releases and download the plugin appropriate for your processor architecture.  In this example, we'll use ``ont-vbz-hdf-plugin-1.0.1-Linux-x86_64.tar.gz``.
-
-#. Download and unpack the plugin:
-
-   .. code-block:: console
-
-      wget https://github.com/nanoporetech/vbz_compression/releases/download/v1.0.1/ont-vbz-hdf-plugin-1.0.1-Linux-x86_64.tar.gz
-      tar -xf ont-vbz-hdf-plugin-1.0.1-Linux-x86_64.tar.gz
-
-#. Add the plugin to your path:
-
-   .. code-block:: console
-
-      export HDF5_PLUGIN_PATH=/full/path/to/ont-vbz-hdf-plugin-1.0.1-Linux/usr/local/hdf5/lib/plugin
-
-#. Run ``DNAscent detect`` as normal.
-
-
 GPU Use
 -------
 
-The ``DNAscent detect`` executable can make use of a GPU, although this is optional (see :ref:`detect`).  DNAscent requires CUDA 10.0 and cuDNN 7.5, and information about these can be found at the following links:
+The ``DNAscent detect`` executable can make use of a GPU, although this is optional (see :ref:`detect`).  DNAscent requires CUDA 11.0 and cuDNN 8.0, and information about these can be found at the following links:
 
 * cuDNN: https://developer.nvidia.com/cudnn
-* CUDA: https://developer.nvidia.com/cuda-10.0-download-archive
+* CUDA: https://developer.nvidia.com/cuda-11.0-download-archive
 
 Always discuss any installation or version changes with your system administrator.
