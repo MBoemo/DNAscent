@@ -21,7 +21,7 @@ Please see the [documentation](https://dnascent.readthedocs.io) for detailed usa
 
 ## Citation
 Please cite our publications if you use DNAscent for your research:
-- Jones MJK,  Rai SK,  Pfuderer PL, Pagan JK, Clarke PR, McClelland SE, Boemo MA. A high-resolution, nanopore-based artificial intelligence assay for DNA replication stress in human cancer cells. bioRxiv. [[bioRxiv](https://doi.org/10.1101/2022.07.27.501677)]
+- Jones MJK,  Rai SK,  Pfuderer PL, Pagan JK, Clarke PR, McClelland SE, Boemo MA. A high-resolution, nanopore-based artificial intelligence assay for DNA replication stress in human cancer cells. bioRxiv. [[bioRxiv](https://doi.org/10.1101/2022.09.22.509021)]
 - Totanes FIG,  Gockel J,  Chapman SE, Bartfai R, Boemo MA, Merrick CJ. Replication origin mapping in the malaria parasite Plasmodium falciparum. bioRxiv. [[bioRxiv](https://doi.org/10.1101/2022.07.27.501677)]
 - Boemo, MA. DNAscent v2: Detecting replication forks in nanopore sequencing data with deep learning. *BMC Genomics* 2021;22:430. [[Journal Link](https://doi.org/10.1186/s12864-021-07736-6)]
 - Muller CA, Boemo MA, Spingardi P, Kessler BM, Kriaucionis S, Simpson JT, Nieduszynski CA. Capturing the dynamics of genome replication on individual ultra-long nanopore sequence reads. *Nature Methods* 2019;16:429-436. [[Journal Link](https://www.nature.com/articles/s41592-019-0394-y)]
