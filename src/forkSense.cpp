@@ -32,7 +32,8 @@ static const char *help=
 "  --markAnalogues           writes analogue incorporation locations to a bed file (default: off),\n"
 "  --markOrigins             writes replication origin locations to a bed file (default: off),\n"
 "  --markTerminations        writes replication termination locations to a bed file (default: off),\n"
-"  --markForks               writes replication fork locations to a bed file (default: off).\n"
+"  --markForks               writes replication fork locations to a bed file (default: off),\n"
+"  --makeSignatures          writes replication stress signatures to a bed files (default: off).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -105,6 +106,11 @@ forkSenseArgs parseSenseArguments( int argc, char** argv ){
 		else if ( flag == "--markAnalogues" ){
 
 			args.markAnalogues = true;
+			i+=1;
+		}
+		else if ( flag == "--makeSignatures" ){
+
+			args.makeSignatures = true;
 			i+=1;
 		}
 		else throw InvalidOption( flag );
@@ -181,7 +187,7 @@ std::vector<ReadSegment> stitchSegmentation(std::vector<ReadSegment> &primarySeg
 	std::map<int, int> connectivity;
 	std::vector<ReadSegment> stitchedSegments;
 	
-	int segmentStitch = 2000;
+	int segmentStitch = 3000;
 	
 	for (size_t i = 0; i < primarySegments.size(); i++){
 	
@@ -192,20 +198,23 @@ std::vector<ReadSegment> stitchSegmentation(std::vector<ReadSegment> &primarySeg
 		
 			if (primarySegments[j].leftmostCoord - primarySegments[i].rightmostCoord < segmentStitch){
 			
-				//make sure there's not a short EdU segment between
+				//make sure there's not a short segment between
 				bool interveningSegment = false;
 				for (size_t k = 0; k < secondarySegments.size(); k++){
 				
 					//segments shouldn't overlap
 					assert(primarySegments[i].leftmostCoord >= secondarySegments[k].rightmostCoord or secondarySegments[k].leftmostCoord >= primarySegments[i].rightmostCoord);
 					
-					if (primarySegments[i].rightmostCoord < secondarySegments[k].leftmostCoord and secondarySegments[k].rightmostCoord < primarySegments[j].leftmostCoord){
+					if (primarySegments[i].rightmostCoord <= secondarySegments[k].leftmostCoord and secondarySegments[k].rightmostCoord <= primarySegments[j].leftmostCoord){
 						interveningSegment = true;
 						break;
 					}
 				}
 				
-				if (not interveningSegment) connectivity[i] = j;
+				if (not interveningSegment){
+					connectivity[i] = j;
+					break;
+				}
 			}
 		}
 	}
@@ -438,7 +447,13 @@ std::string callOrigins(DetectedRead &r, forkSenseArgs args){
 			struct ReadSegment s = {orilb, orilb_idx, oriub, oriub_idx};
 			r.origins.push_back(s);
 
-			outBed += r.chromosome + " " + std::to_string(orilb) + " " + std::to_string(oriub) + " " + r.header.substr(1) + "\n";
+			outBed += r.chromosome + " " 
+			       + std::to_string(orilb) + " " 
+			       + std::to_string(oriub) + " "
+			       + r.readID.substr(1) + " "
+			       + std::to_string( r.mappingLower ) + " "
+			       + std::to_string( r.mappingUpper ) + " "
+			       + r.strand + "\n"; 
 		}
 	}
 
@@ -502,7 +517,13 @@ std::string callTerminations(DetectedRead &r, forkSenseArgs args){
 			struct ReadSegment s = {termlb, termlb_idx, termub, termub_idx};
 
 			r.terminations.push_back(s);
-			outBed += r.chromosome + " " + std::to_string(termlb) + " " + std::to_string(termub) + " " + r.header.substr(1) + "\n";
+			outBed += r.chromosome + " " 
+			       + std::to_string(termlb) + " " 
+			       + std::to_string(termub) + " " 
+			       + r.readID.substr(1) + " "
+			       + std::to_string( r.mappingLower ) + " "
+			       + std::to_string( r.mappingUpper ) + " "
+			       + r.strand + "\n"; 
 		}
 	}
 
@@ -510,54 +531,71 @@ std::string callTerminations(DetectedRead &r, forkSenseArgs args){
 }
 
 
-std::pair<std::string,std::string> writeAnalogueRegions(DetectedRead &r){
+std::pair<std::string,std::string> writeAnalogueRegions(DetectedRead &r, bool segmentToForks){
 
 	std::string outBedEdU, outBedBrdU;
 
 	for (auto i = r.BrdU_segment.begin(); i < r.BrdU_segment.end(); i++){
+	
+		if (segmentToForks and (i -> partners == 0)) continue;
 
-		outBedBrdU += r.chromosome + " " + std::to_string(i -> leftmostCoord) + " " + std::to_string(i -> rightmostCoord) + " " + r.header.substr(1) + "\n";
+		outBedBrdU += r.chromosome + " " 
+		            + std::to_string(i -> leftmostCoord) + " " 
+		            + std::to_string(i -> rightmostCoord) + " " 
+		            + r.readID.substr(1) + " "
+		            + std::to_string( r.mappingLower ) + " "
+		            + std::to_string( r.mappingUpper ) + " "
+		            + r.strand + "\n"; 
 	}
 	for (auto i = r.EdU_segment.begin(); i < r.EdU_segment.end(); i++){
+	
+		if (segmentToForks and (i -> partners == 0)) continue;
 
-		outBedEdU += r.chromosome + " " + std::to_string(i -> leftmostCoord) + " " + std::to_string(i -> rightmostCoord) + " " + r.header.substr(1) + "\n";
+		outBedEdU += r.chromosome + " " 
+		            + std::to_string(i -> leftmostCoord) + " " 
+		            + std::to_string(i -> rightmostCoord) + " " 
+		            + r.readID.substr(1) + " "
+		            + std::to_string( r.mappingLower ) + " "
+		            + std::to_string( r.mappingUpper ) + " "
+		            + r.strand + "\n"; 
 	}
 
 	return std::make_pair(outBedBrdU,outBedEdU);
 }
 
 
-std::pair<std::string,std::string> callForks(DetectedRead &r, std::string analogueOrder){
+void callForks(DetectedRead &r, std::string analogueOrder){
 
 	//maximum distance in bp between EdU and BrdU segments that allow them to be matched
 	int maxGap = 5000;
 	
-	std::vector<ReadSegment> analogue1_segments, analogue2_segments;
+	std::vector<ReadSegment> *analogue1_segments;
+	std::vector<ReadSegment> *analogue2_segments;
 	
 	if (analogueOrder == "EdU,BrdU"){
 
-		analogue1_segments = r.EdU_segment;
-		analogue2_segments = r.BrdU_segment;
+		analogue1_segments = &(r.EdU_segment);
+		analogue2_segments = &(r.BrdU_segment);
 	}
 	else{
 
-		analogue2_segments = r.EdU_segment;
-		analogue1_segments = r.BrdU_segment;
+		analogue2_segments = &(r.EdU_segment);
+		analogue1_segments = &(r.BrdU_segment);
 	}
 
 	std::vector<std::pair<size_t,size_t>> proto_rightForkPairs, proto_leftForkPairs;
 
 	//match up segments - right fork
-	for ( size_t li = 0; li < analogue1_segments.size(); li++ ){
+	for ( size_t li = 0; li < (*analogue1_segments).size(); li++ ){
 
 		//find the closest analogue 2 patch
 		int minDist = std::numeric_limits<int>::max();
 		int bestMatch = -1;
-		for ( size_t ri = 0; ri < analogue2_segments.size(); ri++ ){
+		for ( size_t ri = 0; ri < (*analogue2_segments).size(); ri++ ){
 
-			if (analogue2_segments[ri].leftmostCoord < analogue1_segments[li].rightmostCoord) continue;
+			if ( (*analogue2_segments)[ri].leftmostCoord < (*analogue1_segments)[li].rightmostCoord ) continue;
 
-			int dist = analogue2_segments[ri].leftmostCoord - analogue1_segments[li].rightmostCoord;
+			int dist = (*analogue2_segments)[ri].leftmostCoord - (*analogue1_segments)[li].rightmostCoord;
 			assert(dist >= 0);
 			
 			if (dist < minDist){
@@ -570,13 +608,13 @@ std::pair<std::string,std::string> callForks(DetectedRead &r, std::string analog
 		bool failed = false;
 		if (bestMatch != -1){
 
-			for (size_t l2 = 0; l2 < analogue1_segments.size(); l2++){
+			for (size_t l2 = 0; l2 < (*analogue1_segments).size(); l2++){
 
 				if (li == l2) continue;
 
-				if (analogue2_segments[bestMatch].leftmostCoord < analogue1_segments[l2].rightmostCoord) continue;
+				if ( (*analogue2_segments)[bestMatch].leftmostCoord < (*analogue1_segments)[l2].rightmostCoord ) continue;
 
-				int dist = analogue2_segments[bestMatch].leftmostCoord - analogue1_segments[l2].rightmostCoord;
+				int dist = (*analogue2_segments)[bestMatch].leftmostCoord - (*analogue1_segments)[l2].rightmostCoord;
 				assert(dist >= 0);
 				
 				if (dist < minDist){
@@ -590,10 +628,10 @@ std::pair<std::string,std::string> callForks(DetectedRead &r, std::string analog
 		if (failed) continue;
 		else if (bestMatch != -1 and minDist < maxGap){
 
-			assert(analogue1_segments[li].leftmostCoord < analogue2_segments[bestMatch].rightmostCoord);
+			assert( (*analogue1_segments)[li].leftmostCoord < (*analogue2_segments)[bestMatch].rightmostCoord );
 			
-			analogue1_segments[li].partners++;
-			analogue2_segments[bestMatch].partners++;
+			(*analogue1_segments)[li].partners++;
+			(*analogue2_segments)[bestMatch].partners++;
 			
 			proto_rightForkPairs.push_back(std::make_pair(li,bestMatch));
 		}
@@ -601,16 +639,16 @@ std::pair<std::string,std::string> callForks(DetectedRead &r, std::string analog
 
 
 	//match up segments - left fork
-	for ( size_t li = 0; li < analogue1_segments.size(); li++ ){
+	for ( size_t li = 0; li < (*analogue1_segments).size(); li++ ){
 
 		//find the closest analogue 2 patch
 		int minDist = std::numeric_limits<int>::max();
 		int bestMatch = -1;
-		for ( size_t ri = 0; ri < analogue2_segments.size(); ri++ ){
+		for ( size_t ri = 0; ri < (*analogue2_segments).size(); ri++ ){
 
-			if (analogue1_segments[li].leftmostCoord < analogue2_segments[ri].rightmostCoord) continue;
+			if ( (*analogue1_segments)[li].leftmostCoord < (*analogue2_segments)[ri].rightmostCoord ) continue;
 			
-			int dist = analogue1_segments[li].leftmostCoord - analogue2_segments[ri].rightmostCoord;
+			int dist = (*analogue1_segments)[li].leftmostCoord - (*analogue2_segments)[ri].rightmostCoord;
 			assert(dist >= 0);
 
 			if (dist < minDist){
@@ -623,13 +661,13 @@ std::pair<std::string,std::string> callForks(DetectedRead &r, std::string analog
 		bool failed = false;
 		if (bestMatch != -1){
 
-			for (size_t l2 = 0; l2 < analogue1_segments.size(); l2++){
+			for (size_t l2 = 0; l2 < (*analogue1_segments).size(); l2++){
 
 				if (li == l2) continue;
 
-				if (analogue1_segments[l2].leftmostCoord <  analogue2_segments[bestMatch].rightmostCoord) continue;
+				if ( (*analogue1_segments)[l2].leftmostCoord <  (*analogue2_segments)[bestMatch].rightmostCoord ) continue;
 
-				int dist = analogue1_segments[l2].leftmostCoord -  analogue2_segments[bestMatch].rightmostCoord;
+				int dist = (*analogue1_segments)[l2].leftmostCoord -  (*analogue2_segments)[bestMatch].rightmostCoord;
 				assert(dist >= 0);
 				
 				if (dist < minDist){
@@ -641,69 +679,148 @@ std::pair<std::string,std::string> callForks(DetectedRead &r, std::string analog
 		if (failed) continue;
 		else if (bestMatch != -1 and minDist < maxGap){
 
-			assert(analogue2_segments[bestMatch].leftmostCoord < analogue1_segments[li].rightmostCoord);
+			assert( (*analogue2_segments)[bestMatch].leftmostCoord < (*analogue1_segments)[li].rightmostCoord );
 			
-			analogue2_segments[bestMatch].partners++;
-			analogue1_segments[li].partners++;
+			(*analogue2_segments)[bestMatch].partners++;
+			(*analogue1_segments)[li].partners++;
 			
 			proto_leftForkPairs.push_back(std::make_pair(bestMatch,li));
 		}
 	}
 	
-	//make fork bounds, write to bed files
+	//make fork bounds
 	std::string outBedLeft, outBedRight;
 	for (auto p = proto_rightForkPairs.begin(); p < proto_rightForkPairs.end(); p++){
 	
+		int tipPartners = 0;
+	
 		//left coordinate and index
-		assert(analogue1_segments[p -> first].partners == 1 or analogue1_segments[p -> first].partners == 2);
-		int lc = analogue1_segments[p -> first].leftmostCoord;
-		int li = analogue1_segments[p -> first].leftmostIdx;
-		if (analogue1_segments[p -> first].partners == 2){
+		assert( (*analogue1_segments)[p -> first].partners == 1 or (*analogue1_segments)[p -> first].partners == 2);
+		int lc = (*analogue1_segments)[p -> first].leftmostCoord;
+		int li = (*analogue1_segments)[p -> first].leftmostIdx;
+		if ( (*analogue1_segments)[p -> first].partners == 2){
 		
-			lc = (analogue1_segments[p -> first].leftmostCoord + analogue1_segments[p -> first].rightmostCoord) / 2;
-			li = (analogue1_segments[p -> first].leftmostIdx + analogue1_segments[p -> first].rightmostIdx) / 2;
+			lc = ( (*analogue1_segments)[p -> first].leftmostCoord + (*analogue1_segments)[p -> first].rightmostCoord ) / 2;
+			li = ( (*analogue1_segments)[p -> first].leftmostIdx + (*analogue1_segments)[p -> first].rightmostIdx ) / 2;
 		}
 
 		//right coordinate and index		
-		int rc = analogue2_segments[p -> second].rightmostCoord;
-		int ri = analogue2_segments[p -> second].rightmostIdx;
-		if (analogue2_segments[p -> second].partners == 2){
+		int rc = (*analogue2_segments)[p -> second].rightmostCoord;
+		int ri = (*analogue2_segments)[p -> second].rightmostIdx;
+		if ( (*analogue2_segments)[p -> second].partners == 2){
 		
-			rc = (analogue2_segments[p -> second].rightmostCoord + analogue2_segments[p -> second].leftmostCoord) / 2;
-			ri = (analogue2_segments[p -> second].rightmostIdx + analogue2_segments[p -> second].leftmostIdx) / 2;
+			rc = ( (*analogue2_segments)[p -> second].rightmostCoord + (*analogue2_segments)[p -> second].leftmostCoord ) / 2;
+			ri = ( (*analogue2_segments)[p -> second].rightmostIdx + (*analogue2_segments)[p -> second].leftmostIdx ) / 2;
+			tipPartners++;
+		}
+		
+		double An1Len = (*analogue1_segments)[p -> first].rightmostCoord - lc;
+		double An2Len = rc - (*analogue2_segments)[p -> second].leftmostCoord;
+		
+		int BrdU_in_EdU = 0;
+		int EdU_in_EdU = 0;
+		int attempts_EdU = 0;
+		for (int j = li; j < (*analogue1_segments)[p -> first].rightmostIdx; j++){
+		
+			if (r.brduCalls[j] > 0.5) BrdU_in_EdU++;
+			if (r.eduCalls[j] > 0.5) EdU_in_EdU++;
+			attempts_EdU++;
+		}
+
+		int BrdU_in_BrdU = 0;
+		int EdU_in_BrdU = 0;
+		int attempts_BrdU = 0;	
+		for (int j = (*analogue2_segments)[p -> second].leftmostIdx; j < ri; j++){
+		
+			if (r.brduCalls[j] > 0.5) BrdU_in_BrdU++;
+			if (r.eduCalls[j] > 0.5) EdU_in_BrdU++;
+			attempts_BrdU++;
 		}
 		
 		struct ReadSegment s = {lc, li, rc, ri};
+		s.partners = tipPartners;
+		
+		double overallLength = rc-lc;
+		double sig4 = BrdU_in_EdU/(double) attempts_EdU;
+		double sig5 = EdU_in_EdU/(double) attempts_EdU;
+		double sig6 = EdU_in_BrdU/(double) attempts_BrdU;
+		double sig7 = BrdU_in_BrdU/(double) attempts_BrdU;
+		s.stress_signature = {overallLength,
+					An1Len,
+					An2Len, 
+					sig4, 
+					sig5, 
+					sig6, 
+					sig7};
 		r.rightForks.push_back(s);
-		outBedRight += r.chromosome + " " + std::to_string(lc) + " " + std::to_string(rc) + " " + r.header.substr(1) + "\n";
 	}
 	for (auto p = proto_leftForkPairs.begin(); p < proto_leftForkPairs.end(); p++){
 	
+		int tipPartners = 0;
+
 		//left coordinate and index
-		assert(analogue2_segments[p -> first].partners == 1 or analogue2_segments[p -> first].partners == 2);
-		int lc = analogue2_segments[p -> first].leftmostCoord;
-		int li = analogue2_segments[p -> first].leftmostIdx;
-		if (analogue2_segments[p -> first].partners == 2){
+		assert( (*analogue2_segments)[p -> first].partners == 1 or (*analogue2_segments)[p -> first].partners == 2);
+		int lc = (*analogue2_segments)[p -> first].leftmostCoord;
+		int li = (*analogue2_segments)[p -> first].leftmostIdx;
+		if ( (*analogue2_segments)[p -> first].partners == 2){
 		
-			lc = (analogue2_segments[p -> first].leftmostCoord + analogue2_segments[p -> first].rightmostCoord) / 2;
-			li = (analogue2_segments[p -> first].leftmostIdx + analogue2_segments[p -> first].rightmostIdx) / 2;
+			lc = ( (*analogue2_segments)[p -> first].leftmostCoord + (*analogue2_segments)[p -> first].rightmostCoord ) / 2;
+			li = ( (*analogue2_segments)[p -> first].leftmostIdx + (*analogue2_segments)[p -> first].rightmostIdx ) / 2;
+			tipPartners++;
 		}
 		
 		//right coordinate and index
-		int rc = analogue1_segments[p -> second].rightmostCoord;
-		int ri = analogue1_segments[p -> second].rightmostIdx;
-		if (analogue1_segments[p -> second].partners == 2){
+		int rc = (*analogue1_segments)[p -> second].rightmostCoord;
+		int ri = (*analogue1_segments)[p -> second].rightmostIdx;
+		if ( (*analogue1_segments)[p -> second].partners == 2){
 		
-			rc = (analogue1_segments[p -> second].rightmostCoord + analogue1_segments[p -> second].leftmostCoord) / 2;
-			ri = (analogue1_segments[p -> second].rightmostIdx + analogue1_segments[p -> second].leftmostIdx) / 2;
+			rc = ( (*analogue1_segments)[p -> second].rightmostCoord + (*analogue1_segments)[p -> second].leftmostCoord ) / 2;
+			ri = ( (*analogue1_segments)[p -> second].rightmostIdx + (*analogue1_segments)[p -> second].leftmostIdx ) / 2;
+		}
+		
+		double An2Len = (*analogue2_segments)[p -> first].rightmostCoord - lc;
+		double An1Len = rc - (*analogue1_segments)[p -> second].leftmostCoord;
+
+		int BrdU_in_EdU = 0;
+		int EdU_in_EdU = 0;
+		int attempts_EdU = 0;
+		
+		for (int j = (*analogue1_segments)[p -> second].leftmostIdx; j < ri; j++){
+		
+			if (r.brduCalls[j] > 0.5) BrdU_in_EdU++;
+			if (r.eduCalls[j] > 0.5) EdU_in_EdU++;
+			attempts_EdU++;
+		}
+		
+		int BrdU_in_BrdU = 0;
+		int EdU_in_BrdU = 0;
+		int attempts_BrdU = 0;
+		
+		for (int j = li; j < (*analogue2_segments)[p -> first].rightmostIdx; j++){
+		
+			if (r.brduCalls[j] > 0.5) BrdU_in_BrdU++;
+			if (r.eduCalls[j] > 0.5) EdU_in_BrdU++;
+			attempts_BrdU++;
 		}
 		
 		struct ReadSegment s = {lc, li, rc, ri};
+		
+		double overallLength = rc-lc;
+		double sig4 = BrdU_in_EdU/(double) attempts_EdU;
+		double sig5 = EdU_in_EdU/(double) attempts_EdU;
+		double sig6 = EdU_in_BrdU/(double) attempts_BrdU;
+		double sig7 = BrdU_in_BrdU/(double) attempts_BrdU;
+		s.stress_signature = {overallLength,
+					An1Len,
+					An2Len, 
+					sig4, 
+					sig5, 
+					sig6, 
+					sig7};
+					
+		s.partners = tipPartners;
 		r.leftForks.push_back(s);
-		outBedLeft += r.chromosome + " " + std::to_string(lc) + " " + std::to_string(rc) + " " + r.header.substr(1) + "\n";
 	}
-
-	return std::make_pair(outBedLeft, outBedRight);
 }
 
 
@@ -725,7 +842,9 @@ std::pair< std::vector<int>, int > findNeighbours_mod( std::vector<int> &positio
 		int gap = std::abs(ev - runningPos);
 
 		if (gap <= epsilon){
+		
 			neighbourIdx.push_back(i);
+
 			if (calls[i] > 0.5){
 				positiveCalls++;
 			}
@@ -737,10 +856,10 @@ std::pair< std::vector<int>, int > findNeighbours_mod( std::vector<int> &positio
 	
 	int delta = positiveCalls - positiveAltCalls;
 	int netPositiveCalls = std::max(0,delta);
+
 	
 	return std::make_pair(neighbourIdx, netPositiveCalls);
 }
-
 
 std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double > &calls, std::vector< double > &altCalls, int epsilon, double minDensity ){
 
@@ -753,10 +872,8 @@ std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double
 	std::map< int, int > index2label;
 	for ( size_t i = 0; i < positions.size(); i++ ) index2label[i] = -2;
 
-	int C = 0; //cluster counter
 	for ( size_t i = 0; i < positions.size(); i++ ){
-
-		if (index2label[i] != -2) continue;
+	
 		std::pair<std::vector<int>, int> neighbourPair = findNeighbours_mod( positions, calls, altCalls, i, epsilon );
 		std::vector<int> neighbourIndices = neighbourPair.first;
 		int neighbourCalls = neighbourPair.second;
@@ -764,78 +881,63 @@ std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double
 		if (neighbourCalls < minPoints) {
 
 			index2label[i] = -1; //label as noise
-			continue;
 		}
-
-		C++; //increment the cluster
-		index2label[i] = C;
-		std::vector< int > seedSet = neighbourIndices;
-		seedSet.erase(std::find(seedSet.begin(),seedSet.end(),i)); //seed set is the neighbours minus the event we're at
-		for ( size_t j = 0; j < seedSet.size(); j++ ){
-
-			if (index2label[seedSet[j]] == -1) index2label[seedSet[j]] = C;
-			if (index2label[seedSet[j]] != -2 ) continue;
-			index2label[seedSet[j]] = C;
-			std::pair<std::vector<int>, int> neighbourPair_Inner = findNeighbours_mod(positions, calls, altCalls, seedSet[j], epsilon);
-			std::vector<int> neighbourIndicesInner = neighbourPair_Inner.first;
-			int neighbourCallsInner = neighbourPair_Inner.second;
-			minPoints = neighbourIndicesInner.size() * minDensity;
-			if (neighbourCallsInner >= minPoints){
-
-				seedSet.insert(seedSet.end(),neighbourIndicesInner.begin(),neighbourIndicesInner.end());
-			}
+		else{
+		
+			index2label[i] = 1;
 		}
 	}
 	return index2label;
 }
 
 
-void runDBSCAN(DetectedRead &r, KMeansResult analougeIncorporation){
+void runDBSCAN(DetectedRead &r, KMeansResult analougeIncorporation, std::string analogueOrder){
 	
 	int epsilon = 1000;
 	
-	double minBrdUDensity = std::max(0.1,analougeIncorporation.centroid_1 - analougeIncorporation.centroid_1_stdv);
-	double minEdUDensity = std::max(0.1,analougeIncorporation.centroid_2 - analougeIncorporation.centroid_2_stdv);
+	double minBrdUDensity, minEdUDensity;
+	
+	if (analogueOrder == "EdU,BrdU"){
 
+		minBrdUDensity = std::max(0.1, analougeIncorporation.centroid_1_lowerBound);
+		minEdUDensity = std::max(0.1, analougeIncorporation.centroid_2_lowerBound);
+	}
+	else{
+
+		minBrdUDensity = std::max(0.1, analougeIncorporation.centroid_1_lowerBound);
+		minEdUDensity = std::max(0.1, analougeIncorporation.centroid_2_lowerBound);
+	}
+	
+	
 	std::map<int,int> eduLabels = DBSCAN_mod( r.positions, r.eduCalls, r.brduCalls, epsilon, minEdUDensity );
 	std::map<int,int> brduLabels = DBSCAN_mod( r.positions, r.brduCalls, r.eduCalls, epsilon, minBrdUDensity );
+	
 
 	for (size_t i = 0; i < r.positions.size(); i++){
 	
 		int eduLabel = 0;
 		int brduLabel = 0;
 		int thymLabel = 0;
-		int contestedLabel = 0;
 		
 		if (eduLabels[ i ] >= 0 and brduLabels[ i ] < 0){
 			eduLabel = 1;
 			brduLabel = 0;
 			thymLabel = 0;
-			contestedLabel = 0;
 		}	
 		else if (brduLabels[ i ] >= 0 and eduLabels[ i ] < 0){
 			eduLabel = 0;
 			brduLabel = 1;
 			thymLabel = 0;
-			contestedLabel = 0;
 		}
 		else if (brduLabels[ i ] < 0 and eduLabels[ i ] < 0){
 			eduLabel = 0;
 			brduLabel = 0;
 			thymLabel = 1;
-			contestedLabel = 0;
-		}
-		else if (brduLabels[ i ] >= 0 and eduLabels[ i ] >= 0){
-			eduLabel = 0;
-			brduLabel = 0;
-			thymLabel = 0;
-			contestedLabel = 1;
 		}
 
 		r.EdU_segment_label.push_back(eduLabel);
 		r.BrdU_segment_label.push_back(brduLabel);
 		r.thymidine_segment_label.push_back(thymLabel);
-		r.contested_segment_label.push_back(contestedLabel);
 	}
 }
 
@@ -900,34 +1002,254 @@ std::pair<int, int> segmentationTrim(std::vector< int > &positions, std::vector<
 }
 
 
+void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analougeIncorporation){
+
+	int filterSize = 2000;
+	
+	std::vector< double > secondAnalogueCalls;
+	if (analogueOrder == "EdU,BrdU"){
+	
+		secondAnalogueCalls = r.brduCalls;
+	}
+	else{
+	
+		secondAnalogueCalls = r.eduCalls;
+	}
+
+	//check right forks
+	for (auto s = r.rightForks.begin(); s < r.rightForks.end(); s++){
+	
+		if (s -> partners > 0){
+			s -> score = -1;
+			continue;
+		}
+	
+		int forkTipIdx = s -> rightmostIdx;
+		int forkTipCoord = s -> rightmostCoord;
+		int numPositions = r.positions.size();
+		assert( forkTipIdx < numPositions);
+		double maximumScore = -3.0;
+		bool failOnAlignment = false;
+
+		if (forkTipIdx > 500 and (numPositions - forkTipIdx) > 1000){
+		
+			for (int i = std::max(forkTipIdx - filterSize,500); i < std::min(forkTipIdx + filterSize,numPositions-500); i++){
+			
+				if ( std::abs(r.positions[i] - forkTipCoord) > filterSize) continue;
+			
+				int positiveCalls = 0;
+				int attempts = 0;
+				for (int j = std::max(i - filterSize,0); j < i; j++){
+				
+					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
+
+						if (not r.alignmentQuality[j]) failOnAlignment = true;
+				
+						if (secondAnalogueCalls[j] > 0.5){
+							positiveCalls++;
+						}
+						attempts++;
+					}
+				}
+				if (attempts < 100) continue;
+				double LHS = (double) positiveCalls / (double) attempts;
+				
+				//guard against low denominators
+				if (LHS < 0.3) continue;
+				
+				positiveCalls = 0;
+				attempts = 0;
+				for (int j = i; j < std::min(i + filterSize, numPositions); j++){
+				
+					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
+
+						if (not r.alignmentQuality[j]) failOnAlignment = true;
+				
+						if (secondAnalogueCalls[j] > 0.5){
+							positiveCalls++;
+						}
+						attempts++;
+					}
+				}
+				if (attempts < 100) continue;
+				double RHS = (double) positiveCalls / (double) attempts;
+			
+				double score;
+				if (LHS - RHS > 0.){
+					score = (LHS-RHS)/LHS;
+					score = 1.55*log(1+exp(3.*(score-1))) - 1.55*log(1+exp(3.*(-1)));
+				}
+				else{
+					score = -2.0;
+				}
+				
+				r.stallScore[i] = score;
+				if (score > maximumScore){
+					maximumScore = score;
+				}
+			}
+		}
+
+		if (failOnAlignment){
+			s -> score = -4.0;
+			continue;
+		}
+
+		s -> score = maximumScore;
+	}
+	
+	//check left forks
+	for (auto s = r.leftForks.begin(); s < r.leftForks.end(); s++){
+	
+		if (s -> partners > 0){
+			s -> score = -1;
+			continue;
+		}
+	
+		int forkTipIdx = s -> leftmostIdx;
+		int forkTipCoord = s -> leftmostCoord;
+		int numPositions = r.positions.size();
+		assert( forkTipIdx < numPositions);
+		double maximumScore = -3.0;
+		bool failOnAlignment = false;
+
+		if (forkTipIdx > 500 and (numPositions - forkTipIdx) > 1000){
+		
+			for (int i = std::max(forkTipIdx - filterSize, 500); i < std::min(forkTipIdx + filterSize, numPositions - 500); i++){
+			
+				if ( std::abs(r.positions[i] - forkTipCoord) > filterSize) continue;
+			
+				int positiveCalls = 0;
+				int attempts = 0;
+				for (int j = std::max(i - filterSize,0); j < i; j++){
+				
+					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
+
+						if (not r.alignmentQuality[j]) failOnAlignment = true;
+					
+						if (secondAnalogueCalls[j] > 0.5){
+							positiveCalls++;
+						}
+						attempts++;
+					}
+				}
+				if (attempts < 100) continue;
+				
+				double LHS = (double) positiveCalls / (double) attempts;
+				
+				positiveCalls = 0;
+				attempts = 0;
+				for (int j = i; j < std::min(i + filterSize, numPositions); j++){
+				
+					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
+
+						if (not r.alignmentQuality[j]) failOnAlignment = true;
+				
+						if (secondAnalogueCalls[j] > 0.5){
+							positiveCalls++;
+						}
+						attempts++;
+					}
+				}
+				if (attempts < 100) continue;
+				
+				double RHS = (double) positiveCalls / (double) attempts;
+				
+				if (RHS < 0.3) continue;
+			
+				double score;
+				if (RHS - LHS > 0.){
+					score = (RHS-LHS)/RHS;
+					score = 1.55*log(1+exp(3.*(score-1))) - 1.55*log(1+exp(3.*(-1)));
+				}
+				else{
+					score = -2.0;
+				}
+				r.stallScore[i] = score;
+				if (score > maximumScore){
+					maximumScore = score;
+				}
+			}
+		}
+
+		if (failOnAlignment){
+			s -> score = -4.0;
+			continue;
+		}
+
+		s -> score = maximumScore;
+	}
+}
+
+
 void emptyBuffer(std::vector< DetectedRead > &buffer, forkSenseArgs args, fs_fileManager &fm, KMeansResult analogueIncorporation){
 
 	#pragma omp parallel for schedule(dynamic) shared(args, analogueIncorporation) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
-		runDBSCAN(*b,analogueIncorporation);
+		runDBSCAN(*b,analogueIncorporation, args.analogueOrder);
 		callSegmentation(*b);
 		
-		std::vector<int> eduSegment_output( (b -> positions).size(), 0);
-		std::vector<int> brduSegment_output( (b -> positions).size(), 0);
-		
-		//fix the analogue segment indices 
-		for (auto s = (*b).EdU_segment.begin(); s < (*b).EdU_segment.end(); s++){
-		
-			for (int i = (*s).leftmostIdx; i <= (*s).rightmostIdx; i++) eduSegment_output[i] = 1;
-		}
-		for (auto s = (*b).BrdU_segment.begin(); s < (*b).BrdU_segment.end(); s++){
-		
-			for (int i = (*s).leftmostIdx; i <= (*s).rightmostIdx; i++) brduSegment_output[i] = 1;
-		}
-		
-		std::string termOutput, originOutput, leftForkOutput, rightForkOutput, BrdUOutput, EdUOutput;
+		std::string termOutput, originOutput, leftForkOutput, rightForkOutput, leftForkOutput_signatures, rightForkOutput_signatures, BrdUOutput, EdUOutput;
+		bool segmentToForks = false;
 
 		if (args.markOrigins or args.markTerms or args.markForks){
 
-			std::pair<std::string,std::string> forkOutputPair = callForks(*b, args.analogueOrder);
-			leftForkOutput = forkOutputPair.first;
-			rightForkOutput = forkOutputPair.second;
+			callForks(*b, args.analogueOrder);
+			callStalls(*b, args.analogueOrder, analogueIncorporation);
+			
+			for (auto lf = (*b).leftForks.begin(); lf < (*b).leftForks.end(); lf++){
+			
+				leftForkOutput += (*b).chromosome + " " 
+				               + std::to_string(lf -> leftmostCoord) + " " 
+				               + std::to_string(lf -> rightmostCoord) + " " 
+				               + (*b).readID.substr(1) + " "
+				               + std::to_string( (*b).mappingLower ) + " "
+				               + std::to_string( (*b).mappingUpper ) + " "
+				               + (*b).strand + " "
+				               + std::to_string(lf -> score) + "\n"; 
+			}
+			
+			for (auto rf = (*b).rightForks.begin(); rf < (*b).rightForks.end(); rf++){
+			
+				rightForkOutput += (*b).chromosome + " " 
+				               + std::to_string(rf -> leftmostCoord) + " " 
+				               + std::to_string(rf -> rightmostCoord) + " " 
+				               + (*b).readID.substr(1) + " "
+				               + std::to_string( (*b).mappingLower ) + " "
+				               + std::to_string( (*b).mappingUpper ) + " "
+				               + (*b).strand + " "
+				               + std::to_string(rf -> score) + "\n"; 
+			}
+			
+			if (args.makeSignatures){
+			
+				for (auto lf = (*b).leftForks.begin(); lf < (*b).leftForks.end(); lf++){
+				
+					leftForkOutput_signatures += (*b).chromosome + " " 
+						       + std::to_string(lf -> leftmostCoord) + " " 
+						       + std::to_string(lf -> rightmostCoord) + " " 
+						       + (*b).readID.substr(1) + " "
+						       + std::to_string( (*b).mappingLower ) + " "
+						       + std::to_string( (*b).mappingUpper ) + " "
+						       + (*b).strand + " ";
+					for (auto s = (lf -> stress_signature).begin(); s < (lf -> stress_signature).end(); s++) leftForkOutput_signatures += std::to_string(*s) + " ";
+					leftForkOutput_signatures += std::to_string(lf -> score) + "\n"; 
+				}
+				
+				for (auto rf = (*b).rightForks.begin(); rf < (*b).rightForks.end(); rf++){
+				
+					rightForkOutput_signatures += (*b).chromosome + " " 
+						       + std::to_string(rf -> leftmostCoord) + " " 
+						       + std::to_string(rf -> rightmostCoord) + " " 
+						       + (*b).readID.substr(1) + " "
+						       + std::to_string( (*b).mappingLower ) + " "
+						       + std::to_string( (*b).mappingUpper ) + " "
+						       + (*b).strand + " ";
+					for (auto s = (rf -> stress_signature).begin(); s < (rf -> stress_signature).end(); s++) rightForkOutput_signatures += std::to_string(*s) + " ";
+					rightForkOutput_signatures += std::to_string(rf -> score) + "\n"; 
+				}			
+			}
 
 			if (args.markOrigins){
 
@@ -937,12 +1259,30 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, forkSenseArgs args, fs_fil
 
 				termOutput = callTerminations(*b,args);
 			}
+			segmentToForks = true;
 		}
+		
 		if (args.markAnalogues){
 
-			std::pair<std::string,std::string> analogueOutputPair = writeAnalogueRegions(*b);
+			std::pair<std::string,std::string> analogueOutputPair = writeAnalogueRegions(*b, segmentToForks);
 			BrdUOutput = analogueOutputPair.first;
 			EdUOutput = analogueOutputPair.second;
+		}
+		
+		//fix the analogue segment indices
+		std::vector<int> eduSegment_output( (b -> positions).size(), 0);
+		std::vector<int> brduSegment_output( (b -> positions).size(), 0);
+		for (auto s = (*b).EdU_segment.begin(); s < (*b).EdU_segment.end(); s++){
+		
+			if ( (*s).partners == 0 ) continue;
+		
+			for (int i = (*s).leftmostIdx; i <= (*s).rightmostIdx; i++) eduSegment_output[i] = 1;
+		}
+		for (auto s = (*b).BrdU_segment.begin(); s < (*b).BrdU_segment.end(); s++){
+		
+			if ( (*s).partners == 0 ) continue;
+		
+			for (int i = (*s).leftmostIdx; i <= (*s).rightmostIdx; i++) brduSegment_output[i] = 1;
 		}
 		
 		//only output segmentation on non-trivial reads that have at least one analogue segment called on them
@@ -960,7 +1300,7 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, forkSenseArgs args, fs_fil
 
 		#pragma omp critical
 		{
-			fm.writeOutput(readOutput, termOutput, originOutput, leftForkOutput, rightForkOutput, BrdUOutput, EdUOutput);
+			fm.writeOutput(readOutput, termOutput, originOutput, leftForkOutput, rightForkOutput, leftForkOutput_signatures, rightForkOutput_signatures, BrdUOutput, EdUOutput);
 		}
 	}
 	buffer.clear();
@@ -1016,11 +1356,15 @@ KMeansResult twoMeans_fs( std::vector< double > &observations ){
 		iter++;
 	}while (iter < maxIter and (std::abs(C1_old - C1_new)>tol or std::abs(C2_old - C2_new)>tol));
 	
-	//compute standard deviations
+	//calculate lower bounds from K-means segmentation
+	auto C1_lowerBound = std::min_element( C1_points_old.begin(), C1_points_old.end() );
+	auto C2_lowerBound = std::min_element( C2_points_old.begin(), C2_points_old.end() );
+
+	//more conservative option - lower bound is mean - 1 stdv
 	double C1_stdv = vectorStdv( C1_points_old, C1_new );
 	double C2_stdv = vectorStdv( C2_points_old, C2_new );
 	
-	KMeansResult out = {C1_new, C1_stdv, C2_new, C2_stdv};
+	KMeansResult out = {C1_new, *C1_lowerBound, C1_stdv, C2_new, *C2_lowerBound, C2_stdv};
 
 	return out;
 }
@@ -1130,14 +1474,17 @@ KMeansResult estimateAnalogueIncorporation(std::string detectFilename, int readC
 	
 	double BrdU_p;
 	double BrdU_stdv;
+	double BrdU_lowerBound;
 	
 	if (BrdU_KMeans.centroid_1 > BrdU_KMeans.centroid_2){
 		BrdU_p = BrdU_KMeans.centroid_1;
 		BrdU_stdv = BrdU_KMeans.centroid_1_stdv;
+		BrdU_lowerBound = BrdU_KMeans.centroid_1_lowerBound;
 	}
 	else{
 		BrdU_p = BrdU_KMeans.centroid_2;
-		BrdU_stdv = BrdU_KMeans.centroid_2_stdv;	
+		BrdU_stdv = BrdU_KMeans.centroid_2_stdv;
+		BrdU_lowerBound = BrdU_KMeans.centroid_2_lowerBound;	
 	}
 	
 	
@@ -1145,24 +1492,27 @@ KMeansResult estimateAnalogueIncorporation(std::string detectFilename, int readC
 	
 	double EdU_p;
 	double EdU_stdv;
+	double EdU_lowerBound;
 	
 	if (EdU_KMeans.centroid_1 > EdU_KMeans.centroid_2){
 		EdU_p = EdU_KMeans.centroid_1;
 		EdU_stdv = EdU_KMeans.centroid_1_stdv;
+		EdU_lowerBound = EdU_KMeans.centroid_1_lowerBound;
 	}
 	else{
 		EdU_p = EdU_KMeans.centroid_2;
-		EdU_stdv = EdU_KMeans.centroid_2_stdv;	
+		EdU_stdv = EdU_KMeans.centroid_2_stdv;
+		EdU_lowerBound = EdU_KMeans.centroid_2_lowerBound;	
 	}
 
 	std::cerr << "Estimated fraction of BrdU substitution in BrdU-positive regions: " << BrdU_p << std::endl;
-	std::cerr << "Estimated BrdU substitution stdv in BrdU-positive regions: " << BrdU_stdv << std::endl;
+	std::cerr << "Estimated BrdU substitution lower bound in BrdU-positive regions: " << BrdU_lowerBound << std::endl;
 	std::cerr << "Estimated fraction of EdU substitution in EdU-positive regions: " << EdU_p << std::endl;
-	std::cerr << "Estimated EdU substitution stdv in EdU-positive regions: " << EdU_stdv << std::endl;
+	std::cerr << "Estimated EdU substitution lower bound in EdU-positive regions: " << EdU_lowerBound << std::endl;
 
 	inFile.close();
 	
-	KMeansResult out = {BrdU_p, BrdU_stdv, EdU_p, EdU_stdv};
+	KMeansResult out = {BrdU_p, BrdU_lowerBound, BrdU_stdv, EdU_p, EdU_lowerBound, EdU_stdv};
 	
 	return out;
 }
@@ -1241,16 +1591,13 @@ int sense_main( int argc, char** argv ){
 			assert(d.mappingUpper > d.mappingLower);
 			readBuffer.push_back(d);
 		}
-		else if ( line.substr(0,1) == "%" ){
-
-			continue; //from the old version where we included a cigar string - take this out in a later version
-		}
 		else{
 
 			std::string column;
 			std::stringstream ssLine(line);
 			int position = -1, cIndex = 0;
 			AnalogueScore B, E;
+			bool qualityOK = true;
 			while ( std::getline( ssLine, column, '\t' ) ){
 
 				if ( cIndex == 0 ){
@@ -1265,9 +1612,14 @@ int sense_main( int argc, char** argv ){
 
 					B.set(std::stof(column));
 				}
+				else if ( cIndex == 3 ){
+					assert(column == "*");
+					qualityOK = false;
+				}
 				cIndex++;
 			}
 
+			readBuffer.back().alignmentQuality.push_back(qualityOK);
 			readBuffer.back().positions.push_back(position);
 			readBuffer.back().brduCalls.push_back(B.get());
 			readBuffer.back().eduCalls.push_back(E.get());

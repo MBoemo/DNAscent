@@ -1357,10 +1357,11 @@ std::string eventalign_train( read &r,
 
 
 std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &r,
-            unsigned int totalWindowLength,
-			double signalDilation ){
+							  	  unsigned int totalWindowLength,
+							  	  double signalDilation ){
 
-	bool useRaw = true;
+	//bool useRaw = true;
+	bool useRaw = false;
 
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::string strand;
@@ -1463,6 +1464,12 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			/*stop once we get to the end of the window */
 			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - 5] ) break;
 		}
+		
+		//flag large insertions
+		int querySpan = (r.refToQuery)[posOnRef + windowLength] - (r.refToQuery)[posOnRef];
+		assert(querySpan >= 0);
+		int referenceSpan = windowLength;
+		int indelScore = querySpan - referenceSpan;
 
 		//pass on this window if we have a deletion
 		//TODO: make sure this does actually catch deletion cases properly
@@ -1506,6 +1513,12 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			if (label != "D") evIdx++; //silent states don't emit an event
 		}
 
+		int numInsertions = 0;
+		for (size_t i = 0; i < stateLabels.size(); i++){
+			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
+			if (label == "I") numInsertions++;
+		}
+
 		//do a second pass to print the alignment
 		evIdx = 0;
 		for (size_t i = 0; i < stateLabels.size(); i++){
@@ -1540,11 +1553,11 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 					unsigned int globalEvIdx = eventIndices[evIdx];
 					for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
 
-						ar -> addEvent(sixMerStrand, evPos, (r.raw[raw_i]- r.scalings.shift) / r.scalings.scale, 0.);
+						ar -> addEvent(sixMerStrand, evPos, (r.raw[raw_i]- r.scalings.shift) / r.scalings.scale, 0.,indelScore);
 					}
 				}
 				else{
-					ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
+					ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength,indelScore);
 				}
 			}
 			evIdx ++;
@@ -1602,6 +1615,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			}
 		}
 
+
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, windowLength);
 
 		std::reverse(readSnippet.begin(), readSnippet.end());
@@ -1650,6 +1664,12 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			/*stop once we get to the end of the window */
 			if ( (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef - windowLength] ) break;
 		}
+		
+		//flag large insertions
+		int querySpan = (r.refToQuery)[posOnRef] - (r.refToQuery)[posOnRef - windowLength];
+		assert(querySpan >= 0);
+		int referenceSpan = windowLength;
+		int indelScore = querySpan - referenceSpan;
 
 		//pass on this window if we have a deletion
 		//TODO: make sure this does actually catch deletion cases properly
@@ -1692,6 +1712,12 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 	        if (label != "D") evIdx++; //silent states don't emit an event
 		}
 
+		int numInsertions = 0;
+		for (size_t i = 0; i < stateLabels.size(); i++){
+			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
+			if (label == "I") numInsertions++;
+		}
+
 		//do a second pass to print the alignment
 		evIdx = 0;
 		for (size_t i = 0; i < stateLabels.size(); i++){
@@ -1725,11 +1751,11 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 					unsigned int globalEvIdx = eventIndices[evIdx];
 					for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
 
-						ar -> addEvent(sixMerStrand, evPos, (r.raw[raw_i]- r.scalings.shift) / r.scalings.scale, 0.);
+						ar -> addEvent(sixMerStrand, evPos, (r.raw[raw_i]- r.scalings.shift) / r.scalings.scale, 0.,indelScore);
 					}
 				}
 				else{
-					ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
+					ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength,indelScore);
 				}
 			}
 

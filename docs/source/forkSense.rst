@@ -3,7 +3,7 @@
 forkSense
 ===============================
 
-``DNAscent forkSense`` is a ``DNAscent`` subprogram that interprets the pattern of BrdU and EdU incorporation on each molecule, segmenting the read to show where leftward- or rightward-moving forks were moving during the BrdU and EdU pulses.
+``DNAscent forkSense`` is a ``DNAscent`` subprogram that provides a probability estimate at each thymidine that a leftward- or rightward-moving fork moved through that position during the BrdU and EdU pulses. It can assign a stall score to each fork and create replication stress signatures.
 
 Usage
 -----
@@ -21,10 +21,11 @@ Usage
         --markAnalogues           writes analogue incorporation locations to a bed file (default: off),
         --markOrigins             writes replication origin locations to a bed file (default: off),
         --markTerminations        writes replication termination locations to a bed file (default: off),
-        --markForks               writes replication fork locations to a bed file (default: off).
+        --markForks               writes replication fork locations to a bed file (default: off),
+        --makeSignatures          writes replication stress signatures to a bed files (default: off).
 
 
-The required inputs of ``DNAscent forkSense`` are the output file produced by ``DNAscent detect``, a new output file name for ``DNAscent forkSense`` to write on, and the order in which the analogues were pulsed.  In the example command above, the ``--order`` flag indicates that EdU was pulsed first, and BrdU was pulsed second.  The order of the pulses is important for determining fork direction and differentiating between origins and termination sites, but no information about the pulse length is needed.  Note that the detect file must have been produced using the >v3.0.0 ResNet algorithm; ``DNAscent forkSense`` is not compatible with legacy HMM-based detection. Note further that >v3.0.0 ``DNAscent forkSense`` is not back compatible with the previous BrdU-only protocol, as it relies on the incorporation of both BrdU and EdU to determine fork direction. Users with data from a BrdU-only pulse-chase protocol should use DNAscent v2.0.2.
+The only required inputs of ``DNAscent forkSense`` is the output file produced by ``DNAscent detect`` and the order in which the analogues were pulsed.  In the example command above, the ``--order`` flag indicates that EdU was pulsed first, and BrdU was pulsed second.  No information about the pulse length is needed.  Note that the detect file must have been produced using the ResNet algorithm from DNAscent v3.0 or later; ``DNAscent forkSense`` is not compatible with legacy HMM-based detection or BrdU-only detection.
 
 
 Output
@@ -42,7 +43,7 @@ Main Output File
    #Compute CPU
    #SystemStartTime 10/06/2022 13:04:33
    #Software /path/to/DNAscent
-   #Version 3.0.0
+   #Version 3.1.2
    #Commit b9598a9e5bfa5f8314f92ba0f4fed39be1aee0be
    #EstimatedRegionBrdU 0.559506
    #EstimatedRegionEdU 0.202767
@@ -70,7 +71,7 @@ The following example output shows an example:
    1089895 0       0
    1089899 0       0
 
-Only reads that have at least one BrdU-positive or EdU-positive segment are written to this file. Reads with no base analogue segments called on them are omitted from this file, as 0's everywhere across these reads is implied. Note that the format of this file has changed substantially from DNAscent v2.*. This design decision stems from a shift in the algorithm used, as well as the desire to avoid using excess disk space with redundant information.
+Only reads that have at least one BrdU-positive or EdU-positive segment are written to this file. Reads with no base analogue segments called on them are omitted from this file, as 0's everywhere across these reads is implied. Note that the format of this file has changed substantially from DNAscent v2. This design decision stems from a shift in the algorithm used, as well as the desire to avoid using excess disk space with redundant information.
 
 
 Bed Files
@@ -78,15 +79,58 @@ Bed Files
 
 If the ``--markOrigins`` flag is passed, ``DNAscent forkSense`` will write the genomic region between matched leftward- and rightward-moving forks to a bed file called ``origins_DNAscent_forkSense.bed`` in the working directory.  Likewise, if the ``--markTerminations`` flag is passed, the genomic region between leftward- and rightward-moving forks moving towards each other will be recorded in a bed file called ``terminations_DNAscent_forkSense.bed``. The flag ``--markAnalogues`` will create two separate bed files: one containing the genomic location of BrdU-positive segments, and another containing the genomic location of EdU-positive segments.
 
-If the ``--markForks`` flag is passed, two bed files will be created in the working directory. The genomic location of leftward- and rightward-moving forks will be written to separate bed files called ``leftForks_DNAscent_forkSense.bed`` and ``rightForks_DNAscent_forkSense.bed``.
+If the ``--markForks flag`` is passed, two bed files will be created in the working directory. The genomic location of leftward- and rightward-moving forks will be written to separate bed files called ``leftForks_DNAscent_forkSense.bed`` and ``rightForks_DNAscent_forkSense.bed``.
+
+
 
 All output bed files have the following space-separated columns:
 
 * chromosome name,
 * 5' boundary of the origin (or terminiation site, or fork),
 * 3' boundary of the origin (or terminiation site, or fork),
-* read header of the read that the call came from (similar to those in the output file of ``DNAscent detect``).
+* readID,
+* 5' boundary of the mapped read,
+* 3' boundary of the mapped read,
+* strand mapped to (fwd or rev),
+* fork stall score (for forks only; see below).
 
-For origins and termination sites, the "resolution" of the calls (i.e., the third column minus the second column) will depend on your experimental setup.  In synchronised early S-phase cells, the genomic distance between the 5' and 3' boundaries likely to be small for origins and large for termination sites, as the leftward- and rightward-moving forks should be together near the origin.  In asynchronous or mid/late S-phase cells, the origin calls may appear to be a "lower'' resolution (i.e., larger differences between the 5' and 3' boundaries) as the forks from a single origin will have travelled some distance before the pulses.  When both forks are together at an origin, the origin bed file will record the midpoint of the analogue segment for the analogue that was pulsed first.
+For origins and termination sites, the “resolution” of the calls (i.e., the third column minus the second column) will depend on your experimental setup. In synchronised early S-phase cells, the genomic distance between the 5’ and 3’ boundaries likely to be small for origins and large for termination sites, as the leftward- and rightward-moving forks should be together near the origin. In asynchronous or mid/late S-phase cells, the origin calls may appear to be a “lower’’ resolution (i.e., larger differences between the 5’ and 3’ boundaries) as the forks from a single origin will have travelled some distance before the pulses. When both forks are together at an origin, the origin bed file will record the midpoint of the analogue segment for the analogue that was pulsed first.
 
-The bed files created by ``DNAscent forkSense`` can be opened directly with a genome browser.
+Fork Stalling and Pausing
+^^^^^^^^^^^^^^^^^^^^^^^^^
+As of v3.1.2, DNAscent will assign a stall score to each called fork. These scores range from 0 (most likely unimpeded fork movement) to 1 (most likely a stall or pause). The stall score of each fork is in the last (or eigth) column of the bedfile created when the ``--markForks`` is specified. No additional input is needed; if ``--markForks`` is specified, then the fork bed files will contain stall scores. There are, however, several instances where DNAscent will decline to make a call for a fork. These include cases where DNAscent cannot see the end of the fork (e.g., if the fork runs off the read or comes together with another fork in a termination site) or if there is a nearby indel in the genomic alignment in order to avoid false positives and negatives. When this occurs, DNAscent will print a negative integer instead of a stall score clarifying why no stress call was made for this particular fork. The reason corresponding to each negative integer value is detailed in the table below.
+
++--------+-----------------------------------+
+| Code   | Description                       |
++--------+-----------------------------------+
+| -1     | Fork ends in termination site     |
++--------+-----------------------------------+
+| -2     | Suspected segmentation error      |
++--------+-----------------------------------+
+| -3     | Fork runs off end of read         |
++--------+-----------------------------------+
+| -4     | Proximal indel > 100 bp in length |
++--------+-----------------------------------+
+
+Stress Signatures
+^^^^^^^^^^^^^^^^^
+In addition to a stall score assigned to each fork, ``DNAscent forkSense`` can optionally assign an 8-dimensional stress signature to each called fork. If the ``--makeSignatures`` option is specified, two additional bed files ``leftForks_DNAscent_forkSense_stressSignatures.bed`` and ``rightForks_DNAscent_forkSense_stressSignatures.bed`` will be created in the working directory. The format is largely similar to the fork bed files above, but each line also includes an 8-dimensional stress signature for the fork call in the eight rightmost space-separated columns. From left to right, the columns are:
+
+* chromosome name,
+* 5' boundary of the origin (or terminiation site, or fork),
+* 3' boundary of the origin (or terminiation site, or fork),
+* readID,
+* 5' boundary of the mapped read,
+* 3' boundary of the mapped read,
+* strand mapped to (fwd or rev),
+* fork track length (in bp),
+* length of the first pulsed analogue segment (in bp),
+* length of the second pulsed analogue segment (in bp),
+* frequency of second pulsed analogue calls in the first pulsed analogue segment,
+* frequency of first pulsed analogue calls in the first pulsed analogue segment,
+* frequency of first pulsed analogue calls in the second pulsed analogue segment,
+* frequency of second pulsed analogue calls in the second pulsed analogue segment,
+* stall score.
+
+
+

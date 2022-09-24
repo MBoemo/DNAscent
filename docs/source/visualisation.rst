@@ -3,7 +3,7 @@
 Visualisation
 ===============================
 
-DNAscent supports multilevel analysis: We want users to be able to see the fork calls made by ``DNAscent forkSense`` and visualise them alongside the individual base-pair resolution BrdU and EdU calls by ``DNAscent detect`` in order to see why these calls are being made.  To that end, we include a visualisation utility in ``DNAscent/utils`` that formats the output of DNAscent executables (detect and forkSense) into bedgraphs that can be visualised with IGV or the UCSC Genome Browser. You can supply this utility with the output from one or two of these executables.  If more than one is specified, the utility organises the bedgraphs so that the tracks for each read are grouped together.  
+DNAscent supports multilevel analysis: We want users to be able to see the fork calls made by ``DNAscent forkSense`` and visualise them alongside individual base-pair resolution BrdU calls by ``DNAscent detect`` in order to see why these calls are being made.  To that end, we include a visualisation utility in ``DNAscent/utils`` that formats the output of DNAscent executables (detect and forkSense) into bedgraphs that can be visualised with IGV or the UCSC Genome Browser. You can supply this utility with the output from one or two of these executables.  If more than one is specified, the utility organises the bedgraphs so that the tracks for each read are grouped together.  
 
 Usage
 -----

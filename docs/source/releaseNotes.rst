@@ -3,6 +3,15 @@
 Release Notes
 ===============================
 
+v3.1.2
+-----------------
+
+* ``DNAscent forkSense`` now assigns a stall score to each called fork,
+* ``DNAscent forkSense`` can assign a replication stress signature to each called fork,
+* ``DNAscent detect`` no longer outputs the reference 6mer corresponding to each thymidine position in order to reduce output file size,
+* improvements to fork calling and segmentation,
+* Released with `Jones MJK,  Rai SK,  Pfuderer PL, Bonfim-Melo A, Pagan JK, Clarke PR, McClelland SE, Boemo MA. A high-resolution, nanopore-based artificial intelligence assay for DNA replication stress in human cancer cells. bioRxiv <https://doi.org/10.1101/2022.09.22.509021>`_.
+
 v3.0.2
 -----------------
 

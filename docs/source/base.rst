@@ -22,7 +22,7 @@ DNAscent
 Overview
 --------
 
-DNAscent is software designed to detect the modified bases BrdU and EdU in Oxford Nanopore reads.  In an experimental setup where BrdU and EdU are incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis.  
+DNAscent is software designed to detect the modified bases BrdU and EdU in Oxford Nanopore reads.  In an experimental setup where BrdU and EdU are incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis.  DNAscent can also call the genomic positions of stalled and stressed replication forks for use as a replication stress assay.
 
 At present, the only Oxford Nanopore flow cells supported by DNAscent are R9.4.1. The Flongle, MinION, GridION, and PromethION platforms are all supported.
 
@@ -32,7 +32,9 @@ DNAscent is under active development by the `Boemo Group <https://www.boemogroup
 Publications
 ------------
 
-If you use DNAscent for your research, please cite the following publications:
+If you use DNAscent for your research, please cite our publications:
+
+Jones MJK,  Rai SK,  Pfuderer PL, Bonfim-Melo A, Pagan JK, Clarke PR, McClelland SE, Boemo MA. A high-resolution, nanopore-based artificial intelligence assay for DNA replication stress in human cancer cells. [`bioRxiv <https://doi.org/10.1101/2022.09.22.509021>`_]
 
 Totanes FIG,  Gockel J,  Chapman SE, Bartfai R, Boemo MA, Merrick CJ. Replication origin mapping in the malaria parasite Plasmodium falciparum. [`bioRxiv <https://doi.org/10.1101/2022.07.27.501677>`_]
 

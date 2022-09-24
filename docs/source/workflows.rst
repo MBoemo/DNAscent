@@ -18,22 +18,21 @@ Download and compile DNAscent:
 
    git clone --recursive https://github.com/MBoemo/DNAscent.git
    cd DNAscent
-   git checkout 3.0.2
+   git checkout 3.1.2
    make
+   cd ..
 
 Concatenate the fastq files from Guppy:
 
 .. code-block:: console
 
-   cat /path/to/GuppyOutDirectory/pass/*.fastq /path/to/GuppyOutDirectory/fail/*.fastq > reads.fastq
-   
-Note that we recommend running DNAscent on reads that have passed and failed Guppy's QCs, hence concatenating them into a single fastq file above. Analogue-substituted reads (particularly if they are heavily substituted) are predisposed to failing Guppy's QCs, so only running DNAscent on Guppy's passed reads can disproportionately throw out the reads you are most interested in. DNAscent will do its own analogue-aware QCs at the ``DNAscent detect`` stage. 
+   cat /path/to/GuppyOutDirectory/*.fastq > reads.fastq
 
 Align the reads with `minimap2 <https://github.com/lh3/minimap2>`_ and sort with `samtools <http://www.htslib.org/>`_:
 
 .. code-block:: console
 
-   minimap2 -L -ax map-ont -o alignment.sam /path/to/reference.fasta reads.fastq
+   minimap2 -ax map-ont -o alignment.sam /path/to/reference.fasta reads.fastq
    samtools view -Sb -o alignment.bam alignment.sam
    samtools sort alignment.bam alignment.sorted
    samtools index alignment.sorted.bam
@@ -85,7 +84,7 @@ From this, we can see that the GPU's device ID is 0 (just to the left of Tesla) 
 
 Note that we're assuming the CUDA libraries for the GPU have been set up properly (see :ref:`installation`). If these libraries can't be accessed, DNAscent will splash a warning saying so and default back to using CPUs.
 
-When ``DNAscent detect`` is finished, there will be a file called ``output.detect`` in the current directory.  At this point, we can make bedgraphs out of the ``DNAscent detect`` output (see :ref:`visualisation`) which can also be loaded into IGV or the UCSC Genome Browser.
+When ``DNAscent detect`` is finished, it will should put a file called ``output.detect`` in the current directory.  At this point, we can make bedgraphs out of the ``DNAscent detect`` output (see :ref:`visualisation`) which can also be loaded into IGV or the UCSC Genome Browser.
 
 Lastly, we can run ``DNAscent forkSense`` on the output of ``DNAscent detect`` to measure replication fork movement.  Suppose that in our experimental protocol, we pulsed BrdU first followed by EdU.  Let's run it on four threads and specify that we want it to keep track of replication origins, forks, and termination sites:
 
@@ -97,7 +96,7 @@ This will make the following files:
 
 * origins_DNAscent_forkSense.bed (with our origin calls),
 * terminations_DNAscent_forkSense.bed (with our termination calls), 
-* two bed files (leftForks_DNAscent_forkSense.bed, rightForks_DNAscent_forkSense.bed) with our fork calls,
+* four bed files (leftForks_DNAscent_forkSense.bed, leftForksStressed_DNAscent_forkSense.bed, rightForks_DNAscent_forkSense.bed, rightForksStressed_DNAscent_forkSense.bed) with our fork calls,
 * output.forkSense. 
 
 We can load the bed files directly into IGV to see where origins, forks, and terminiations were called in the genome.
@@ -108,7 +107,7 @@ We can visualise (see :ref:`visualisation`) output.forkSense by turning them int
 
    python dnascent2bedgraph.py -d output.detect -f output.forkSense -o newBedgraphDirectory
 
-This will create a new directory called ``newBedgraphDirectory``.  By passing both a ``forkSense`` and ``detect`` file to dnascent2bedgraph.py, the utility will convert them both into bedgraphs and organise them so that for each read, we can see the single-nt BrdU and EdU detection output from ``DNAscent detect`` right next to the left- and rightward-moving fork probabilities from ``DNAscent forkSense``.  These bedgraphs can then be loaded into IGV or the UCSC Genome Browser. 
+This will create a new directory called ``newBedgraphDirectory``.  By passing both a ``forkSense`` and ``detect`` file to dnascent2bedgraph.py, the utility will convert them both into bedgraphs and organise them so that for each read, we can see the bp-resolution BrdU detection output from ``DNAscent detect`` right next to the left- and rightward-moving fork probabilities from ``DNAscent forkSense``.  These bedgraphs can then be loaded into IGV or the UCSC Genome Browser. 
 
 Perhaps, however, we are only interested in viewing reads with origin calls on them. In this case, we can use the bed file generated above (origins_DNAscent_forkSense.bed) to specify that we only want bedgraphs of reads with origin calls on them.
 

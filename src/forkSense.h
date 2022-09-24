@@ -23,13 +23,17 @@ struct ReadSegment{
 	int rightmostCoord = 0;
 	int rightmostIdx = 0;
 	int partners = 0;
+	double score = 0.0;
+	std::vector<double> stress_signature;
 };
 
 
 struct KMeansResult{
 	double centroid_1;
+	double centroid_1_lowerBound;
 	double centroid_1_stdv;
 	double centroid_2;
+	double centroid_2_lowerBound;
 	double centroid_2_stdv;
 };
 
@@ -42,6 +46,7 @@ struct forkSenseArgs {
 	bool markTerms = false;
 	bool markForks = false;
 	bool markAnalogues = false;
+	bool makeSignatures = false;
 	unsigned int threads = 1;
 };
 
@@ -65,10 +70,12 @@ class DetectedRead{
 
 	public:
 		std::vector< int > positions;
+		std::vector< bool > alignmentQuality;
 		std::vector< double > brduCalls, eduCalls;
+		std::map< int, double > stallScore;
 		std::string readID, chromosome, strand, header;
 		int mappingLower, mappingUpper;
-		std::vector< int > EdU_segment_label, BrdU_segment_label, thymidine_segment_label, contested_segment_label;
+		std::vector< int > EdU_segment_label, BrdU_segment_label, thymidine_segment_label;
 		std::vector<ReadSegment> EdU_segment, BrdU_segment;
 		std::vector<ReadSegment> origins, terminations, leftForks, rightForks;
 		std::vector<double> tensorInput;
@@ -84,7 +91,7 @@ class fs_fileManager{
 	protected:
 	
 		forkSenseArgs inputArgs;
-		std::ofstream outFile, originFile, termFile, leftForkFile, rightForkFile, EdUFile, BrdUFile;
+		std::ofstream outFile, originFile, termFile, leftForkFile, rightForkFile, leftSignaturesFile, rightSignaturesFile, EdUFile, BrdUFile;
 
 	public:
 	
@@ -121,6 +128,16 @@ class fs_fileManager{
 				rightForkFile << writeBedHeader(args);
 				if ( not rightForkFile.is_open() ) throw IOerror( "rightForks_DNAscent_forkSense.bed" );
 			}
+			if (args.makeSignatures){
+
+				leftSignaturesFile.open("leftForks_DNAscent_forkSense_stressSignatures.bed");
+				leftSignaturesFile << writeBedHeader(args);
+				if ( not leftSignaturesFile.is_open() ) throw IOerror( "leftForks_DNAscent_forkSense_stressSignatures.bed" );
+
+				rightSignaturesFile.open("rightForks_DNAscent_forkSense_stressSignatures.bed");
+				rightSignaturesFile << writeBedHeader(args);
+				if ( not rightSignaturesFile.is_open() ) throw IOerror( "rightForks_DNAscent_forkSense_stressSignatures.bed" );
+			}
 			if (args.markAnalogues){
 
 				BrdUFile.open("BrdU_DNAscent_forkSense.bed");
@@ -136,7 +153,9 @@ class fs_fileManager{
 				std::string &termOutput,
 				std::string &originOutput,		
 				std::string &leftForkOutput,		
-				std::string &rightForkOutput,		
+				std::string &rightForkOutput,	
+				std::string &leftSignaturesOutput,		
+				std::string &rightSignaturesOutput,		
 				std::string &BrdUOutput,		
 				std::string &EdUOutput	){
 		
@@ -145,6 +164,8 @@ class fs_fileManager{
 			if (inputArgs.markOrigins and originOutput.size() > 0) originFile << originOutput;
 			if (inputArgs.markForks and leftForkOutput.size() > 0) leftForkFile << leftForkOutput;
 			if (inputArgs.markForks and rightForkOutput.size() > 0) rightForkFile << rightForkOutput;
+			if (inputArgs.makeSignatures and leftSignaturesOutput.size() > 0) leftSignaturesFile << leftSignaturesOutput;
+			if (inputArgs.makeSignatures and rightSignaturesOutput.size() > 0) rightSignaturesFile << rightSignaturesOutput;
 			if (inputArgs.markAnalogues and BrdUOutput.size() > 0) BrdUFile << BrdUOutput;
 			if (inputArgs.markAnalogues and EdUOutput.size() > 0) EdUFile << EdUOutput;
 		}
@@ -155,6 +176,14 @@ class fs_fileManager{
 			if (inputArgs.markAnalogues){
 				BrdUFile.close();
 				EdUFile.close();
+			}
+			if (inputArgs.makeSignatures){
+				leftSignaturesFile.close();
+				rightSignaturesFile.close();			
+			}
+			if (inputArgs.markForks){
+				leftForkFile.close();
+				rightForkFile.close();			
 			}
 		}
 };

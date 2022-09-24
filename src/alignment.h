@@ -34,12 +34,14 @@ class AlignedPosition{
 		unsigned int refPos;
 		std::vector<double> events;
 		std::vector<double> lengths;
+		double eventAlignQuality;
 
 	public:
-		AlignedPosition(std::string sixMer, unsigned int refPos){
+		AlignedPosition(std::string sixMer, unsigned int refPos, int quality){
 
 			this -> sixMer = sixMer;
 			this -> refPos = refPos;
+			this -> eventAlignQuality = quality;
 		}
 		~AlignedPosition() {};
 		void addEvent(double ev, double len){
@@ -54,6 +56,10 @@ class AlignedPosition{
 		unsigned int getRefPos(void){
 
 			return refPos;
+		}
+		double getAlignmentQuality(void){
+			
+			return eventAlignQuality;
 		}
 		std::vector<float> makeFeature(void){
 
@@ -89,6 +95,7 @@ class AlignedRead{
 		std::string readID, chromosome, strand;
 		std::map<unsigned int, std::shared_ptr<AlignedPosition>> positions;
 		unsigned int mappingLower, mappingUpper;
+		std::vector<double> alignmentQualities;
 
 	public:
 		AlignedRead(std::string readID, std::string chromosome, std::string strand, unsigned int ml, unsigned int mu, unsigned int numEvents){
@@ -109,11 +116,11 @@ class AlignedRead{
 			this -> positions = ar.positions;
 		}
 		~AlignedRead(){}
-		void addEvent(std::string sixMer, unsigned int refPos, double ev, double len){
+		void addEvent(std::string sixMer, unsigned int refPos, double ev, double len, int quality){
 
 			if (positions.count(refPos) == 0){
 
-				std::shared_ptr<AlignedPosition> ap( new AlignedPosition(sixMer, refPos));
+				std::shared_ptr<AlignedPosition> ap( new AlignedPosition(sixMer, refPos, quality));
 				ap -> addEvent(ev,len);
 				positions[refPos] = ap;
 			}
@@ -175,6 +182,24 @@ class AlignedRead{
 
 				for (auto p = positions.rbegin(); p != positions.rend(); p++){
 					out.push_back(p -> first);
+				}
+			}
+			return out;
+		}
+		std::vector<int> getAlignmentQuality(void){
+
+			std::vector<int> out;
+			out.reserve(positions.size());
+			if (strand == "fwd"){
+
+				for (auto p = positions.begin(); p != positions.end(); p++){
+					out.push_back( (p -> second) -> getAlignmentQuality() );
+				}
+			}
+			else{
+
+				for (auto p = positions.rbegin(); p != positions.rend(); p++){
+					out.push_back( (p -> second) -> getAlignmentQuality() );
 				}
 			}
 			return out;

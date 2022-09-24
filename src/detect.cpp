@@ -778,6 +778,7 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 
 	//get positions on the read reference to write the output
 	std::vector<unsigned int> positions = r -> getPositions();
+	std::vector<int> alignmentQuality = r -> getAlignmentQuality();
 	std::vector<std::string> sixMers = r -> getSixMers();
 
 	size_t output_size = TF_TensorByteSize(OutputValues) / sizeof(float);
@@ -801,8 +802,8 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 			}
 
 			str_line += thisPosition + "\t" + std::to_string(output_array[i])+ "\t" + std::to_string(output_array[i-1]);
-			if (r -> getStrand() == "rev") str_line += "\t" + reverseComplement(sixMers[pos]);
-			else str_line += "\t" + sixMers[pos];
+			if (std::abs(alignmentQuality[pos]) > 100) str_line += "\t*";
+
 			lines.push_back(str_line);
 			str_line = "";
 			pos++;
