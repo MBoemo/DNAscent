@@ -42,10 +42,7 @@ struct forkSenseArgs {
 	std::string detectFilename;
 	std::string outputFilename;
 	std::string analogueOrder;
-	bool markOrigins = false;
-	bool markTerms = false;
-	bool markForks = false;
-	bool markAnalogues = false;
+	bool deprecatedMarks = false;
 	bool makeSignatures = false;
 	unsigned int threads = 1;
 };
@@ -105,29 +102,31 @@ class fs_fileManager{
 			std::string outHeader = writeForkSenseHeader(args, analogueIncorporation);
 			outFile << outHeader;
 			
-			//aux bed files
-			if (args.markTerms){
+			//bed files
+			termFile.open("terminations_DNAscent_forkSense.bed");
+			termFile << writeBedHeader(args);
+			if ( not termFile.is_open() ) throw IOerror( "terminations_DNAscent_forkSense.bed" );
 
-				termFile.open("terminations_DNAscent_forkSense.bed");
-				termFile << writeBedHeader(args);
-				if ( not termFile.is_open() ) throw IOerror( "terminations_DNAscent_forkSense.bed" );
-			}
-			if (args.markOrigins){
+			originFile.open("origins_DNAscent_forkSense.bed");
+			originFile << writeBedHeader(args);
+			if ( not originFile.is_open() ) throw IOerror( "origins_DNAscent_forkSense.bed" );
 
-				originFile.open("origins_DNAscent_forkSense.bed");
-				originFile << writeBedHeader(args);
-				if ( not originFile.is_open() ) throw IOerror( "origins_DNAscent_forkSense.bed" );
-			}
-			if (args.markForks){
+			leftForkFile.open("leftForks_DNAscent_forkSense.bed");
+			leftForkFile << writeBedHeader(args);
+			if ( not leftForkFile.is_open() ) throw IOerror( "leftForks_DNAscent_forkSense.bed" );
 
-				leftForkFile.open("leftForks_DNAscent_forkSense.bed");
-				leftForkFile << writeBedHeader(args);
-				if ( not leftForkFile.is_open() ) throw IOerror( "leftForks_DNAscent_forkSense.bed" );
+			rightForkFile.open("rightForks_DNAscent_forkSense.bed");
+			rightForkFile << writeBedHeader(args);
+			if ( not rightForkFile.is_open() ) throw IOerror( "rightForks_DNAscent_forkSense.bed" );
 
-				rightForkFile.open("rightForks_DNAscent_forkSense.bed");
-				rightForkFile << writeBedHeader(args);
-				if ( not rightForkFile.is_open() ) throw IOerror( "rightForks_DNAscent_forkSense.bed" );
-			}
+			BrdUFile.open("BrdU_DNAscent_forkSense.bed");
+			BrdUFile << writeBedHeader(args);
+			if ( not BrdUFile.is_open() ) throw IOerror( "BrdU_DNAscent_forkSense.bed" );
+
+			EdUFile.open("EdU_DNAscent_forkSense.bed");
+			EdUFile << writeBedHeader(args);
+			if ( not EdUFile.is_open() ) throw IOerror( "EdU_DNAscent_forkSense.bed" );
+
 			if (args.makeSignatures){
 
 				leftSignaturesFile.open("leftForks_DNAscent_forkSense_stressSignatures.bed");
@@ -137,16 +136,6 @@ class fs_fileManager{
 				rightSignaturesFile.open("rightForks_DNAscent_forkSense_stressSignatures.bed");
 				rightSignaturesFile << writeBedHeader(args);
 				if ( not rightSignaturesFile.is_open() ) throw IOerror( "rightForks_DNAscent_forkSense_stressSignatures.bed" );
-			}
-			if (args.markAnalogues){
-
-				BrdUFile.open("BrdU_DNAscent_forkSense.bed");
-				BrdUFile << writeBedHeader(args);
-				if ( not BrdUFile.is_open() ) throw IOerror( "BrdU_DNAscent_forkSense.bed" );
-
-				EdUFile.open("EdU_DNAscent_forkSense.bed");
-				EdUFile << writeBedHeader(args);
-				if ( not EdUFile.is_open() ) throw IOerror( "EdU_DNAscent_forkSense.bed" );
 			}
 		}
 		void writeOutput(std::string &readOutput,
@@ -160,36 +149,40 @@ class fs_fileManager{
 				std::string &EdUOutput	){
 		
 			outFile << readOutput;
-			if (inputArgs.markTerms and termOutput.size() > 0) termFile << termOutput;
-			if (inputArgs.markOrigins and originOutput.size() > 0) originFile << originOutput;
-			if (inputArgs.markForks and leftForkOutput.size() > 0) leftForkFile << leftForkOutput;
-			if (inputArgs.markForks and rightForkOutput.size() > 0) rightForkFile << rightForkOutput;
+			termFile << termOutput;
+			originFile << originOutput;
+			leftForkFile << leftForkOutput;
+			rightForkFile << rightForkOutput;
+			BrdUFile << BrdUOutput;
+			EdUFile << EdUOutput;
+
 			if (inputArgs.makeSignatures and leftSignaturesOutput.size() > 0) leftSignaturesFile << leftSignaturesOutput;
 			if (inputArgs.makeSignatures and rightSignaturesOutput.size() > 0) rightSignaturesFile << rightSignaturesOutput;
-			if (inputArgs.markAnalogues and BrdUOutput.size() > 0) BrdUFile << BrdUOutput;
-			if (inputArgs.markAnalogues and EdUOutput.size() > 0) EdUFile << EdUOutput;
+
 		}
 		void closeAll(){
 			outFile.close();
-			if (inputArgs.markTerms) termFile.close();
-			if (inputArgs.markOrigins) originFile.close();
-			if (inputArgs.markAnalogues){
-				BrdUFile.close();
-				EdUFile.close();
-			}
+			termFile.close();
+			originFile.close();
+			BrdUFile.close();
+			EdUFile.close();
+			leftForkFile.close();
+			rightForkFile.close();
+
 			if (inputArgs.makeSignatures){
 				leftSignaturesFile.close();
 				rightSignaturesFile.close();			
-			}
-			if (inputArgs.markForks){
-				leftForkFile.close();
-				rightForkFile.close();			
 			}
 		}
 };
 
 KMeansResult twoMeans_fs( std::vector< double > & );
 std::pair<int, int> segmentationTrim(std::vector< int > &, std::vector< double > &, std::vector< double > &, int , int );
+KMeansResult estimateAnalogueIncorporation(std::string , int );
+void runDBSCAN(DetectedRead &, KMeansResult, int);
+void callSegmentation(DetectedRead &, int);
+std::pair<std::string,std::string> writeAnalogueRegions(DetectedRead &, bool );
+
 
 #endif
 

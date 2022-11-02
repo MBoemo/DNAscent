@@ -20,19 +20,15 @@
 #include <stdlib.h>
 
 static const char *help=
-"forkSense: DNAscent AI executable that calls replication origins, termination sites, and fork movement.\n"
+"forkSense: DNAscent executable that calls replication origins, termination sites, fork movement, and replication stress.\n"
 "To run DNAscent forkSense, do:\n"
-"   DNAscent forkSense -d /path/to/BrdUCalls.detect -o /path/to/output.forkSense --order EdU,BrdU\n"
+"   DNAscent forkSense -d /path/to/BrdU_EdU_calls.detect -o /path/to/output.forkSense --order EdU,BrdU\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
 "  -o,--output               path to output file for forkSense,\n"
 "     --order                order in which the analogues were pulsed (EdU,BrdU or BrdU,EdU).\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default: 1 thread),\n"
-"  --markAnalogues           writes analogue incorporation locations to a bed file (default: off),\n"
-"  --markOrigins             writes replication origin locations to a bed file (default: off),\n"
-"  --markTerminations        writes replication termination locations to a bed file (default: off),\n"
-"  --markForks               writes replication fork locations to a bed file (default: off),\n"
 "  --makeSignatures          writes replication stress signatures to a bed files (default: off).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
@@ -90,22 +86,22 @@ forkSenseArgs parseSenseArguments( int argc, char** argv ){
 		}
 		else if ( flag == "--markOrigins" ){
 
-			args.markOrigins = true;
+			args.deprecatedMarks = true;
 			i+=1;
 		}
 		else if ( flag == "--markTerminations" ){
 
-			args.markTerms = true;
+			args.deprecatedMarks = true;
 			i+=1;
 		}
 		else if ( flag == "--markForks" ){
 
-			args.markForks = true;
+			args.deprecatedMarks = true;
 			i+=1;
 		}
 		else if ( flag == "--markAnalogues" ){
 
-			args.markAnalogues = true;
+			args.deprecatedMarks = true;
 			i+=1;
 		}
 		else if ( flag == "--makeSignatures" ){
@@ -128,6 +124,11 @@ forkSenseArgs parseSenseArguments( int argc, char** argv ){
 		exit(EXIT_FAILURE);
 	}
 
+	if (args.deprecatedMarks){
+		std::cerr << "Note: The markOrigins, markTerminations, markForks, and markAnalogues options are deprecated." << std::endl;
+		std::cerr << "These options are all now on by default." << std::endl;
+	}
+
 	return args;
 }
 
@@ -144,6 +145,7 @@ std::string writeForkSenseHeader(forkSenseArgs &args, KMeansResult analougeIncor
 
 	std::string out;
 	out += "#DetectFile " + args.detectFilename + "\n";
+	out += "#AnalogueOrder " + args.analogueOrder + "\n";
 	out += "#Threads " + std::to_string(args.threads) + "\n";
 	out += "#Compute " + compute + "\n";
 	out += "#SystemStartTime " + str + "\n";
@@ -251,9 +253,7 @@ std::vector<ReadSegment> stitchSegmentation(std::vector<ReadSegment> &primarySeg
 }
 
 
-void callSegmentation(DetectedRead &r){
-
-	int minLength = 1000;
+void callSegmentation(DetectedRead &r, int minLength){
 
 	bool inSegment = false;
 	int startCoord = -1, endCoord = -1;
@@ -891,23 +891,10 @@ std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double
 }
 
 
-void runDBSCAN(DetectedRead &r, KMeansResult analougeIncorporation, std::string analogueOrder){
+void runDBSCAN(DetectedRead &r, KMeansResult analougeIncorporation, int epsilon){
 	
-	int epsilon = 1000;
-	
-	double minBrdUDensity, minEdUDensity;
-	
-	if (analogueOrder == "EdU,BrdU"){
-
-		minBrdUDensity = std::max(0.1, analougeIncorporation.centroid_1_lowerBound);
-		minEdUDensity = std::max(0.1, analougeIncorporation.centroid_2_lowerBound);
-	}
-	else{
-
-		minBrdUDensity = std::max(0.1, analougeIncorporation.centroid_1_lowerBound);
-		minEdUDensity = std::max(0.1, analougeIncorporation.centroid_2_lowerBound);
-	}
-	
+	double minBrdUDensity = std::max(0.1, analougeIncorporation.centroid_1_lowerBound);
+	double minEdUDensity = std::max(0.1, analougeIncorporation.centroid_2_lowerBound);
 	
 	std::map<int,int> eduLabels = DBSCAN_mod( r.positions, r.eduCalls, r.brduCalls, epsilon, minEdUDensity );
 	std::map<int,int> brduLabels = DBSCAN_mod( r.positions, r.brduCalls, r.eduCalls, epsilon, minBrdUDensity );
@@ -1187,87 +1174,76 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, forkSenseArgs args, fs_fil
 	#pragma omp parallel for schedule(dynamic) shared(args, analogueIncorporation) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
-		runDBSCAN(*b,analogueIncorporation, args.analogueOrder);
-		callSegmentation(*b);
+		int minimumLen = 1000;
+		runDBSCAN(*b, analogueIncorporation, minimumLen);
+		callSegmentation(*b, minimumLen);
 		
 		std::string termOutput, originOutput, leftForkOutput, rightForkOutput, leftForkOutput_signatures, rightForkOutput_signatures, BrdUOutput, EdUOutput;
 		bool segmentToForks = false;
 
-		if (args.markOrigins or args.markTerms or args.markForks){
+		callForks(*b, args.analogueOrder);
+		callStalls(*b, args.analogueOrder, analogueIncorporation);
 
-			callForks(*b, args.analogueOrder);
-			callStalls(*b, args.analogueOrder, analogueIncorporation);
-			
+		for (auto lf = (*b).leftForks.begin(); lf < (*b).leftForks.end(); lf++){
+
+			leftForkOutput += (*b).chromosome + " "
+						   + std::to_string(lf -> leftmostCoord) + " "
+						   + std::to_string(lf -> rightmostCoord) + " "
+						   + (*b).readID.substr(1) + " "
+						   + std::to_string( (*b).mappingLower ) + " "
+						   + std::to_string( (*b).mappingUpper ) + " "
+						   + (*b).strand + " "
+						   + std::to_string(lf -> score) + "\n";
+		}
+
+		for (auto rf = (*b).rightForks.begin(); rf < (*b).rightForks.end(); rf++){
+
+			rightForkOutput += (*b).chromosome + " "
+						   + std::to_string(rf -> leftmostCoord) + " "
+						   + std::to_string(rf -> rightmostCoord) + " "
+						   + (*b).readID.substr(1) + " "
+						   + std::to_string( (*b).mappingLower ) + " "
+						   + std::to_string( (*b).mappingUpper ) + " "
+						   + (*b).strand + " "
+						   + std::to_string(rf -> score) + "\n";
+		}
+
+		if (args.makeSignatures){
+
 			for (auto lf = (*b).leftForks.begin(); lf < (*b).leftForks.end(); lf++){
 			
-				leftForkOutput += (*b).chromosome + " " 
-				               + std::to_string(lf -> leftmostCoord) + " " 
-				               + std::to_string(lf -> rightmostCoord) + " " 
-				               + (*b).readID.substr(1) + " "
-				               + std::to_string( (*b).mappingLower ) + " "
-				               + std::to_string( (*b).mappingUpper ) + " "
-				               + (*b).strand + " "
-				               + std::to_string(lf -> score) + "\n"; 
+				leftForkOutput_signatures += (*b).chromosome + " "
+						   + std::to_string(lf -> leftmostCoord) + " "
+						   + std::to_string(lf -> rightmostCoord) + " "
+						   + (*b).readID.substr(1) + " "
+						   + std::to_string( (*b).mappingLower ) + " "
+						   + std::to_string( (*b).mappingUpper ) + " "
+						   + (*b).strand + " ";
+				for (auto s = (lf -> stress_signature).begin(); s < (lf -> stress_signature).end(); s++) leftForkOutput_signatures += std::to_string(*s) + " ";
+				leftForkOutput_signatures += std::to_string(lf -> score) + "\n";
 			}
 			
 			for (auto rf = (*b).rightForks.begin(); rf < (*b).rightForks.end(); rf++){
 			
-				rightForkOutput += (*b).chromosome + " " 
-				               + std::to_string(rf -> leftmostCoord) + " " 
-				               + std::to_string(rf -> rightmostCoord) + " " 
-				               + (*b).readID.substr(1) + " "
-				               + std::to_string( (*b).mappingLower ) + " "
-				               + std::to_string( (*b).mappingUpper ) + " "
-				               + (*b).strand + " "
-				               + std::to_string(rf -> score) + "\n"; 
+				rightForkOutput_signatures += (*b).chromosome + " "
+						   + std::to_string(rf -> leftmostCoord) + " "
+						   + std::to_string(rf -> rightmostCoord) + " "
+						   + (*b).readID.substr(1) + " "
+						   + std::to_string( (*b).mappingLower ) + " "
+						   + std::to_string( (*b).mappingUpper ) + " "
+						   + (*b).strand + " ";
+				for (auto s = (rf -> stress_signature).begin(); s < (rf -> stress_signature).end(); s++) rightForkOutput_signatures += std::to_string(*s) + " ";
+				rightForkOutput_signatures += std::to_string(rf -> score) + "\n";
 			}
-			
-			if (args.makeSignatures){
-			
-				for (auto lf = (*b).leftForks.begin(); lf < (*b).leftForks.end(); lf++){
-				
-					leftForkOutput_signatures += (*b).chromosome + " " 
-						       + std::to_string(lf -> leftmostCoord) + " " 
-						       + std::to_string(lf -> rightmostCoord) + " " 
-						       + (*b).readID.substr(1) + " "
-						       + std::to_string( (*b).mappingLower ) + " "
-						       + std::to_string( (*b).mappingUpper ) + " "
-						       + (*b).strand + " ";
-					for (auto s = (lf -> stress_signature).begin(); s < (lf -> stress_signature).end(); s++) leftForkOutput_signatures += std::to_string(*s) + " ";
-					leftForkOutput_signatures += std::to_string(lf -> score) + "\n"; 
-				}
-				
-				for (auto rf = (*b).rightForks.begin(); rf < (*b).rightForks.end(); rf++){
-				
-					rightForkOutput_signatures += (*b).chromosome + " " 
-						       + std::to_string(rf -> leftmostCoord) + " " 
-						       + std::to_string(rf -> rightmostCoord) + " " 
-						       + (*b).readID.substr(1) + " "
-						       + std::to_string( (*b).mappingLower ) + " "
-						       + std::to_string( (*b).mappingUpper ) + " "
-						       + (*b).strand + " ";
-					for (auto s = (rf -> stress_signature).begin(); s < (rf -> stress_signature).end(); s++) rightForkOutput_signatures += std::to_string(*s) + " ";
-					rightForkOutput_signatures += std::to_string(rf -> score) + "\n"; 
-				}			
-			}
-
-			if (args.markOrigins){
-
-				originOutput = callOrigins(*b,args);
-			}
-			if (args.markTerms){
-
-				termOutput = callTerminations(*b,args);
-			}
-			segmentToForks = true;
 		}
+
+		originOutput = callOrigins(*b,args);
+		termOutput = callTerminations(*b,args);
+		segmentToForks = true;
 		
-		if (args.markAnalogues){
-
-			std::pair<std::string,std::string> analogueOutputPair = writeAnalogueRegions(*b, segmentToForks);
-			BrdUOutput = analogueOutputPair.first;
-			EdUOutput = analogueOutputPair.second;
-		}
+		std::pair<std::string,std::string> analogueOutputPair = writeAnalogueRegions(*b, segmentToForks);
+		BrdUOutput = analogueOutputPair.first;
+		EdUOutput = analogueOutputPair.second;
 		
 		//fix the analogue segment indices
 		std::vector<int> eduSegment_output( (b -> positions).size(), 0);

@@ -18,6 +18,7 @@
 #include "trainCNN.h"
 #include "alignment.h"
 #include "trainGMM.h"
+#include "segment.h"
 
 /*prototype */
 int show_options( int, char** );
@@ -27,6 +28,7 @@ static std::map< std::string, std::function< int( int, char** ) > > executables 
 	{"index", 	index_main},
 	{"detect", 	detect_main},
 	{"forkSense", 	sense_main},
+	{"segment", 	segment_main},
 	{"align", 	align_main},
 	{"trainCNN", 	data_main},
 	{"trainGMM", 	train_main},
