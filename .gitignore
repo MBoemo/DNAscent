@@ -13,10 +13,13 @@ examples/
 .*swm
 
 #libraries
-hdf5-1.8.14/
+hdf5-*/
+hdf5-*.tar.gz
 tensorflow/
-hdf5-1.8.14.tar.gz
 htslib/
+fast5/
+htslib/
+tinydir/
 
 #generated
 .depend
