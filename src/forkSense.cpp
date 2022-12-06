@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <limits>
 #include <stdlib.h>
+#include <iostream>
 
 static const char *help=
 "forkSense: DNAscent executable that calls replication origins, termination sites, fork movement, and replication stress.\n"
@@ -891,10 +892,10 @@ std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double
 }
 
 
-void runDBSCAN(DetectedRead &r, KMeansResult analougeIncorporation, int epsilon){
+void runDBSCAN(DetectedRead &r, KMeansResult analougeIncorporation, int epsilon, double incorporationFloor){
 	
-	double minBrdUDensity = std::max(0.1, analougeIncorporation.centroid_1_lowerBound);
-	double minEdUDensity = std::max(0.1, analougeIncorporation.centroid_2_lowerBound);
+	double minBrdUDensity = std::max(incorporationFloor, analougeIncorporation.centroid_1_lowerBound);
+	double minEdUDensity = std::max(incorporationFloor, analougeIncorporation.centroid_2_lowerBound);
 	
 	std::map<int,int> eduLabels = DBSCAN_mod( r.positions, r.eduCalls, r.brduCalls, epsilon, minEdUDensity );
 	std::map<int,int> brduLabels = DBSCAN_mod( r.positions, r.brduCalls, r.eduCalls, epsilon, minBrdUDensity );
@@ -1175,7 +1176,8 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, forkSenseArgs args, fs_fil
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
 		int minimumLen = 1000;
-		runDBSCAN(*b, analogueIncorporation, minimumLen);
+		double incorporationFloor = 0.1;
+		runDBSCAN(*b, analogueIncorporation, minimumLen, incorporationFloor);
 		callSegmentation(*b, minimumLen);
 		
 		std::string termOutput, originOutput, leftForkOutput, rightForkOutput, leftForkOutput_signatures, rightForkOutput_signatures, BrdUOutput, EdUOutput;

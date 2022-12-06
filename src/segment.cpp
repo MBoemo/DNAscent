@@ -66,7 +66,7 @@ segmentArgs parseSegmentArguments( int argc, char** argv ){
 			i+=2;
 			specifiedDetect = true;
 		}
- 		if ( flag == "-m" or flag == "--minLen" ){
+ 		else if ( flag == "-m" or flag == "--minLen" ){
 			std::string strArg( argv[ i + 1 ] );
 			args.minLength = std::stoi( strArg.c_str() );
 			i+=2;
@@ -133,12 +133,12 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, segmentArgs args, std::ofs
 	#pragma omp parallel for schedule(dynamic) shared(args, analogueIncorporation) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
-		runDBSCAN(*b, analogueIncorporation, args.minLength);
+		double incorporationFloor = 0.3;
+		runDBSCAN(*b, analogueIncorporation, args.minLength, incorporationFloor);
 		callSegmentation(*b, args.minLength);
 
 		std::string BrdUOutput, EdUOutput;
 		bool segmentToForks = false;
-
 		std::pair<std::string,std::string> analogueOutputPair = writeAnalogueRegions(*b, segmentToForks);
 		BrdUOutput = analogueOutputPair.first;
 		EdUOutput = analogueOutputPair.second;
@@ -185,10 +185,14 @@ int segment_main( int argc, char** argv ){
 	EdUFile << writeSegmentHeader(args, analogueIncorporation);
 	if ( not EdUFile.is_open() ) throw IOerror( "EdU_DNAscent_segment.bed" );
 
+ 	inFile.open( args.detectFilename );
+	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
+
 	int failed = 0;
 
 	std::vector< DetectedRead > readBuffer;
 	int progress = 0;
+
 	while( std::getline( inFile, line ) ){
 
 		if ( line.substr(0,1) == "#"){
@@ -237,6 +241,7 @@ int segment_main( int argc, char** argv ){
 			int position = -1, cIndex = 0;
 			AnalogueScore B, E;
 			bool qualityOK = true;
+
 			while ( std::getline( ssLine, column, '\t' ) ){
 
 				if ( cIndex == 0 ){

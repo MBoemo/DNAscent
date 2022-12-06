@@ -179,7 +179,7 @@ class fs_fileManager{
 KMeansResult twoMeans_fs( std::vector< double > & );
 std::pair<int, int> segmentationTrim(std::vector< int > &, std::vector< double > &, std::vector< double > &, int , int );
 KMeansResult estimateAnalogueIncorporation(std::string , int );
-void runDBSCAN(DetectedRead &, KMeansResult, int);
+void runDBSCAN(DetectedRead &, KMeansResult, int, double);
 void callSegmentation(DetectedRead &, int);
 std::pair<std::string,std::string> writeAnalogueRegions(DetectedRead &, bool );
 
