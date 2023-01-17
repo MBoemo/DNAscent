@@ -1044,6 +1044,12 @@ int detect_main( int argc, char** argv ){
 					prog++;
 					continue;
 				}
+				// catch strange reads with scale < 0.0 - that originate from short alignments
+				if ( r.scalings.scale <= 0.0 ) {
+					failed++;
+					prog++;
+					continue;
+				}
 
 				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, args.dilation );
 
