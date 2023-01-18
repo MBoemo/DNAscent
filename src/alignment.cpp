@@ -1533,7 +1533,10 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
 
-			assert(scaledEvent > 0.0);
+			if (!(scaledEvent > 0.0)) {
+                                std::cout << "Bad scaledEvent(1) intercepted " << scaledEvent << std::endl;
+                                throw "scaledEvent error(1) in the evenalign_detect ...";
+                        }
 
 			unsigned int evPos;
 			std::string sixMerRef;
@@ -1732,7 +1735,10 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
 
-			assert(scaledEvent > 0.0);
+			if (!(scaledEvent > 0.0)) {
+				std::cout << "Bad scaledEvent(2) intercepted " << scaledEvent << std::endl;
+				throw "scaledEvent error(2) in the evenalign_detect ...";
+			}
 
 			unsigned int evPos;
 			std::string sixMerRef;

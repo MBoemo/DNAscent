@@ -1044,14 +1044,21 @@ int detect_main( int argc, char** argv ){
 					prog++;
 					continue;
 				}
-				// catch strange reads with scale < 0.0 - that originate from short alignments
-				if ( r.scalings.scale <= 0.0 ) {
+
+				std::pair<bool,std::shared_ptr<AlignedRead>> ar;
+				try {
+					ar = eventalign_detect( r, windowLength_align, args.dilation );
+				} catch (const char* error_msg) {
+					std::cout << "eventalign_detect threw an error: " << error_msg << std::endl;
+					std::cout << "details about the offending read:" << std::endl;
+					std::cout << r.basecall << " " << r.referenceSeqMappedTo << " " << r.readID << std::endl;
+					std::cout << r.scalings.shift<<" "<<r.scalings.drift<<" "<<r.scalings.scale<<" "<<r.scalings.var;
+					std::cout << std::endl << std::endl;
+					// treating it as a "regular" failed read here ...
 					failed++;
 					prog++;
 					continue;
 				}
-
-				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, args.dilation );
 
 				if (not ar.first){
 					failed++;
