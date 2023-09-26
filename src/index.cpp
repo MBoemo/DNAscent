@@ -26,7 +26,8 @@
 "  -s,--sequencing-summary   path to sequencing summary file Guppy.\n"
 "Optional arguments are:\n"
 "  -o,--output               output file name (default is index.dnascent),\n"
-"     --GridION              account for the different sequencing summary format used by in-built GridION basecalling.\n"
+"     --GridION              account for the different sequencing summary format used by in-built GridION basecalling,\n"
+"     --legacy               parse old sequencing summary file format from Guppy v6.x.x and below.\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -35,6 +36,7 @@
 	std::string ssPath;
 	std::string outfile;
 	bool GridION = false;
+	bool legacy = false;
 };
 
 
@@ -80,6 +82,11 @@ Arguments parseIndexArguments( int argc, char** argv ){
 		else if ( flag == "--GridION" ){
 
 			args.GridION = true;
+			i+=1;
+		}
+		else if ( flag == "--legacy" ){
+
+			args.legacy = true;
 			i+=1;
 		}
 		else throw InvalidOption( flag );
@@ -221,7 +228,7 @@ std::vector<std::string> fast5_get_multi_read_groups(hid_t &hdf5_file){
 }
 
 
-std::map<std::string,std::string> parseSequencingSummary(std::string path, bool &bulk, bool &useGridION){
+std::map<std::string,std::string> parseSequencingSummary(std::string path, bool &bulk, bool &useGridION, bool &legacy){
 
 	std::map<std::string,std::string> readID2fast5;
 	std::map<std::string,std::vector<std::string>> fast52readID;
@@ -247,11 +254,17 @@ std::map<std::string,std::string> parseSequencingSummary(std::string path, bool 
 				else if (cIndex == 2) readID = column;
 				else if (cIndex > 2) break;
 			}
-			else{
+			else if (legacy){
 			
 				if (cIndex == 0) fast5 = column;
 				else if (cIndex == 1) readID = column;
 				else if (cIndex > 1) break;
+			}
+			else{
+			
+				if (cIndex == 1) fast5 = column;
+				else if (cIndex == 3) readID = column;
+				else if (cIndex > 3) break;
 			}
 			cIndex++;
 		}
@@ -290,7 +303,7 @@ int index_main( int argc, char** argv ){
 	readDirectory(args.fast5path.c_str(), fast52fullpath);
 
 	bool isBulkFast5;
-	std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args.ssPath, isBulkFast5, args.GridION);
+	std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args.ssPath, isBulkFast5, args.GridION, args.legacy);
 
 	if (isBulkFast5) outFile << "#bulk" << std::endl;
 	else outFile << "#individual" << std::endl;
