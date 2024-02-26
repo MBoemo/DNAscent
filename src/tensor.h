@@ -130,6 +130,7 @@ struct TensorShape{
 
 std::shared_ptr<ModelSession> model_load_cpu(const char *filename, unsigned int threads, const char *);
 std::shared_ptr<ModelSession> model_load_gpu(const char *filename, unsigned char device, unsigned int threads, const char *);
-
+std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > model_load_cpu_twoInputs(const char *filename, unsigned int threads);
+std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > model_load_gpu_twoInputs(const char *filename, unsigned char device, unsigned int threads);
 
 #endif

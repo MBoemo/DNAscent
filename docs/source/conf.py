@@ -18,11 +18,11 @@
 # -- Project information -----------------------------------------------------
 
 project = 'DNAscent'
-copyright = '2022, Michael A. Boemo'
+copyright = '2024, Michael A. Boemo'
 author = 'Michael A. Boemo'
 
 # The full version, including alpha/beta/rc tags
-release = '3.1.2'
+release = '4.0.1'
 
 
 # -- General configuration ---------------------------------------------------

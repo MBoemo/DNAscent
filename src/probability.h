@@ -31,3 +31,4 @@ double lnProd( double, double );
 bool lnGreaterThan( double, double );
 double uniformPDF( double, double, double );
 double normalPDF( double, double, double );
+double cauchyPDF( double, double, double );

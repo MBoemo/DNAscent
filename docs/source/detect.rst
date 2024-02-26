@@ -46,9 +46,9 @@ Output
    #Mode CNN
    #MappingQuality 20
    #MappingLength 5000
-   #SystemStartTime 09/06/2022 12:45:29
+   #SystemStartTime 09/02/2024 12:45:29
    #Software /path/to/DNAscent
-   #Version 3.1.2
+   #Version 4.0.1
    #Commit 4cf80a7b89bdf510a91b54572f8f94d3daf9b167
 
 You can easily access the header of any .detect file with ``head -11 /path/to/output.detect`` or, alternatively, ``grep '#' /path/to/output.detect``.
@@ -92,6 +92,6 @@ Consider the following examples:
    992459  0.056535        0.041545
 
    
-Note that as of v3.1.2, the reference 6mer corresponding to genomic position (formerly in a fourth column) has been removed. We anticipate that this was useful to only a small fraction of users, but was increasing the output file size for all users. Users may instead observe a "*" character in the fourth column; these characters mark indel sites for ``forkSense`` in order to avoid stalled fork false positives caused by indels in the genomic alignment. 
+Users may instead observe a "*" character in the fourth column; these characters mark indel sites for ``forkSense`` in order to avoid stalled fork false positives caused by indels in the genomic alignment. 
 
 

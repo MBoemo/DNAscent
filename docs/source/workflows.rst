@@ -3,9 +3,10 @@
 Workflow
 ===============================
 
-The following is a full DNAscent workflow, where we'll start off after Guppy has finished running (users that need help with Guppy should refer to the `Oxford Nanopore webpages <https://nanoporetech.com/nanopore-sequencing-data-analysis>`_).  In particular, we assume the following:
+The following is a full DNAscent workflow, where we'll start off after Guppy has finished running (users that need help with Guppy should refer to the `Oxford Nanopore webpages <https://nanoporetech.com/nanopore-sequencing-data-analysis>`_). The recommended Guppy basecalling configuration file for v4.0.1 is ``dna_r10.4.1_e8.2_400bps_5khz_hac.cfg``.
+In particular, we assume the following:
 
-* you have a directory of 1D R9.5 or R9.4.1 450bp/s Oxford Nanopore fast5 reads (which may be in subdirectories) that you want to use for detection,
+* you have a directory of R10.4.1 Oxford Nanopore fast5 reads (which may be in subdirectories) that you want to use for detection,
 * these reads have been basecalled to fastq format using Guppy (available from Oxford Nanopore),
 * you have a reference/genome file (in fasta format) for your reads.
 
@@ -18,7 +19,7 @@ Download and compile DNAscent:
 
    git clone --recursive https://github.com/MBoemo/DNAscent.git
    cd DNAscent
-   git checkout 3.1.2
+   git checkout 4.0.1
    make
    cd ..
 

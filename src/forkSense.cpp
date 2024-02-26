@@ -34,7 +34,7 @@ static const char *help=
 "  --markTerminations        writes replication termination locations to a bed file (default: off),\n"
 "  --markForks               writes replication fork locations to a bed file (default: off),\n"
 "  --makeSignatures          writes replication stress signatures to a bed files (default: off).\n"
-"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"DNAscent is under active development by the Boemo Group, Department of Pathology, University of Cambridge (https://www.boemogroup.org/).\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
 
@@ -48,7 +48,7 @@ forkSenseArgs parseSenseArguments( int argc, char** argv ){
  		std::cout << help << std::endl;
 		exit(EXIT_SUCCESS);
 	}
-	else if( argc < 4 ){
+	else if( argc < 4 ){ //PLP&SY: check with Mike
  		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent forkSense." << std::endl;
 		exit(EXIT_FAILURE);
 	}
@@ -279,9 +279,9 @@ void callSegmentation(DetectedRead &r){
 
 			if ( abs(endCoord - startCoord) >= minLength ){
 
-				std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
-				startIdx += trim.first;
-				endIdx -= trim.second;
+				//std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
+				//startIdx += trim.first;
+				//endIdx -= trim.second;
 				startCoord = r.positions[startIdx];
 				endCoord = r.positions[endIdx];
 				
@@ -309,9 +309,9 @@ void callSegmentation(DetectedRead &r){
 
 		if ( abs(endCoord - startCoord) >= minLength ){
 
-			std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
-			startIdx += trim.first;
-			endIdx -= trim.second;
+			//std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
+			//startIdx += trim.first;
+			//endIdx -= trim.second;
 			startCoord = r.positions[startIdx];
 			endCoord = r.positions[endIdx];
 			
@@ -345,9 +345,9 @@ void callSegmentation(DetectedRead &r){
 
 			if ( abs(endCoord - startCoord) >= minLength ){
 			
-				std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
-				startIdx += trim.first;
-				endIdx -= trim.second;
+				//std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
+				//startIdx += trim.first;
+				//endIdx -= trim.second;
 				startCoord = r.positions[startIdx];
 				endCoord = r.positions[endIdx];
 				
@@ -375,9 +375,9 @@ void callSegmentation(DetectedRead &r){
 
 		if ( abs(endCoord - startCoord) >= minLength ){
 		
-			std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
-			startIdx += trim.first;
-			endIdx -= trim.second;
+			//std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
+			//startIdx += trim.first;
+			//endIdx -= trim.second;
 			startCoord = r.positions[startIdx];
 			endCoord = r.positions[endIdx];
 			
@@ -695,7 +695,7 @@ void callForks(DetectedRead &r, std::string analogueOrder){
 		int tipPartners = 0;
 	
 		//left coordinate and index
-		assert( (*analogue1_segments)[p -> first].partners == 1 or (*analogue1_segments)[p -> first].partners == 2);
+		assert( ((*analogue1_segments)[p -> first].partners == 1) or ((*analogue1_segments)[p -> first].partners == 2));
 		int lc = (*analogue1_segments)[p -> first].leftmostCoord;
 		int li = (*analogue1_segments)[p -> first].leftmostIdx;
 		if ( (*analogue1_segments)[p -> first].partners == 2){
@@ -759,7 +759,7 @@ void callForks(DetectedRead &r, std::string analogueOrder){
 		int tipPartners = 0;
 
 		//left coordinate and index
-		assert( (*analogue2_segments)[p -> first].partners == 1 or (*analogue2_segments)[p -> first].partners == 2);
+		assert( ((*analogue2_segments)[p -> first].partners == 1) or ((*analogue2_segments)[p -> first].partners == 2));
 		int lc = (*analogue2_segments)[p -> first].leftmostCoord;
 		int li = (*analogue2_segments)[p -> first].leftmostIdx;
 		if ( (*analogue2_segments)[p -> first].partners == 2){
@@ -863,11 +863,6 @@ std::pair< std::vector<int>, int > findNeighbours_mod( std::vector<int> &positio
 
 std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double > &calls, std::vector< double > &altCalls, int epsilon, double minDensity ){
 
-	//labels
-	//-2 := undefined
-	//-1 := noise
-	// 0 <= cluster int
-
 	//initialise labels
 	std::map< int, int > index2label;
 	for ( size_t i = 0; i < positions.size(); i++ ) index2label[i] = -2;
@@ -893,7 +888,7 @@ std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double
 
 void runDBSCAN(DetectedRead &r, KMeansResult analougeIncorporation, std::string analogueOrder){
 	
-	int epsilon = 1000;
+	int epsilon = 500;
 	
 	double minBrdUDensity, minEdUDensity;
 	
@@ -1016,6 +1011,10 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		secondAnalogueCalls = r.eduCalls;
 	}
 
+	//non-linear scaling parameters for stall score
+	double beta = 10.; //higher values of beta mean more conservative stall scores
+	double alpha = 1./log(2./(1.+exp(-1.*beta))); //set alpha so that non-linear scaling of 1 is equal to 1
+
 	//check right forks
 	for (auto s = r.rightForks.begin(); s < r.rightForks.end(); s++){
 	
@@ -1025,73 +1024,67 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		}
 	
 		int forkTipIdx = s -> rightmostIdx;
-		int forkTipCoord = s -> rightmostCoord;
 		int numPositions = r.positions.size();
 		assert( forkTipIdx < numPositions);
 		double maximumScore = -3.0;
 		bool failOnAlignment = false;
 
-		if (forkTipIdx > 500 and (numPositions - forkTipIdx) > 1000){
+		if (forkTipIdx > filterSize and forkTipIdx < numPositions-filterSize){
+			
+			int positiveCalls = 0;
+			int attempts = 0;
+			for (int j = forkTipIdx-filterSize; j < forkTipIdx; j++){
+			
+				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
+
+					if (not r.alignmentQuality[j]) failOnAlignment = true;
+			
+					if (secondAnalogueCalls[j] > 0.5){
+						positiveCalls++;
+					}
+					attempts++;
+				}
+			}
+			if (attempts < 50) continue;
+			double LHS = (double) positiveCalls / (double) attempts;
+			
+			//guard against low denominators
+			if (LHS < 0.2) continue;
+			
+			positiveCalls = 0;
+			attempts = 0;
+			for (int j = forkTipIdx; j < forkTipIdx+filterSize; j++){
+			
+				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
+
+					if (not r.alignmentQuality[j]) failOnAlignment = true;
+			
+					if (secondAnalogueCalls[j] > 0.5){
+						positiveCalls++;
+					}
+					attempts++;
+				}
+			}
+			if (attempts < 50) continue;
+			double RHS = (double) positiveCalls / (double) attempts;
 		
-			for (int i = std::max(forkTipIdx - filterSize,500); i < std::min(forkTipIdx + filterSize,numPositions-500); i++){
+			double score;
+			if (LHS - RHS > 0.){
+				score = (LHS-RHS)/LHS;
+				score = alpha*log(1+exp(beta*(score-1))) - alpha*log(1+exp(beta*(-1)));
+			}
+			else{
+				score = -2.0;
+			}
 			
-				if ( std::abs(r.positions[i] - forkTipCoord) > filterSize) continue;
-			
-				int positiveCalls = 0;
-				int attempts = 0;
-				for (int j = std::max(i - filterSize,0); j < i; j++){
-				
-					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
-
-						if (not r.alignmentQuality[j]) failOnAlignment = true;
-				
-						if (secondAnalogueCalls[j] > 0.5){
-							positiveCalls++;
-						}
-						attempts++;
-					}
-				}
-				if (attempts < 100) continue;
-				double LHS = (double) positiveCalls / (double) attempts;
-				
-				//guard against low denominators
-				if (LHS < 0.3) continue;
-				
-				positiveCalls = 0;
-				attempts = 0;
-				for (int j = i; j < std::min(i + filterSize, numPositions); j++){
-				
-					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
-
-						if (not r.alignmentQuality[j]) failOnAlignment = true;
-				
-						if (secondAnalogueCalls[j] > 0.5){
-							positiveCalls++;
-						}
-						attempts++;
-					}
-				}
-				if (attempts < 100) continue;
-				double RHS = (double) positiveCalls / (double) attempts;
-			
-				double score;
-				if (LHS - RHS > 0.){
-					score = (LHS-RHS)/LHS;
-					score = 1.55*log(1+exp(3.*(score-1))) - 1.55*log(1+exp(3.*(-1)));
-				}
-				else{
-					score = -2.0;
-				}
-				
-				r.stallScore[i] = score;
-				if (score > maximumScore){
-					maximumScore = score;
-				}
+			r.stallScore[forkTipIdx] = score;
+			if (score > maximumScore){
+				maximumScore = score;
 			}
 		}
 
 		if (failOnAlignment){
-			s -> score = -4.0;
+			s -> score = -4.0; 
 			continue;
 		}
 
@@ -1107,68 +1100,62 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		}
 	
 		int forkTipIdx = s -> leftmostIdx;
-		int forkTipCoord = s -> leftmostCoord;
 		int numPositions = r.positions.size();
 		assert( forkTipIdx < numPositions);
 		double maximumScore = -3.0;
 		bool failOnAlignment = false;
 
-		if (forkTipIdx > 500 and (numPositions - forkTipIdx) > 1000){
+		if (forkTipIdx > filterSize and forkTipIdx < numPositions-filterSize){
+			
+			int positiveCalls = 0;
+			int attempts = 0;
+			for (int j = forkTipIdx-filterSize; j < forkTipIdx; j++){
+			
+				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
+
+					if (not r.alignmentQuality[j]) failOnAlignment = true;
+				
+					if (secondAnalogueCalls[j] > 0.5){
+						positiveCalls++;
+					}
+					attempts++;
+				}
+			}
+			if (attempts < 50) continue;
+			
+			double LHS = (double) positiveCalls / (double) attempts;
+			
+			positiveCalls = 0;
+			attempts = 0;
+			for (int j = forkTipIdx; j < forkTipIdx+filterSize; j++){
+			
+				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
+
+					if (not r.alignmentQuality[j]) failOnAlignment = true;
+			
+					if (secondAnalogueCalls[j] > 0.5){
+						positiveCalls++;
+					}
+					attempts++;
+				}
+			}
+			if (attempts < 50) continue;
+			
+			double RHS = (double) positiveCalls / (double) attempts;
+			
+			if (RHS < 0.2) continue;
 		
-			for (int i = std::max(forkTipIdx - filterSize, 500); i < std::min(forkTipIdx + filterSize, numPositions - 500); i++){
-			
-				if ( std::abs(r.positions[i] - forkTipCoord) > filterSize) continue;
-			
-				int positiveCalls = 0;
-				int attempts = 0;
-				for (int j = std::max(i - filterSize,0); j < i; j++){
-				
-					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
-
-						if (not r.alignmentQuality[j]) failOnAlignment = true;
-					
-						if (secondAnalogueCalls[j] > 0.5){
-							positiveCalls++;
-						}
-						attempts++;
-					}
-				}
-				if (attempts < 100) continue;
-				
-				double LHS = (double) positiveCalls / (double) attempts;
-				
-				positiveCalls = 0;
-				attempts = 0;
-				for (int j = i; j < std::min(i + filterSize, numPositions); j++){
-				
-					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
-
-						if (not r.alignmentQuality[j]) failOnAlignment = true;
-				
-						if (secondAnalogueCalls[j] > 0.5){
-							positiveCalls++;
-						}
-						attempts++;
-					}
-				}
-				if (attempts < 100) continue;
-				
-				double RHS = (double) positiveCalls / (double) attempts;
-				
-				if (RHS < 0.3) continue;
-			
-				double score;
-				if (RHS - LHS > 0.){
-					score = (RHS-LHS)/RHS;
-					score = 1.55*log(1+exp(3.*(score-1))) - 1.55*log(1+exp(3.*(-1)));
-				}
-				else{
-					score = -2.0;
-				}
-				r.stallScore[i] = score;
-				if (score > maximumScore){
-					maximumScore = score;
-				}
+			double score;
+			if (RHS - LHS > 0.){
+				score = (RHS-LHS)/RHS;
+				score = alpha*log(1+exp(beta*(score-1))) - alpha*log(1+exp(beta*(-1)));
+			}
+			else{
+				score = -2.0;
+			}
+			r.stallScore[forkTipIdx] = score;
+			if (score > maximumScore){
+				maximumScore = score;
 			}
 		}
 
@@ -1423,7 +1410,7 @@ KMeansResult estimateAnalogueIncorporation(std::string detectFilename, int readC
 
 	std::vector< double > BrdU_callFractions, EdU_callFractions;
 	
-	int resolution = 2000; //look in 2 kb segments
+	int resolution = 1000; //look in 1 kb segments
 	
 	int startingPos = -1;
 	int progress = 0;
@@ -1612,7 +1599,7 @@ int sense_main( int argc, char** argv ){
 
 					B.set(std::stof(column));
 				}
-				else if ( cIndex == 3 ){
+				else if ( cIndex == 4 ){
 					assert(column == "*");
 					qualityOK = false;
 				}

@@ -3,8 +3,6 @@
 Download & Installation
 ===============================
 
-Development was done using gcc 9.3.0 on an Ubuntu 16.04 platform. While installation on other platforms is possible, Ubuntu is the platform that is recommended and supported.
-
 Clone the DNAscent repository with the recursive flag so that the dependencies are cloned as well.
 
 .. code-block:: console
@@ -16,7 +14,7 @@ The DNAscent directory will appear in your current directory. Switch to the late
 .. code-block:: console
 
    cd DNAscent
-   git checkout 3.1.2
+   git checkout 4.0.1
    make
 
 This will put the DNAscent executable into the DNAscent/bin directory. Compilation requires a version of gcc that supports C++14, and a typical compile time for DNAscent and all of its dependencies is 5-7 minutes.
@@ -57,7 +55,7 @@ In new versions of MinKNOW, the fast5 files are compressed with VBZ Compression 
 GPU Use
 -------
 
-The ``DNAscent detect`` executable can make use of a GPU, although this is optional (see :ref:`detect`).  DNAscent requires CUDA 11.0 and cuDNN 8.0, and information about these can be found at the following links:
+The ``DNAscent detect`` executable can make use of a GPU, although this is optional (see :ref:`detect`).  DNAscent requires CUDA 11.8 and cuDNN 8.9. Information about these can be found at the following links:
 
 * cuDNN: https://developer.nvidia.com/cudnn
 * CUDA: https://developer.nvidia.com/cuda-11.0-download-archive

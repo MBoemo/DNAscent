@@ -156,7 +156,7 @@ std::vector<int> ref2indels(bam1_t *record, int &refStart, int &refEnd ){
 }
 
 
-void parseCigar(bam1_t *record, std::map< unsigned int, unsigned int > &ref2query, int &refStart, int &refEnd ){
+void parseCigar(bam1_t *record, std::map< unsigned int, unsigned int > &ref2query, std::map< unsigned int, unsigned int > &query2ref, int &refStart, int &refEnd ){
 	//Covered in: tests/detect/htslib
 
 	//initialise reference and query coordinates for the first match
@@ -179,6 +179,7 @@ void parseCigar(bam1_t *record, std::map< unsigned int, unsigned int > &ref2quer
 				for ( int j = refPosition; j < refPosition + ol; j++ ){
 
 					ref2query[j] = queryPosition;
+					query2ref[queryPosition] = j;
 					queryPosition++;
 				}
 				refPosition += ol;
@@ -217,6 +218,7 @@ void parseCigar(bam1_t *record, std::map< unsigned int, unsigned int > &ref2quer
 				for ( int j = refPosition; j < refPosition + ol; j++ ){
 
 					ref2query[j] = queryPosition;
+					query2ref[queryPosition] = j;
 					queryPosition++;
 				}
 				refPosition += ol;

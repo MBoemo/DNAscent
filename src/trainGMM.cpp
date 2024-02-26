@@ -1,6 +1,5 @@
 //----------------------------------------------------------
 // Copyright 2019 University of Oxford
-// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -12,13 +11,14 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <cmath>
 #include "common.h"
 #include "data_IO.h"
 #include "error_handling.h"
 #include "event_handling.h"
 #include "probability.h"
-#include "poreModels.h"
 #include "trainGMM.h"
+#include "config.h"
 
 static const char *help=
 "trainGMM: DNAscent executable that determines the mean and standard deviation of a base analogue's current.\n"
@@ -33,7 +33,7 @@ static const char *help=
 "  -m,--max-reads            maximum number of reads to consider (default is 100000),\n"
 "  -e,--max-events           maximum number of events per 6mer to consider (default is 10000),\n"
 "  -t,--threads              number of threads (default is 1 thread).\n"
-"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"DNAscent is under active development by the Boemo Group, Department of Pathology, University of Cambridge (https://www.boemogroup.org/).\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
 struct Arguments {
@@ -44,6 +44,7 @@ struct Arguments {
 	int threads;
 	std::string eventalignFilename;
 	unsigned int maxReads;
+	bool capReads;
 	unsigned int maxEvents;
 	float pi;
 };
@@ -67,6 +68,7 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 	//defaults - we'll override these if the option was specified by the user
 	trainArgs.threads = 1;
 	trainArgs.maxReads = 100000;
+	trainArgs.capReads = false;
 	trainArgs.maxEvents = 10000;
 	trainArgs.pi = 0.5;
 
@@ -91,6 +93,7 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.maxReads = std::stoi(strArg.c_str());
+			trainArgs.capReads = true;
 			i+=2;
 		}
 		else if ( flag == "-e" or flag == "--max-events" ){
@@ -382,39 +385,48 @@ int train_main( int argc, char** argv ){
 
 	/*fudge for openmp */
 	char set1[] = {'A', 'T', 'G', 'C'};
-	int k = 6;
-	std::vector<std::string> allSixMers;
-	printAllKLength(set1, k, 4, allSixMers);
-	std::map< int, std::string > intToSixmer;
-	std::map< std::string, int > sixmerToInt;
-	int index = 0;
-	for ( unsigned int i = 0; i < allSixMers.size(); i++ ){
+	unsigned int k = Pore_Substrate_Config.kmer_len;
+	std::vector<std::string> allKmers;
+	printAllKLength(set1, k, 4, allKmers);
 
-		intToSixmer[index] = allSixMers[i];
-		sixmerToInt[allSixMers[i]] = index;
+	std::map< int, std::string > intToKmer;
+	std::map< std::string, int > kmerToInt;
+	int index = 0;
+	for ( unsigned int i = 0; i < allKmers.size(); i++ ){
+
+		intToKmer[index] = allKmers[i];
+		kmerToInt[allKmers[i]] = index;
 		index++;
 	}
 
-	std::vector< std::vector< double > > importedEvents( 4096 );
+	std::vector< std::vector< double > > importedEvents( pow(4,k) );
 
 	//get a read count
 	unsigned int readCount = 0;
-	std::ifstream eventFile(trainArgs.eventalignFilename);
-	if ( not eventFile.is_open() ) throw IOerror( trainArgs.eventalignFilename );
-	while( std::getline( eventFile, line ) ){
 
-		if ( line.substr(0,1) == ">" ) readCount++;
-	}	
-	progressBar pb_read(std::min(readCount,trainArgs.maxReads),true);
-	eventFile.close();
+	if (not trainArgs.capReads){
+		std::ifstream readStream(trainArgs.eventalignFilename);	
+		if ( not readStream.is_open() ) throw IOerror( trainArgs.eventalignFilename );
+		while( std::getline( readStream, line ) ){
+			if ( line.substr(0,1) == ">" ) readCount++;
+		}
+		readStream.close();	
+	
+	}
+	else{
+		readCount = trainArgs.maxReads;
+	}
+	
+	progressBar pb_read(readCount,true);
 
 	unsigned int readsRead = 0;
- 	eventFile.open( trainArgs.eventalignFilename );
+	std::ifstream eventFile(trainArgs.eventalignFilename);	
 	if ( not eventFile.is_open() ) throw IOerror( trainArgs.eventalignFilename );
-	std::getline( eventFile, line);//throw away the header
 	while ( std::getline( eventFile, line) ){
-
+	
 		if (line.empty()) continue;
+
+		if ( line.substr(0,1) == "#" ) continue;
 
 		if ( line.substr(0,1) == ">" ){
 
@@ -424,15 +436,15 @@ int train_main( int argc, char** argv ){
 		}
 
 		std::istringstream ss( line );
-		std::string sixMer, entry;
-		double eventMean = 0.0;
+		std::string kmer, entry;
+		double eventMean;
 
 		int col = 0;
 		while ( std::getline( ss, entry, '\t' ) ){
 
-			if ( col == 4 ){
+			if ( col == 3 ){
 
-				sixMer = entry;
+				kmer = entry;
 				break;
 			}
 			else if ( col == 2 ){
@@ -442,11 +454,8 @@ int train_main( int argc, char** argv ){
 			col++;
 		}
 
-		assert (eventMean != 0.0);
-
-		if ( importedEvents[sixMer2index(sixMer)].size() < trainArgs.maxEvents ){
-
-			importedEvents[sixMer2index(sixMer)].push_back( eventMean );
+		if ( importedEvents[kmer2index(kmer, k)].size() < trainArgs.maxEvents ){
+			importedEvents[kmer2index(kmer, k)].push_back( eventMean );
 		}
 		if (readsRead > trainArgs.maxReads) break;
 	}
@@ -458,7 +467,7 @@ int train_main( int argc, char** argv ){
 	outFile << "6mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_1" << '\t' << "pi_2" << '\t' << "mean_2" << '\t' << "stdv_2" << '\t' << "imported_events" << '\t' << "filtered_events" << std::endl;
 	progressBar pb_fit( importedEvents.size(),true );
 
-	#pragma omp parallel for schedule(dynamic) shared(pb_fit, thymidineModel, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
+	#pragma omp parallel for schedule(dynamic) shared(pb_fit, Pore_Substrate_Config, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
 	for ( unsigned int i = 0; i < importedEvents.size(); i++ ){
 
 		/*don't train if we have less than 200 events for this 6mer */
@@ -482,11 +491,11 @@ int train_main( int argc, char** argv ){
 			continue;
 		}
 
-		std::string sixMer = intToSixmer[i];
+		std::string kmer = intToKmer[i];
 		double mu1, stdv1, mu2, stdv2;
 
 		/*get the ONT distribution for the mixture */
-		std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
 		mu1 = meanStd.first;
 		stdv1 = meanStd.second;
 
@@ -508,7 +517,7 @@ int train_main( int argc, char** argv ){
 		}
 		#pragma omp critical
 		{	
-			outFile << sixMer << '\t' << meanStd.first << '\t' << meanStd.second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << (importedEvents[i]).size() << "\t" << filteredEvents.size() << std::endl;
+			outFile << kmer << '\t' << meanStd.first << '\t' << meanStd.second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << (importedEvents[i]).size() << "\t" << filteredEvents.size() << std::endl;
 			pb_fit.displayProgress( prog, failed, 0 );
 		}
 		prog++;

@@ -1,6 +1,5 @@
 //----------------------------------------------------------
 // Copyright 2019-2020 University of Oxford
-// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -19,9 +18,7 @@
 struct PoreParameters {
 
 	double shift;
-	double drift = 0.0;
 	double scale;
-	double var = 1.0;
 	double eventsPerBase = 0.0;
 };
 
@@ -46,12 +43,21 @@ class EventAlignment{
 		}
 };
 
+
+struct event {
+
+	double mean;
+	std::vector< double > raw;
+};
+
+
 struct read{
 
 	std::string basecall, referenceSeqMappedTo, referenceMappedTo, filename, readID;
 	PoreParameters scalings;
-	std::vector< double > raw, normalisedEvents, eventLengths;
-	std::map< unsigned int, unsigned int > refToQuery;
+	std::vector< event > events;
+	std::vector< double> raw;
+	std::map< unsigned int, unsigned int > refToQuery, queryToRef;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
 	std::map< unsigned int, std::pair< unsigned int, unsigned int >> eventIdx2rawIdx;
 	std::map<unsigned int, double> posToScore;
@@ -62,9 +68,15 @@ struct read{
 		void printScalings(void){
 
 			std::cerr << "shift" << " " << scalings.shift << std::endl;
-			std::cerr << "drift" << " " << scalings.drift << std::endl;
 			std::cerr << "scale" << " " << scalings.scale << std::endl;
-			std::cerr << "var" << " " << scalings.var << std::endl;
+		}
+		void clean(void){
+			events.clear();
+			raw.clear();
+			eventAlignment.clear();
+			scalings.shift = -1.;
+			scalings.scale = -1.;
+			scalings.eventsPerBase = -1.;
 		}
 };
 
@@ -72,12 +84,13 @@ struct read{
 /*function prototypes */
 std::map< std::string, std::string > import_reference( std::string );
 std::map< std::string, std::string > import_reference_pfasta( std::string );
-std::vector< std::pair< double, double > > import_poreModel( std::string );
+std::vector< std::pair< double, double > > import_poreModel_staticStdv( std::string, unsigned int);
+std::vector< std::pair< double, double > > import_poreModel_fitStdv( std::string, unsigned int);
 std::string getExePath(void);
 std::string getGitCommit(void);
-std::string writeDetectHeader(std::string, std::string, std::string, int, bool, unsigned int, unsigned int, double, bool);
+std::string writeDetectHeader(std::string, std::string, std::string, int, bool, unsigned int, unsigned int, bool);
 std::string writeRegionsHeader(std::string, double, bool, unsigned int, unsigned int, double, double);
-unsigned int sixMer2index(std::string &);
-
+unsigned int kmer2index(std::string &, unsigned int);
+void parseIndex( std::string, std::map< std::string, std::string > & );
 
 #endif

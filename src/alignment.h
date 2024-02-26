@@ -1,6 +1,5 @@
 //----------------------------------------------------------
 // Copyright 2019-2020 University of Oxford
-// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -17,41 +16,67 @@
 #include "common.h"
 #include "event_handling.h"
 #include "../fast5/include/fast5.hpp"
-#include "poreModels.h"
 #include "common.h"
 #include <memory>
 #include <utility>
+#include "config.h"
 
-#define NFEATURES 8
-
+#define NFEATURES 5
+#define RAWDEPTH 20
 
 class AlignedPosition{
 
 	private:
 
 		bool forTraining = false;
-		std::string sixMer;
+		std::string kmer;
 		unsigned int refPos;
-		std::vector<double> events;
-		std::vector<double> lengths;
+		std::vector<double> signal;
 		double eventAlignQuality;
+		std::map<std::string, int> base2index = {{"A",0}, {"T",1}, {"G",2}, {"C",3}};
 
 	public:
-		AlignedPosition(std::string sixMer, unsigned int refPos, int quality){
+		AlignedPosition(std::string kmer, unsigned int refPos, int quality){
 
-			this -> sixMer = sixMer;
+			this -> kmer = kmer;
 			this -> refPos = refPos;
 			this -> eventAlignQuality = quality;
 		}
 		~AlignedPosition() {};
-		void addEvent(double ev, double len){
+		void addSignal(double s){
 
-			events.push_back(ev);
-			lengths.push_back(len);
+			signal.push_back(s);
 		}
-		std::string getSixMer(void){
+		std::string getKmer(void){
 
-			return sixMer;
+			return kmer;
+		}
+		unsigned int getCoreIndex(void){
+			std::string kmer_subseq = kmer.substr(2,5);
+			unsigned int kmer_len = kmer_subseq.size();
+			unsigned int p = 1;
+			unsigned int r = 0;
+			for (size_t i = 0; i < kmer_len; i++){
+
+				r += base2index[kmer_subseq.substr(kmer_len-i-1,1)] * p;
+				p *= 4;
+			}
+			r += 1;
+			return r;
+		}
+		unsigned int getResidualIndex(void){
+			std::string kmer_subseq = kmer.substr(0,2) + kmer.substr(7,2);
+			assert(kmer_subseq.size() == 4);
+			unsigned int kmer_len = kmer_subseq.size();
+			unsigned int p = 1;
+			unsigned int r = 0;
+			for (size_t i = 0; i < kmer_len; i++){
+
+				r += base2index[kmer_subseq.substr(kmer_len-i-1,1)] * p;
+				p *= 4;
+			}
+			r += 1;
+			return r;
 		}
 		unsigned int getRefPos(void){
 
@@ -61,28 +86,49 @@ class AlignedPosition{
 			
 			return eventAlignQuality;
 		}
-		std::vector<float> makeFeature(void){
+		std::vector<float> makeSignalFeature(void){
 
-			assert(events.size() > 0 && events.size() == lengths.size());
-			assert(sixMer.substr(0,1) == "A" || sixMer.substr(0,1) == "T" || sixMer.substr(0,1) == "G" || sixMer.substr(0,1) == "C");
+			assert(signal.size() > 0);
+			assert(kmer.substr(0,1) == "A" || kmer.substr(0,1) == "T" || kmer.substr(0,1) == "G" || kmer.substr(0,1) == "C");
+			
+			std::vector<float> padded_signal;
 
+			for (size_t i = 0; i < signal.size(); i++){
 
+				padded_signal.push_back(signal[i]);
+
+				if (i == RAWDEPTH - 1) break;
+			}
+			
+			//zero padding if this position has few raw events - these will be masked by the neural network
+			if (signal.size() < RAWDEPTH){
+
+				for (size_t i = 0; i < RAWDEPTH - signal.size(); i++){
+
+					padded_signal.push_back(0.);
+				}
+			}
+
+			assert(padded_signal.size() == RAWDEPTH);
+			return padded_signal;
+		}
+		std::vector<float> makeSequenceFeature(void){
+
+			assert(signal.size() > 0);
+			assert(kmer.substr(0,1) == "A" || kmer.substr(0,1) == "T" || kmer.substr(0,1) == "G" || kmer.substr(0,1) == "C");
+			
 			//one-hot encode bases
 			std::vector<float> feature = {0., 0., 0., 0.};
-			if (sixMer.substr(0,1) == "A") feature[0] = 1.;
-			else if (sixMer.substr(0,1) == "T") feature[1] = 1.;
-			else if (sixMer.substr(0,1) == "G") feature[2] = 1.;
-			else if (sixMer.substr(0,1) == "C") feature[3] = 1.;
-			
-			std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
-			
-			//event means
-			double eventMean = vectorMean(events);
-			double lengthsSum = vectorSum(lengths);
-			feature.push_back(eventMean);
-			feature.push_back(lengthsSum);
+			if (kmer.substr(0,1) == "A") feature[0] = 1.;
+			else if (kmer.substr(0,1) == "T") feature[1] = 1.;
+			else if (kmer.substr(0,1) == "G") feature[2] = 1.;
+			else if (kmer.substr(0,1) == "C") feature[3] = 1.;
+
+			//expected signal
+			std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, Pore_Substrate_Config.kmer_len)];
 			feature.push_back(meanStd.first);
-			feature.push_back(meanStd.second);
+
+			//feature.push_back((float) signal.size());
 
 			return feature;
 		}
@@ -98,6 +144,9 @@ class AlignedRead{
 		std::vector<double> alignmentQualities;
 
 	public:
+		bool QCpassed;
+		std::string stdout;
+	
 		AlignedRead(std::string readID, std::string chromosome, std::string strand, unsigned int ml, unsigned int mu, unsigned int numEvents){
 
 			this -> readID = readID;
@@ -105,6 +154,7 @@ class AlignedRead{
 			this -> strand = strand;
 			this -> mappingLower = ml;
 			this -> mappingUpper = mu;
+			this -> QCpassed = false;
 		}
 		AlignedRead( const AlignedRead &ar ){
 
@@ -116,17 +166,17 @@ class AlignedRead{
 			this -> positions = ar.positions;
 		}
 		~AlignedRead(){}
-		void addEvent(std::string sixMer, unsigned int refPos, double ev, double len, int quality){
+		void addSignal(std::string kmer, unsigned int refPos, double sig, int quality){
 
 			if (positions.count(refPos) == 0){
 
-				std::shared_ptr<AlignedPosition> ap( new AlignedPosition(sixMer, refPos, quality));
-				ap -> addEvent(ev,len);
+				std::shared_ptr<AlignedPosition> ap( new AlignedPosition(kmer, refPos, quality));
+				ap -> addSignal(sig);
 				positions[refPos] = ap;
 			}
 			else{
 
-				positions[refPos] -> addEvent(ev,len);
+				positions[refPos] -> addSignal(sig);
 			}
 		}
 		std::string getReadID(void){
@@ -144,17 +194,17 @@ class AlignedRead{
 		unsigned int getMappingUpper(void){
 			return mappingUpper;
 		}
-		std::vector<float> makeTensor(void){
+		std::vector<float> makeSignalTensor(void){
 
 			assert(strand == "fwd" || strand == "rev");
 			std::vector<float> tensor;
-			tensor.reserve(NFEATURES * positions.size());
+			tensor.reserve(3 * positions.size());
 
 			if (strand == "fwd"){
 
 				for (auto p = positions.begin(); p != positions.end(); p++){
 
-					std::vector<float> feature = (p -> second) -> makeFeature();
+					std::vector<float> feature = (p -> second) -> makeSignalFeature();
 					tensor.insert(tensor.end(), feature.begin(), feature.end());
 				}
 			}
@@ -162,8 +212,52 @@ class AlignedRead{
 
 				for (auto p = positions.rbegin(); p != positions.rend(); p++){
 
-					std::vector<float> feature = (p -> second) -> makeFeature();
+					std::vector<float> feature = (p -> second) -> makeSignalFeature();
 					tensor.insert(tensor.end(), feature.begin(), feature.end());
+				}
+			}
+			return tensor;
+		}
+		std::vector<float> makeCoreSequenceTensor(void){
+
+			assert(strand == "fwd" || strand == "rev");
+			std::vector<float> tensor;
+			tensor.reserve(positions.size());
+
+			if (strand == "fwd"){
+
+				for (auto p = positions.begin(); p != positions.end(); p++){
+				
+					tensor.push_back( (p -> second) -> getCoreIndex() );
+				}
+			}
+			else{
+
+				for (auto p = positions.rbegin(); p != positions.rend(); p++){
+
+					tensor.push_back( (p -> second) -> getCoreIndex() );
+				}
+			}
+			return tensor;
+		}
+		std::vector<float> makeResidualSequenceTensor(void){
+
+			assert(strand == "fwd" || strand == "rev");
+			std::vector<float> tensor;
+			tensor.reserve(positions.size());
+
+			if (strand == "fwd"){
+
+				for (auto p = positions.begin(); p != positions.end(); p++){
+				
+					tensor.push_back( (p -> second) -> getResidualIndex() );
+				}
+			}
+			else{
+
+				for (auto p = positions.rbegin(); p != positions.rend(); p++){
+
+					tensor.push_back( (p -> second) -> getResidualIndex() );
 				}
 			}
 			return tensor;
@@ -260,34 +354,37 @@ class AlignedRead{
 
 			return cigarString;
 		}
-		std::vector<std::string> getSixMers(void){
+		std::vector<std::string> getKmers(void){
 
 			std::vector<std::string> out;
 			out.reserve(positions.size());
 			if (strand == "fwd"){
 
 				for (auto p = positions.begin(); p != positions.end(); p++){
-					out.push_back((p -> second) -> getSixMer());
+					out.push_back((p -> second) -> getKmer());
 				}
 			}
 			else{
 
 				for (auto p = positions.rbegin(); p != positions.rend(); p++){
-					out.push_back((p -> second) -> getSixMer());
+					out.push_back((p -> second) -> getKmer());
 				}
 			}
 			return out;
 		}
-		std::vector<size_t> getShape(void){
+		std::vector<size_t> getSignalShape(void){
 
-			return {positions.size(), NFEATURES};
+			return {positions.size(), RAWDEPTH, 1};
+		}
+		std::vector<size_t> getSequenceShape(void){
+
+			return {positions.size()};
 		}
 };
 
 
 /*function prototypes */
 int align_main( int argc, char** argv );
-std::string eventalign_train( read &, unsigned int , std::map<unsigned int, std::pair<double,double>> &, double, bool);
-std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &, unsigned int, double );
+std::shared_ptr<AlignedRead> eventalign( read &, unsigned int , std::map<unsigned int,std::pair<double,double>> &);
 
 #endif

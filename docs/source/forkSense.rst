@@ -25,7 +25,8 @@ Usage
         --makeSignatures          writes replication stress signatures to a bed files (default: off).
 
 
-The only required inputs of ``DNAscent forkSense`` is the output file produced by ``DNAscent detect`` and the order in which the analogues were pulsed.  In the example command above, the ``--order`` flag indicates that EdU was pulsed first, and BrdU was pulsed second.  No information about the pulse length is needed.  Note that the detect file must have been produced using the ResNet algorithm from DNAscent v3.0 or later; ``DNAscent forkSense`` is not compatible with legacy HMM-based detection or BrdU-only detection.
+The only required inputs of ``DNAscent forkSense`` is the output file produced by ``DNAscent detect`` and the order in which the analogues were pulsed.  
+In the example command above, the ``--order`` flag indicates that EdU was pulsed first, and BrdU was pulsed second.  No information about the pulse length is needed.  
 
 
 Output
@@ -41,9 +42,9 @@ Main Output File
    #DetectFile /path/to/DNAscent.detect
    #Threads 1
    #Compute CPU
-   #SystemStartTime 10/06/2022 13:04:33
+   #SystemStartTime 10/02/2024 13:04:33
    #Software /path/to/DNAscent
-   #Version 3.1.2
+   #Version 4.0.1
    #Commit b9598a9e5bfa5f8314f92ba0f4fed39be1aee0be
    #EstimatedRegionBrdU 0.559506
    #EstimatedRegionEdU 0.202767
@@ -98,7 +99,7 @@ For origins and termination sites, the “resolution” of the calls (i.e., the 
 
 Fork Stalling and Pausing
 ^^^^^^^^^^^^^^^^^^^^^^^^^
-As of v3.1.2, DNAscent will assign a stall score to each called fork. These scores range from 0 (most likely unimpeded fork movement) to 1 (most likely a stall or pause). The stall score of each fork is in the last (or eigth) column of the bedfile created when the ``--markForks`` is specified. No additional input is needed; if ``--markForks`` is specified, then the fork bed files will contain stall scores. There are, however, several instances where DNAscent will decline to make a call for a fork. These include cases where DNAscent cannot see the end of the fork (e.g., if the fork runs off the read or comes together with another fork in a termination site) or if there is a nearby indel in the genomic alignment in order to avoid false positives and negatives. When this occurs, DNAscent will print a negative integer instead of a stall score clarifying why no stress call was made for this particular fork. The reason corresponding to each negative integer value is detailed in the table below.
+DNAscent will assign a stall score to each called fork. These scores range from 0 (most likely unimpeded fork movement) to 1 (most likely a stall or pause). The stall score of each fork is in the last (or eigth) column of the bedfile created when the ``--markForks`` is specified. No additional input is needed; if ``--markForks`` is specified, then the fork bed files will contain stall scores. There are, however, several instances where DNAscent will decline to make a call for a fork. These include cases where DNAscent cannot see the end of the fork (e.g., if the fork runs off the read or comes together with another fork in a termination site) or if there is a nearby indel in the genomic alignment in order to avoid false positives and negatives. When this occurs, DNAscent will print a negative integer instead of a stall score clarifying why no stress call was made for this particular fork. The reason corresponding to each negative integer value is detailed in the table below.
 
 +--------+-----------------------------------+
 | Code   | Description                       |

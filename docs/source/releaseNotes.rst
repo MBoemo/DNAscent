@@ -3,6 +3,19 @@
 Release Notes
 ===============================
 
+v4.0.1
+-----------------
+
+This is a pre-release. It is possible (maybe even probable) that the deep learning model and other parts of the software will be re-tuned in the coming weeks as we listen to community feedback. 
+
+* All DNAscent executables now work on Oxford Nanopore R10.4.1 pores. ``DNAscent detect`` detects the thymidine analogues BrdU and EdU in single molecules as in v3.0.2 and v3.1.2.
+* POD5 is not yet supported but POD5 support is planned for v4.0.2 which will be the LTS release. POD5 can be converted to FAST5 using the ``pod5 convert to_fast5`` utility (https://pypi.org/project/pod5/#pod5-convert-to_fast5).
+* DNAscent's deep learning models were trained on R10.4.1 flow cells with 5kHz sampling which is now the default sampling rate on Oxford Nanopore platforms. Using DNAscent with reads sequenced with the older 4kHz sampling rate is not recommended.
+* ``DNAscent index`` still uses the sequencing_summary.txt file from Guppy and legacy versions of Guppy are available on the Oxford Nanopore Community webpage. Compatibility with Dorado is planned for v4.0.2 LTS.
+* Tensorflow updated to 2.12.0 and, correspondingly, GPU usage now requires CUDA 11.8 and cuDNN 8.9.
+* Useage is otherwise identical to v3.1.2.
+* Training data for this release was provided by Mathew Jones at the University of Queensland. This software was developed in collaboration with the `Jones Lab <https://researchers.uq.edu.au/researcher/25051>`_, `Merrick Lab <https://www.path.cam.ac.uk/directory/catherine-merrick>`_, and `McClelland Lab <https://www.bartscancer.london/staff/professor-sarah-mcclelland/>`_ to whom we are grateful for their collaboration and support. We are particularly grateful to them for supporting the release of the software to the community ahead of publication.
+
 v3.1.2
 -----------------
 

@@ -1,6 +1,5 @@
 //----------------------------------------------------------
 // Copyright 2019 University of Oxford
-// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -10,7 +9,6 @@
 #define ERROR_HANDLING_H
 
 #include "scrappie/event_detection.h"
-#include "poreModels.h"
 #include "common.h"
 #include "data_IO.h"
 #include <math.h>
@@ -165,6 +163,18 @@ struct OverwriteFailure : public std::exception {
 struct UnrecognisedBase : public std::exception {
 	const char * what () const throw () {
 		return "Input sequence contains an unrecognised base - must be A, T, G, C, or N.";
+	}
+};
+
+struct InvalidMappingThreshold : public std::exception {
+	const char * what () const throw () {
+		return "Mapping quality passed with -q must be an integer >= 0.";
+	}
+};
+
+struct InvalidLengthThreshold : public std::exception {
+	const char * what () const throw () {
+		return "Minimum read mapping length passed with -l must be an integer >= 100.";
 	}
 };
 

@@ -39,9 +39,9 @@ FAST5_INCLUDE = -I./fast5/include
 #add include flags for each library
 CPPFLAGS += $(H5_INCLUDE) $(HTS_INCLUDE) $(FAST5_INCLUDE) $(TENS_INCLUDE)
 
-MAIN_EXECUTABLE = bin/DNAscent
+DNASCENT_EXECUTABLE = bin/DNAscent
 
-all: depend $(MAIN_EXECUTABLE)
+all: depend $(DNASCENT_EXECUTABLE)
 
 #all each library if they're not already built
 htslib/libhts.a:
@@ -60,15 +60,15 @@ tensorflow/include/tensorflow/c/c_api.h:
 	if [ ! -e tensorflow/include/tensorflow/c/c_api.h ]; then \
 		mkdir tensorflow; \
 		cd tensorflow; \
-		wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-linux-x86_64-2.4.1.tar.gz; \
-		tar -xzf libtensorflow-gpu-linux-x86_64-2.4.1.tar.gz || exit 255; \
+		wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-linux-x86_64-2.12.0.tar.gz; \
+		tar -xzf libtensorflow-gpu-linux-x86_64-2.12.0.tar.gz || exit 255; \
 		cd ..; \
 	fi 
 	
 SUBDIRS = src src/scrappie src/pfasta src/sgsmooth
 CPP_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.cpp))
 C_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.c))
-EXE_SRC = src/DNAscent.cpp
+DNA_EXE_SRC = src/main/DNAscent.cpp
 
 #log the commit 
 src/gitcommit.h: .git/HEAD .git/index
@@ -82,9 +82,12 @@ src/softwarepath.h:
 CPP_OBJ = $(CPP_SRC:.cpp=.o)
 C_OBJ = $(C_SRC:.c=.o)
 
+DNASCENT_OBJ = $(DNA_EXE_SRC:..cpp=.0)
+
+
 depend: .depend
 
-.depend: $(CPP_SRC) $(C_SRC) $(EXE_SRC) $(H5_LIB) $(TENS_DEPEND) src/gitcommit.h src/softwarepath.h
+.depend: $(CPP_SRC) $(C_SRC) $(H5_LIB) $(TENS_DEPEND) src/gitcommit.h src/softwarepath.h
 	rm -f ./.depend
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -MM $(CPP_SRC) $(C_SRC) > ./.depend;
 
@@ -95,10 +98,12 @@ depend: .depend
 .c.o:
 	$(CC) -o $@ -c $(CFLAGS) $(CPPFLAGS) $(H5_INCLUDE) -fPIC $<
 	
+src/main/DNAscent.o: src/gitcommit.h src/softwarepath.h
+	$(CXX) -o $@ -c $(CXXFLAGS) $(CPPFLAGS) -fPIC $<
 
-#compile the main executable
-$(MAIN_EXECUTABLE): src/DNAscent.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(TENS_DEPEND) src/gitcommit.h src/softwarepath.h
-	$(CXX) -o $@ $(CXXFLAGS) $(CPPFLAGS) -fPIC $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(TENS_LIB) $(LIBFLAGS) $(LDFLAGS)
+#compile the main executables
+$(DNASCENT_EXECUTABLE): src/main/DNAscent.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(TENS_DEPEND) src/gitcommit.h src/softwarepath.h
+	$(CXX) -o $@ $(CXXFLAGS) $(CPPFLAGS) -fPIC $(DNASCENT_OBJ) $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(TENS_LIB) $(LIBFLAGS) $(LDFLAGS)
 
 clean:
-	rm -f $(MAIN_EXECUTABLE) $(CPP_OBJ) $(C_OBJ) src/DNAscent.o src/gitcommit.h src/softwarepath.h
+	rm -f $(DNASCENT_EXECUTABLE) $(CPP_OBJ) $(C_OBJ) src/main/DNAscent.o src/gitcommit.h src/softwarepath.h

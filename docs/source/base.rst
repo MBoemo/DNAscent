@@ -22,11 +22,14 @@ DNAscent
 Overview
 --------
 
-DNAscent is software designed to detect the modified bases BrdU and EdU in Oxford Nanopore reads.  In an experimental setup where BrdU and EdU are incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis.  DNAscent can also call the genomic positions of stalled and stressed replication forks for use as a replication stress assay.
+DNAscent is software designed to detect the base analogues BrdU and EdU in Oxford Nanopore reads.  In an experimental setup where BrdU and EdU are incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis.  DNAscent can also call the genomic positions of stalled and stressed replication forks for use as a replication stress assay.
 
-At present, the only Oxford Nanopore flow cells supported by DNAscent are R9.4.1. The Flongle, MinION, GridION, and PromethION platforms are all supported.
+DNAscent v4.0.1 supports sequencing data collected on Oxford Nanopore R10.4.1 flow cells. Users wishing to analyse data acquired on legacy R9.4.1 flow cells should roll back to DNAscent v3.1.2 as v4.0.1 is not back-compatible with R9.4.1 flow cells. As R9.4.1 flow cells have been deprecated by Oxford Nanopore,
+previous versions of DNAscent designed for R9.4.1 flow cells (v3.1.2 and below) are no longer under active development.
 
-DNAscent is under active development by the `Boemo Group <https://www.boemogroup.org/>`_ based in the `Department of Pathology, University of Cambridge <https://www.path.cam.ac.uk/>`_.  We aim to push regular updates and improvements, and incorporating new functionality is an active area of our computational research.
+The Oxford Nanopore Flongle, MinION, GridION, and PromethION platforms are all supported.
+
+DNAscent is under active development by the `Boemo Group <https://www.boemogroup.org/>`_ based in the `Department of Pathology, University of Cambridge <https://www.path.cam.ac.uk/>`_.  We aim to push regular updates and improvements and incorporating new functionality is an active area of our computational research.
 
 
 Publications
@@ -45,4 +48,4 @@ Muller CA, Boemo MA, Spingardi P, Kessler, BM, Kriaucionis S, Simpson JT, Niedus
 Bugs, Questions, and Comments
 -----------------------------
 
-Should any bugs arise or if you have any questions about usage, please raise a `GitHub issue <https://github.com/MBoemo/DNAscent/issues>`_. If you have comments or suggestions to improve the software or the documentation, please Email Michael Boemo at mb915@cam.ac.uk.
+Should any bugs arise or if you have any questions about usage, please raise a `GitHub issue <https://github.com/MBoemo/DNAscent/issues>`_. Your feedback is an important part of the development process. If you have comments or suggestions to improve the software or the documentation, please Email Michael Boemo at mb915@cam.ac.uk.

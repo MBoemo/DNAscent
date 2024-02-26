@@ -1,17 +1,21 @@
 # DNAscent
 [![Documentation Status](https://readthedocs.org/projects/dnascent/badge/?version=latest)](https://dnascent.readthedocs.io/en/latest/?badge=latest)
 
-Software for detecting contiguous regions of base analogues incorporated in Oxford Nanopore reads.  Development was done using gcc 5.4.0 on an Ubuntu 16.04 platform.
+DNAscent is software designed to detect the base analogues BrdU and EdU in single molecules of DNA sequenced on the Oxford Nanopore platform. In an experimental setup where BrdU and EdU are incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis. DNAscent can also call the genomic positions of stalled and stressed replication forks for use as a replication stress assay.
+
+DNAscent v4.0.1 supports sequencing data collected on Oxford Nanopore R10.4.1 flow cells. The Oxford Nanopore Flongle, MinION, GridION, and PromethION platforms are all supported.
+
+DNAscent is under active development by the [Boemo Group](https://www.boemogroup.org/) based in the [Department of Pathology, University of Cambridge](https://www.path.cam.ac.uk/).
 
 ## Downloading and Compiling DNAscent
-The recommended OS for DNAscent is Ubuntu 16.04.  Clone the DNAscent repository with the recursive flag so that the dependencies are cloned as well.
+Clone the DNAscent repository with the recursive flag so that the dependencies are cloned as well.
 ```shell
 git clone --recursive https://github.com/MBoemo/DNAscent.git
 ```
 The DNAscent directory will appear in your current directory.  Switch to the latest tagged version and compile the software by running:
 ```shell
 cd DNAscent
-git checkout 3.1.2
+git checkout 4.0.1
 make
 ```
 This will put the DNAscent executable into the DNAscent/bin directory.  A typical compile time for DNAscent and its dependencies is 5 minutes.
@@ -28,3 +32,7 @@ Please cite our publications if you use DNAscent for your research:
 
 ## Questions and Bugs
 Should any bugs arise or if you have basic usage questions, please raise a [GitHub issue](https://github.com/MBoemo/DNAscent/issues). For more detailed discussions or collaborations, please Email Michael Boemo at mb915@cam.ac.uk.
+
+## Legacy Flow Cells
+Users wishing to analyse data acquired on legacy R9.4.1 flow cells should roll back to DNAscent v3.1.2 as v4.0.1 and above are not back-compatible with R9.4.1 flow cells. As R9.4.1 flow cells have been deprecated by Oxford Nanopore,
+previous versions of DNAscent designed for R9.4.1 flow cells (v3.1.2 and below) are no longer under active development.
