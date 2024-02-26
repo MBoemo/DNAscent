@@ -1,5 +1,5 @@
 .. DNAscent documentation master file, created by
-   sphinx-quickstart on Fri Feb  7 18:58:49 2020.
+   sphinx-quickstart on Mon Feb 26 13:46:59 2024.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
@@ -18,6 +18,7 @@ DNAscent
    workflows
    cookbook
    releaseNotes
+
 
 Overview
 --------
