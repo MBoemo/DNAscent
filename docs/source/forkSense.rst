@@ -11,7 +11,7 @@ Usage
 .. code-block:: console
 
    To run DNAscent forkSense, do:
-      DNAscent forkSense -d /path/to/BrdUCalls.detect -o /path/to/output.forkSense --order EdU,BrdU
+      DNAscent forkSense -d /path/to/output.detect -o /path/to/output.forkSense --order EdU,BrdU
    Required arguments are:
      -d,--detect               path to output file from DNAscent detect,
      -o,--output               path to output file for forkSense,
