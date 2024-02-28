@@ -138,7 +138,7 @@ Arguments parseDetectArguments( int argc, char** argv ){
 			args.outputFilename = strArg;
 			i+=2;
 		}
-		else if ( "--HMM" ){
+		else if ( flag == "--HMM" ){
 		
 			args.useHMM = true;
 			i+=1;
