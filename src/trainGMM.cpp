@@ -47,6 +47,7 @@ struct Arguments {
 	bool capReads;
 	unsigned int maxEvents;
 	float pi;
+
 };
 
 Arguments parseTrainingArguments( int argc, char** argv ){
