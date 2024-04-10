@@ -155,31 +155,30 @@ std::map< std::string, std::string > import_reference_pfasta( std::string fastaF
 	std::cout << "Importing reference... ";
 	std::map< std::string, std::string > reference;
 
-	int file_descriptor =
-	    strcmp(fastaFilePath.c_str(), "-") == 0 ? STDIN_FILENO : open(fastaFilePath.c_str(), O_RDONLY);
+	int file_descriptor = strcmp(fastaFilePath.c_str(), "-") == 0 ? STDIN_FILENO : open(fastaFilePath.c_str(), O_RDONLY);
 	if (file_descriptor < 0) err(1, "%s", fastaFilePath.c_str());
 
-	pfasta_file pf;
-	int l = pfasta_parse(&pf, file_descriptor);
-	if (l != 0) {
-		errx(1, "%s: %s", fastaFilePath.c_str(), pfasta_strerror(&pf));
+	struct pfasta_parser pp = pfasta_init(file_descriptor);
+	if (pp.errstr) {
+		errx(1, "%s: %s", fastaFilePath.c_str(), pp.errstr);
 	}
 
-	pfasta_seq ps;
-	while ((l = pfasta_read(&pf, &ps)) == 0) {
+	while (!pp.done) {
 
-		std::string chromosomeName(ps.name);
-		std::string chromosomeSeq(ps.seq);
+		struct pfasta_record pr = pfasta_read(&pp);
+		if (pp.errstr) errx(2, "%s: %s", fastaFilePath.c_str(), pp.errstr);
+		std::string chromosomeName(pr.name);
+		std::string chromosomeSeq(pr.sequence);
 		std::transform( chromosomeSeq.begin(), chromosomeSeq.end(), chromosomeSeq.begin(), toupper );
 		reference[ chromosomeName ] = chromosomeSeq;
-		pfasta_seq_free(&ps);
+		pfasta_record_free(&pr);
+		
+		//testing
+		//std::cout << chromosomeName << std::endl;
+		//std::cout << chromosomeSeq << std::endl; 
 	}
 
-	if (l < 0) {
-		errx(1, "%s: %s", fastaFilePath.c_str(), pfasta_strerror(&pf));
-	}
-
-	pfasta_free(&pf);
+	pfasta_free(&pp);
 	close(file_descriptor);
 
 	std::cout << "ok." << std::endl;
