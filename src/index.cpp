@@ -23,11 +23,9 @@
 "   DNAscent index -f /path/to/fast5Directory\n"
 "Required arguments are:\n"
 "  -f,--files                full path to fast5 files,\n"
-"  -s,--sequencing-summary   path to sequencing summary file Guppy.\n"
+"  -s,--sequencing-summary   path to sequencing summary file from Guppy.\n"
 "Optional arguments are:\n"
-"  -o,--output               output file name (default is index.dnascent),\n"
-"     --GridION              account for the different sequencing summary format used by in-built GridION basecalling,\n"
-"     --P2Solo               account for the different sequencing summary format used by MinKNOW > 24.02.10 on P2 Solo.\n"
+"  -o,--output               output file name (default is index.dnascent).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -35,8 +33,6 @@
 	std::string sigfilesPath;
 	std::string seqssumPath;
 	std::string outfile;
-	bool GridION = false;
-	bool P2Solo = false;
 };
 
 
@@ -81,19 +77,15 @@ Arguments parseIndexArguments( int argc, char** argv ){
 		}
 		else if ( flag == "--GridION" ){
 
-			args.GridION = true;
+			std::cerr << "Note: GridION flag is no longer necessary and will be ignored." << std::endl;
 			i+=1;
 		}
 		else if ( flag == "--P2Solo" ){
 
-			args.P2Solo = true;
+			std::cerr << "Note: P2Solo flag is no longer necessary and will be ignored." << std::endl;
 			i+=1;
 		}
 		else throw InvalidOption( flag );
-	}
-	if (args.P2Solo and args.GridION){
-		std::cerr << "P2Solo and GridION options are mutually exclusive. Choose only one." << std::endl;
-		throw InvalidOption( "--P2Solo; --GridION" );
 	}
 	return args;
 }
@@ -244,34 +236,38 @@ std::map<std::string,std::string> parseSequencingSummary(Arguments &args){
  	std::ifstream inFile( args.seqssumPath );
 	if ( not inFile.is_open() ) throw IOerror( args.seqssumPath );
 	std::string line;
-	std::getline(inFile,line);//header
-
+	
+	//parse header
+	int column_filename = -1;
+	int column_readID = -1;
+	int cIndex = 0;
+	std::string col_header;
+	std::getline(inFile,line);
+	std::stringstream ssHeader(line);
+	while( std::getline( ssHeader, col_header, '\t' ) ){
+	
+		if (col_header == "filename" or col_header == "filename_fast5") column_filename = cIndex;
+		else if (col_header == "read_id") column_readID = cIndex;
+		cIndex++;
+	}
+	
+	if (column_filename == -1 or column_readID == -1){
+	
+		std::cerr << "Failed to parse sequencing summary file." << std::endl;
+		std::cerr << "Please raise this as an issue on GitHub (https://github.com/MBoemo/DNAscent/issues) and paste the first few lines of the sequencing summary file." << std::endl;
+		throw IOerror( args.seqssumPath );
+	}
+	
 	while ( std::getline( inFile, line ) ){
 
 		std::string readID, fast5, column;
 		std::stringstream ssLine(line);
-		int cIndex = 0;
+		cIndex = 0;
 		
 		while( std::getline( ssLine, column, '\t' ) ){
 		
-			if (args.GridION){
-
-				if (cIndex == 1) fast5 = column;
-				else if (cIndex == 2) readID = column;
-				else if (cIndex > 2) break;
-			}
-			else if (args.P2Solo){
-
-				if (cIndex == 1) fast5 = column;
-				else if (cIndex == 4) readID = column;
-				else if (cIndex > 4) break;
-			}
-			else{
-			
-				if (cIndex == 0) fast5 = column;
-				else if (cIndex == 1) readID = column;
-				else if (cIndex > 1) break;
-			}
+			if (cIndex == column_filename) fast5 = column;
+			else if (cIndex == column_readID) readID = column;
 			cIndex++;
 		}
 		readID2fast5[readID] = fast5;
