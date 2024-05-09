@@ -539,7 +539,7 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 	ar -> stdout += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
 	unsigned int posOnRef = 0;
-	while ( posOnRef < r.referenceSeqMappedTo.size() ){
+	while ( posOnRef < r.referenceSeqMappedTo.size() - k + 1){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
 		unsigned int basesToEnd = r.referenceSeqMappedTo.size() - posOnRef ;
