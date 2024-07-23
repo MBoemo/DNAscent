@@ -60,8 +60,8 @@ tensorflow/include/tensorflow/c/c_api.h:
 	if [ ! -e tensorflow/include/tensorflow/c/c_api.h ]; then \
 		mkdir tensorflow; \
 		cd tensorflow; \
-		wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-linux-x86_64-2.12.0.tar.gz; \
-		tar -xzf libtensorflow-gpu-linux-x86_64-2.12.0.tar.gz || exit 255; \
+		wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-linux-x86_64-2.4.1.tar.gz; \
+		tar -xzf libtensorflow-gpu-linux-x86_64-2.4.1.tar.gz || exit 255; \
 		cd ..; \
 	fi 
 	

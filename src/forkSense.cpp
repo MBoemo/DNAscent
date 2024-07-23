@@ -279,9 +279,9 @@ void callSegmentation(DetectedRead &r){
 
 			if ( abs(endCoord - startCoord) >= minLength ){
 
-				//std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
-				//startIdx += trim.first;
-				//endIdx -= trim.second;
+				std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
+				startIdx += trim.first;
+				endIdx -= trim.second;
 				startCoord = r.positions[startIdx];
 				endCoord = r.positions[endIdx];
 				
@@ -309,9 +309,9 @@ void callSegmentation(DetectedRead &r){
 
 		if ( abs(endCoord - startCoord) >= minLength ){
 
-			//std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
-			//startIdx += trim.first;
-			//endIdx -= trim.second;
+			std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
+			startIdx += trim.first;
+			endIdx -= trim.second;
 			startCoord = r.positions[startIdx];
 			endCoord = r.positions[endIdx];
 			
@@ -345,9 +345,9 @@ void callSegmentation(DetectedRead &r){
 
 			if ( abs(endCoord - startCoord) >= minLength ){
 			
-				//std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
-				//startIdx += trim.first;
-				//endIdx -= trim.second;
+				std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
+				startIdx += trim.first;
+				endIdx -= trim.second;
 				startCoord = r.positions[startIdx];
 				endCoord = r.positions[endIdx];
 				
@@ -375,9 +375,9 @@ void callSegmentation(DetectedRead &r){
 
 		if ( abs(endCoord - startCoord) >= minLength ){
 		
-			//std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
-			//startIdx += trim.first;
-			//endIdx -= trim.second;
+			std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
+			startIdx += trim.first;
+			endIdx -= trim.second;
 			startCoord = r.positions[startIdx];
 			endCoord = r.positions[endIdx];
 			
@@ -952,13 +952,13 @@ std::pair<int, int> segmentationTrim(std::vector< int > &positions, std::vector<
 	
 	std::vector<double> segmentDensities;
 	int maxCallsInd = segmentCalls.size();
-	for (int i = 0; i < maxCallsInd; i++){
+	
+	for (int i = 0.33*maxCallsInd; i < 0.66*maxCallsInd; i++){
 	
 		int positiveCalls = 0;
 		int attempts = 0;
 		int lb = std::max(0,i-epsilon);
-		int segmentIdxLen = segmentCalls.size();
-		int ub = std::min(segmentIdxLen, i+epsilon);
+		int ub = std::min(maxCallsInd, i+epsilon);
 
 		for (int j = lb; j < ub; j++){
 		
@@ -1012,7 +1012,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 	}
 
 	//non-linear scaling parameters for stall score
-	double beta = 10.; //higher values of beta mean more conservative stall scores
+	double beta = 1.; //higher values of beta mean more conservative stall scores
 	double alpha = 1./log(2./(1.+exp(-1.*beta))); //set alpha so that non-linear scaling of 1 is equal to 1
 
 	//check right forks
@@ -1410,7 +1410,7 @@ KMeansResult estimateAnalogueIncorporation(std::string detectFilename, int readC
 
 	std::vector< double > BrdU_callFractions, EdU_callFractions;
 	
-	int resolution = 1000; //look in 1 kb segments
+	int resolution = 2000; //look in 2 kb segments
 	
 	int startingPos = -1;
 	int progress = 0;

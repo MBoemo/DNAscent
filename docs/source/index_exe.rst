@@ -3,7 +3,7 @@
 index
 ===============================
 
-``DNAscent index`` is a ``DNAscent`` subprogram that creates a map between Oxford Nanopore readIDs and fast5 files.  This allows ``DNAscent detect`` to scan through bam files and pull out the relevant signal information for each read.
+``DNAscent index`` is a ``DNAscent`` subprogram that creates a map between Oxford Nanopore readIDs and FAST5 files.  This allows ``DNAscent detect`` to scan through bam files and pull out the relevant signal information for each read.
 
 Usage
 -----
@@ -16,10 +16,9 @@ Usage
      -f,--files                path to fast5 files.
      -s,--sequencing-summary   path to sequencing summary file Guppy.
    Optional arguments are:
-     -o,--output               output file name (default is index.dnascent),
-        --GridION              account for the different sequencing summary format used by in-built GridION basecalling.
+     -o,--output               output file name (default is index.dnascent).
 
-The required inputs to ``DNAscent index`` are the full path to the top-level directory containing the sequencing run's fast5 files (passed using the ``-f`` flag) and the path to the ``sequencing_summary.txt`` file (specified using the ``-s`` flag).  
+The required inputs to ``DNAscent index`` are the full path to the top-level directory containing the sequencing run's FAST5 files (passed using the ``-f`` flag) and the path to the ``sequencing_summary.txt`` file (specified using the ``-s`` flag).  
 ``sequencing_summary.txt`` is created by Guppy during basecalling and is located in the top level directory containing the Guppy-created fastq files.  
 The default behaviour of ``DNAscent index`` is to place a file called ``index.dnascent`` in the working directory.  The name of this file can be overridden using the ``-o`` flag.
 

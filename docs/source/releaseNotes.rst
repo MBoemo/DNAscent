@@ -3,6 +3,16 @@
 Release Notes
 ===============================
 
+v4.0.2
+-----------------
+
+* The deep learning model is the same as in v4.0.1. Users should see nearly identical performance in BrdU and EdU calling.
+* Fork speed and stall calling has been fine-tuned from v4.0.1. Users should now see a closer match between v4.0.2 on R10 pores and that of v3.1.2 on R9 pores.
+* Starting with this release, we will be providing supported Singularity images here (https://cloud.sylabs.io/library/mboemo). This is now the recommended way to use and run DNAscent.
+* There was a longstanding issue of different basecallers producing slightly different sequencing summary formats which could trip up ``DNAscent index``. Previously, we provided various flags for ``DNAscent index`` to account for the different formats but this was more complicated than it needed to be. ``DNAscent index`` will now tune itself for whatever sequencing summary format you have.
+* v4.0.1 had an issue where one of the model layers was not properly optimised for GPU usage by TensorFlow 2.12.0. This was causing slow runtimes of ``DNAscent detect`` on certain GPUs. The issue is fixed in this release, although it required a rollback to TensorFlow 2.4.1 (at least for now). Part of our aim in releasing and supporting Singularity images was to mitigate any inconvenience that might have been caused by the need to change CUDA and CuDNN versions.
+* POD5 and Dorado support are still ongoing. While we missed our target for including them in this release, positive community feedback on v4.0.1 and deprecation of R9 flowcells meant that we wanted to move R10 support out of the pre-release stage and ship a fully supported release to address the above issues. Engineering on quality-of-life features remains ongoing.
+
 v4.0.1
 -----------------
 
@@ -12,7 +22,7 @@ This is a pre-release. It is possible (maybe even probable) that the deep learni
 * POD5 is not yet supported but POD5 support is planned for v4.0.2 which will be the LTS release. POD5 can be converted to FAST5 using the ``pod5 convert to_fast5`` utility (https://pypi.org/project/pod5/#pod5-convert-to_fast5).
 * DNAscent's deep learning models were trained on R10.4.1 flow cells with 5kHz sampling which is now the default sampling rate on Oxford Nanopore platforms. Using DNAscent with reads sequenced with the older 4kHz sampling rate is not recommended.
 * ``DNAscent index`` still uses the sequencing_summary.txt file from Guppy and legacy versions of Guppy are available on the Oxford Nanopore Community webpage. Compatibility with Dorado is planned for v4.0.2 LTS.
-* Tensorflow updated to 2.12.0 and, correspondingly, GPU usage now requires CUDA 11.8 and cuDNN 8.9.
+* TensorFlow updated to 2.12.0 and, correspondingly, GPU usage now requires CUDA 11.8 and cuDNN 8.9.
 * Useage is otherwise identical to v3.1.2.
 * Training data for this release was provided by Mathew Jones at the University of Queensland. This software was developed in collaboration with the `Jones Lab <https://researchers.uq.edu.au/researcher/25051>`_, `Merrick Lab <https://www.path.cam.ac.uk/directory/catherine-merrick>`_, and `McClelland Lab <https://www.bartscancer.london/staff/professor-sarah-mcclelland/>`_ to whom we are grateful for their collaboration and support. We are particularly grateful to them for supporting the release of the software to the community ahead of publication.
 
@@ -33,7 +43,7 @@ v3.0.2
 * dnascent2bedgraph utility updated to plot both EdU and BrdU tracks in genome browsers,
 * ``DNAscent regions`` is now deprecated and has been fully superceded by ``DNAscent forkSense``,
 * ``DNAscent psl`` is now deprecated as reads can be more comprehensively plotted using the dnascent2bedgraph utility,
-* Migration from Tensorflow 1.14 to 2.4.1 and, correspondingly, GPU usage now requires CUDA 11 and cuDNN 8,
+* Migration from TensorFlow 1.14 to 2.4.1 and, correspondingly, GPU usage now requires CUDA 11 and cuDNN 8,
 * Released with `Totanes FIG,  Gockel J,  Chapman SE, Bartfai R, Boemo MA, Merrick CJ. Replication origin mapping in the malaria parasite Plasmodium falciparum. bioRxiv <https://doi.org/10.1101/2022.07.27.501677>`_.
 
 v2.0.0

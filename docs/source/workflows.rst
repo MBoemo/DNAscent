@@ -3,12 +3,12 @@
 Workflow
 ===============================
 
-The following is a full DNAscent workflow, where we'll start off after Guppy has finished running (users that need help with Guppy should refer to the `Oxford Nanopore webpages <https://nanoporetech.com/nanopore-sequencing-data-analysis>`_). The recommended Guppy basecalling configuration file for v4.0.1 is ``dna_r10.4.1_e8.2_400bps_5khz_hac.cfg``.
+The following is a full DNAscent workflow, where we'll start off after Guppy has finished running (users that need help with Guppy should refer to the `Oxford Nanopore webpages <https://nanoporetech.com/nanopore-sequencing-data-analysis>`_). The recommended Guppy basecalling configuration file for v4.0.2 is ``dna_r10.4.1_e8.2_400bps_5khz_hac.cfg``.
 In particular, we assume the following:
 
-* you have a directory of R10.4.1 Oxford Nanopore fast5 reads (which may be in subdirectories) that you want to use for detection,
-* these reads have been basecalled to fastq format using Guppy (available from Oxford Nanopore),
-* you have a reference/genome file (in fasta format) for your reads.
+* You have a directory of R10.4.1 Oxford Nanopore FAST5 reads (which may be in subdirectories) that you want to use for detection. Currently, DNAscent only supports FAST5 format. You can convert POD5 to FAST5 using the ``pod5 convert to_fast5`` utility (https://pypi.org/project/pod5/#pod5-convert-to_fast5).
+* Reads have been basecalled to fastq format using Guppy (available from Oxford Nanopore).
+* You have a reference/genome file (in fasta format) for your reads.
 
 Example Workflow
 ----------------
@@ -19,7 +19,7 @@ Download and compile DNAscent:
 
    git clone --recursive https://github.com/MBoemo/DNAscent.git
    cd DNAscent
-   git checkout 4.0.1
+   git checkout 4.0.2
    make
    cd ..
 

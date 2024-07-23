@@ -1,0 +1,54 @@
+Bootstrap: docker
+From: nvidia/cuda:11.1.1-cudnn8-devel-ubuntu18.04
+
+%labels
+    Version v4.0.2
+
+%help
+    DNAscent is software for detecting regions of BrdU and EdU incorporation in Oxford Nanopore reads. 
+    Source: https://github.com/MBoemo/DNAscent
+    Documentation: https://dnascent.readthedocs.io/en/latest/?badge=latest
+    Web: https://www.boemogroup.org/
+    Please submit any bugs to https://github.com/MBoemo/DNAscent/issues.
+
+%post
+    
+    # Install system packages
+    apt-get update && apt-get install -y \
+        lzma-dev \
+        liblzma-dev \
+        libbz2-dev \
+        libbsd-dev \
+        git \
+        build-essential \
+        wget
+
+    # Clone and compile DNAscent
+    mkdir -p /app
+    cd app
+    git clone --recursive https://github.com/MBoemo/DNAscent.git
+    cd DNAscent
+    make
+    
+    # Install vbz plugin
+    cd /
+    mkdir -p /plugin
+    cd plugin
+    wget https://github.com/nanoporetech/vbz_compression/releases/download/v1.0.1/ont-vbz-hdf-plugin-1.0.1-Linux-x86_64.tar.gz
+    tar -xf ont-vbz-hdf-plugin-1.0.1-Linux-x86_64.tar.gz
+    
+%environment
+
+    # cuda paths
+    export CUDA_HOME=/usr/local/cuda
+    export CPATH=/usr/local/cuda/include:$CPATH
+    export CUDA_PATH=/usr/local/cuda
+    export LIBRARY_PATH=/usr/local/cuda/lib64:$LIBRARY_PATH
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+    export PATH=/usr/local/cuda/bin:$PATH
+    
+    # vbz plugin path
+    export HDF5_PLUGIN_PATH=/plugin/ont-vbz-hdf-plugin-1.0.1-Linux/usr/local/hdf5/lib/plugin
+
+%runscript
+    exec /app/DNAscent/bin/DNAscent "$@"

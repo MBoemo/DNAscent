@@ -44,7 +44,7 @@ Main Output File
    #Compute CPU
    #SystemStartTime 10/02/2024 13:04:33
    #Software /path/to/DNAscent
-   #Version 4.0.1
+   #Version 4.0.2
    #Commit b9598a9e5bfa5f8314f92ba0f4fed39be1aee0be
    #EstimatedRegionBrdU 0.559506
    #EstimatedRegionEdU 0.202767
