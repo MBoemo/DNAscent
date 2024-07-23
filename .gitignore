@@ -34,3 +34,6 @@ src/softwarepath.h
 #plots
 *.png
 *.pdf
+
+#images
+*.sif

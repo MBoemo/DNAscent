@@ -11,7 +11,7 @@ We recommend running DNAscent using one of our supported Singularity images. The
 
 .. code-block:: console
 
-   singularity pull DNAscent.sif library://mboemo/DNAscent/DNAscent:4.0.2
+   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.0.2
    
 You can run DNAscent from the image by passing the desired executable and arguments. The following example shows how to run DNAscent :ref:`detect`:
 

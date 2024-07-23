@@ -3,11 +3,18 @@
 
 DNAscent is software designed to detect the base analogues BrdU and EdU in single molecules of DNA sequenced on the Oxford Nanopore platform. In an experimental setup where BrdU and EdU are incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis. DNAscent can also call the genomic positions of stalled and stressed replication forks for use as a replication stress assay.
 
-DNAscent v4.0.1 supports sequencing data collected on Oxford Nanopore R10.4.1 flow cells. The Oxford Nanopore Flongle, MinION, GridION, and PromethION platforms are all supported.
+DNAscent v4.0.2 supports sequencing data collected on Oxford Nanopore R10.4.1 flow cells. The Oxford Nanopore Flongle, MinION, GridION, and PromethION platforms are all supported.
 
 DNAscent is under active development by the [Boemo Group](https://www.boemogroup.org/) based in the [Department of Pathology, University of Cambridge](https://www.path.cam.ac.uk/).
 
-## Downloading and Compiling DNAscent
+## Singularity Image
+The recommended way to run DNAscent is via one of our supported Singularity images: https://cloud.sylabs.io/library/mboemo/dnascent/dnascent
+You can obtain the latest image by running:
+```shell
+singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.0.2
+```
+
+## Building from Source
 Clone the DNAscent repository with the recursive flag so that the dependencies are cloned as well.
 ```shell
 git clone --recursive https://github.com/MBoemo/DNAscent.git
@@ -15,7 +22,7 @@ git clone --recursive https://github.com/MBoemo/DNAscent.git
 The DNAscent directory will appear in your current directory.  Switch to the latest tagged version and compile the software by running:
 ```shell
 cd DNAscent
-git checkout 4.0.1
+git checkout 4.0.2
 make
 ```
 This will put the DNAscent executable into the DNAscent/bin directory.  A typical compile time for DNAscent and its dependencies is 5 minutes.
