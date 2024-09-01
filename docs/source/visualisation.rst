@@ -9,14 +9,14 @@ Download a recent version of IGV (https://igv.org/) that supports modified bases
 
 At the moment, BrdU and EdU are not directly supported by IGV (this is a planned update). In the meantime, IGV will parse EdU as 5fU and BrdU as 5caU. The colours of these bases can be changed independently. We suggest changing the base modification likelihood threshold to 0.5 to reduce clutter.
 
-.. image:: IGV_viewer.png
+.. image:: _static/IGV_viewer.png
    :width: 800
 
 Right click on the bam track name and choose: Color alignments by --> base modification (all). You can then load any of the bed files produced by ``DNAscent forkSense`` for viewing alongside the BrdU and EdU calls.
 
 The following image shows the result of a protocol where EdU (blue) was pulsed for five minutes followed by BrdU (red) for 10 minutes. We can observe the following replication origin from both the BrdU and EdU calls from ``DNAscent detect`` and the bed file from ``DNAscent forkSense``.
 
-.. image:: IGV_origin.png
+.. image:: _static/IGV_origin.png
    :width: 800
 
 The bam files produced by ``DNAscent detect`` can, depending on your application, be large and unwieldy. If you have a bed file of origin calls from ``DNAscent forkSense`` called ``origins_DNAscent_forkSense.bed`` (or any other bed file from ``DNAscent forkSense``) and a bam file from ``DNAscent detect`` called ``detect_output.bam``, you can create a smaller bam file of just the reads with origin calls on them by doing the following:
