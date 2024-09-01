@@ -27,7 +27,6 @@ double eexp( double );
 double eln( double );
 double lnSum( double,  double );
 double lnProd( double, double );
-//double lnQuot( double, double );
 bool lnGreaterThan( double, double );
 double uniformPDF( double, double, double );
 double normalPDF( double, double, double );

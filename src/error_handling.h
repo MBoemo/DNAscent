@@ -8,15 +8,13 @@
 #ifndef ERROR_HANDLING_H
 #define ERROR_HANDLING_H
 
-#include "scrappie/event_detection.h"
-#include "common.h"
-#include "data_IO.h"
 #include <math.h>
 #include <cmath>
 #include <stdlib.h>
 #include <assert.h>
 #include <exception>
 #include <string.h>
+#include <string>
 
 struct IOerror : public std::exception {
 	std::string badFilename;	
@@ -26,6 +24,25 @@ struct IOerror : public std::exception {
 	}
 	const char* what () const throw () {
 		const char* message = "Could not open file: ";
+		const char* specifier = badFilename.c_str();
+		char* result;
+		result = static_cast<char*>(calloc(strlen(message)+strlen(specifier)+1, sizeof(char)));
+		strcpy( result, message);
+		strcat( result, specifier );
+
+		return result;
+	}	
+};
+
+
+struct InvalidExtension : public std::exception {
+	std::string badFilename;	
+	InvalidExtension( std::string s ){
+
+		badFilename = s;
+	}
+	const char* what () const throw () {
+		const char* message = "Output extension should be detect or bam. Received: ";
 		const char* specifier = badFilename.c_str();
 		char* result;
 		result = static_cast<char*>(calloc(strlen(message)+strlen(specifier)+1, sizeof(char)));
@@ -63,8 +80,46 @@ struct MissingFast5 : public std::exception {
 		badFast5 = s;
 	}
 	const char* what () const throw () {
-		const char* message = "In specified directory, couldn't find fast5 file: ";
+		const char* message = "In specified directory, couldn't find fast5 or pod5 file: ";
 		const char* specifier = badFast5.c_str();
+		char* result;
+		result = static_cast<char*>(calloc(strlen(message)+strlen(specifier)+1, sizeof(char)));
+		strcpy( result, message);
+		strcat( result, specifier );
+
+		return result;
+	}	
+};
+
+
+struct BadBamField : public std::exception {
+	std::string msg;
+	BadBamField( std::string s ){
+
+		msg = s;
+	}
+	const char* what () const throw () {
+		const char* message = "Invalid bam field on readID: ";
+		const char* specifier = msg.c_str();
+		char* result;
+		result = static_cast<char*>(calloc(strlen(message)+strlen(specifier)+1, sizeof(char)));
+		strcpy( result, message);
+		strcat( result, specifier );
+
+		return result;
+	}
+};
+
+
+struct BamWriteError : public std::exception {
+	std::string filename;	
+	BamWriteError( std::string s ){
+
+		filename = s;
+	}
+	const char* what () const throw () {
+		const char* message = "Write error on filename: ";
+		const char* specifier = filename.c_str();
 		char* result;
 		result = static_cast<char*>(calloc(strlen(message)+strlen(specifier)+1, sizeof(char)));
 		strcpy( result, message);
@@ -84,6 +139,25 @@ struct InvalidDevice : public std::exception {
 	const char* what () const throw () {
 		const char* message = "Invalid GPU device ID (expected single int): ";
 		const char* specifier = badDeviceID.c_str();
+		char* result;
+		result = static_cast<char*>(calloc(strlen(message)+strlen(specifier)+1, sizeof(char)));
+		strcpy( result, message);
+		strcat( result, specifier );
+
+		return result;
+	}
+};
+
+
+struct TrailingFlag : public std::exception {
+	std::string msg;
+	TrailingFlag( std::string s ){
+
+		msg = s;
+	}
+	const char* what () const throw () {
+		const char* message = "Expected input for flag: ";
+		const char* specifier = msg.c_str();
 		char* result;
 		result = static_cast<char*>(calloc(strlen(message)+strlen(specifier)+1, sizeof(char)));
 		strcpy( result, message);
@@ -117,7 +191,14 @@ struct FastaFormatting : public std::exception {
 
 struct BadFast5Field : public std::exception {
 	const char * what () const throw () {
-		return "Fast5 field could not be opened.";
+		return "fast5 field could not be opened.";
+	}
+};
+
+
+struct BadPod5Field : public std::exception {
+	const char * what () const throw () {
+		return "pod5 field could not be opened.";
 	}
 };
 

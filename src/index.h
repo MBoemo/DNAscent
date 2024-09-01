@@ -10,7 +10,6 @@
 #define INDEX_H
 
 
-/*function prototypes */
 int index_main( int argc, char** argv );
 
 #endif

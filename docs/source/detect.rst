@@ -12,20 +12,23 @@ Usage
 
    To run DNAscent detect, do:
       DNAscent detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect
-   Required arguments are:
+   Required arguments are:\n"
      -b,--bam                  path to alignment BAM file,
      -r,--reference            path to genome reference in fasta format,
      -i,--index                path to DNAscent index,
-     -o,--output               path to output file that will be generated.
-   Optional arguments are:
+     -o,--output               path to output file with extension `detect` (for human-readable format) or `bam` (for modbam format).
+   Optional arguments are:\n"
      -t,--threads              number of threads (default is 1 thread),
      --GPU                     use the GPU device indicated for prediction (default is CPU),
      -q,--quality              minimum mapping quality (default is 20),
      -l,--length               minimum read length in bp (default is 1000).
 
-The main input of ``DNAscent detect`` is an alignment (bam file) between the sequence fastq from Guppy and the organism's reference genome.  This bam file should be sorted using ``samtools sort`` and indexed using ``samtools index`` so that there is a .bam.bai file in the same directory as the bam file. (Please see the example in :ref:`workflows` for details on how to do this.)  The full path to the reference genome used in the alignment should be passed using the ``-r`` flag, and the index required by the ``-i`` flag is the file created using ``DNAscent index`` (see :ref:`index_exe`).  
 
-The number of threads is specified using the ``-t`` flag. ``DNAscent detect`` multithreads quite well by analysing a separate read on each thread, so multithreading is recommended. By default, the signal alignments and ResNet BrdU predictions are run on CPUs.  If a CUDA-compatible GPU device is specified using the ``--GPU`` flag, then the signal alignments will be run on CPUs using the threads specified with ``-t`` and the ResNet BrdU prediction will be run on the GPU. Your GPU device number can be found with the command ``nvidia-smi``. GPU use requires that CUDA and cuDNN are set up correctly on your system and that these libraries can be accessed. If they're not, DNAscent will default back to using CPUs.
+The main input of ``DNAscent detect`` is an alignment file in bam format. As of v4.0.3, the recommended way to create this bam file is via Dorado. However, it's still acceptable to create the alignment file using an aligner (we recommend minimap2), a fastq of basecalled reads, and the organism's reference genome.
+
+The path to the reference genome used in the alignment should be passed using the ``-r`` flag, and the index required by the ``-i`` flag is the file created using ``DNAscent index`` (see :ref:`index_exe`).
+
+The number of threads is specified using the ``-t`` flag. ``DNAscent detect`` multithreads quite well by analysing a separate read on each thread so multithreading is recommended. By default, the signal alignments and base analogue predictions are run on CPUs.  If a CUDA-compatible GPU device is specified using the ``--GPU`` flag, then the signal alignments will be run on CPUs using the threads specified with ``-t`` and the base analogue prediction will be run on the GPU. Your GPU device number can be found with the command ``nvidia-smi``. GPU use requires that CUDA and cuDNN are set up correctly on your system and that these libraries can be accessed. If they're not, DNAscent will default back to using CPUs.
 
 It is sometimes useful to only run ``DNAscent detect`` on reads that exceed a certain mapping quality or length threshold (as measured by the subsequence of the contig that the read maps to).  In order to do this without having to filter the bam file, DNAscent provides the ``-l`` and ``-q`` flags.  Any read in the bam file with a reference length lower than the value specificed with ``-l`` or a mapping quality lower than the value specified with ``-q`` will be ignored.
 
@@ -34,7 +37,9 @@ Before calling BrdU and EdU in a read, ``DNAscent detect`` must first perform a 
 Output
 ------
 
-``DNAscent detect`` will produce a single human-readable output file with the name and location that you specified using the ``-o`` flag.  To aid organisation and reproducibility, each detect file starts with a short header.  The start of each header line is always a hash (#) character, and it specifies the input files and settings used, as well as the version and commit of DNAscent that produced the file.  An example is as follows:
+``DNAscent detect`` will produce a single output file in one of two formats. If a ``detect`` extension is specified using the ``-o`` flag (example: /path/to/myOutput.detect) then the output will be a human-readable table of BrdU and EdU probabilities at every thymidine position of each sequenced molecule. If a ``bam`` extension is specified using the ``-o`` flag (example: /path/to/myOutput.bam) then the output file will be in modbam format. The resulting bam file will be records from the input bam file that pass DNAscent's quality controls with analogue positions and probabilities specified using `MM and ML tags <https://samtools.github.io/hts-specs/SAMtags.pdf>`_, respectively. 
+
+In human-readable format, each detect file starts with a short header.  The start of each header line is always a hash (#) character, and it specifies the input files and settings used, as well as the version and commit of DNAscent that produced the file.  An example is as follows:
 
 .. code-block:: console
 
@@ -48,7 +53,7 @@ Output
    #MappingLength 5000
    #SystemStartTime 09/02/2024 12:45:29
    #Software /path/to/DNAscent
-   #Version 4.0.2
+   #Version 4.0.3
    #Commit 4cf80a7b89bdf510a91b54572f8f94d3daf9b167
 
 You can easily access the header of any .detect file with ``head -11 /path/to/output.detect`` or, alternatively, ``grep '#' /path/to/output.detect``.

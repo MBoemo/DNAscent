@@ -9,7 +9,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define VERSION "4.0.2"
+#define VERSION "4.0.3"
 
 #include <algorithm>
 #include <vector>
@@ -20,6 +20,7 @@
 #include <iostream>
 #include <chrono>
 #include <iomanip>
+#include <cstring>
 
 int show_version( int, char** );
 
@@ -60,7 +61,6 @@ class progressBar{
 				std::cout << "] " << std::right << std::setw(3) << int(progress * 100.0) << "%  ";
 
 				std::cout << std::right << std::setw(_digits) << currentNumber << "/" << maxNumber << "  ";
-
 
 				unsigned int estTimeLeft = elapsedTime.count() * ( (double) maxNumber / (double) currentNumber - 1.0 );			
 				unsigned int hours = estTimeLeft / 3600;
@@ -178,7 +178,6 @@ inline std::string complement( std::string DNAseq ){
 }
 
 
-/*function prototypes */
 void displayProgress( int, int );
 std::vector< std::string > split( std::string, char );
 int argMin( std::vector< double > );
@@ -189,5 +188,6 @@ double vectorSum( std::vector< double > & );
 std::vector<double> movingAvgFilter(std::vector<double> &, unsigned int);
 std::vector<double> movingAvgFilterLogistic(std::vector<double> &, unsigned int);
 std::vector<double> normVectorSum(std::vector<double>);
+const char *get_ext(const char *);
 
 #endif

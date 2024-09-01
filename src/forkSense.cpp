@@ -8,23 +8,29 @@
 
 #include "../tensorflow/include/tensorflow/c/eager/c_api.h"
 #include <fstream>
-#include "data_IO.h"
 #include "trainGMM.h"
 #include "forkSense.h"
 #include "tensor.h"
+#include "common.h"
+#include "data_IO.h"
+#include "reads.h"
+#include "../htslib/htslib/hts.h"
+#include "../htslib/htslib/sam.h"
 #include <cmath>
 #include <memory>
 #include <math.h>
 #include <algorithm>
 #include <limits>
 #include <stdlib.h>
+#include <ctime>
+
 
 static const char *help=
-"forkSense: DNAscent AI executable that calls replication origins, termination sites, and fork movement.\n"
+"forkSense: DNAscent executable that calls replication origins, termination sites, and fork movement.\n"
 "To run DNAscent forkSense, do:\n"
-"   DNAscent forkSense -d /path/to/BrdUCalls.detect -o /path/to/output.forkSense --order EdU,BrdU\n"
+"   DNAscent forkSense -d /path/to/detectOutput.bam -o /path/to/output.forkSense --order EdU,BrdU\n"
 "Required arguments are:\n"
-"  -d,--detect               path to output file from DNAscent detect,\n"
+"  -d,--detect               path to output file from DNAscent detect with `detect` or `bam` extension,\n"
 "  -o,--output               path to output file for forkSense,\n"
 "     --order                order in which the analogues were pulsed (EdU,BrdU or BrdU,EdU).\n"
 "Optional arguments are:\n"
@@ -48,7 +54,7 @@ forkSenseArgs parseSenseArguments( int argc, char** argv ){
  		std::cout << help << std::endl;
 		exit(EXIT_SUCCESS);
 	}
-	else if( argc < 4 ){ //PLP&SY: check with Mike
+	else if( argc < 4 ){ 
  		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent forkSense." << std::endl;
 		exit(EXIT_FAILURE);
 	}
@@ -65,24 +71,48 @@ forkSenseArgs parseSenseArguments( int argc, char** argv ){
  		std::string flag( argv[ i ] );
 
  		if ( flag == "-d" or flag == "--detect" ){
+ 		
+ 			if (i == argc-1) throw TrailingFlag(flag);		
+ 		
  			std::string strArg( argv[ i + 1 ] );
+ 			
+ 			const char *ext = get_ext(strArg.c_str());
+				
+			if (strcmp(ext,"bam") == 0){
+				args.humanReadable = false;
+			}
+			else if (strcmp(ext,"detect") == 0){
+				args.humanReadable = true;
+			}
+			else{
+				throw InvalidExtension(ext);
+			}
+			
 			args.detectFilename = strArg;
 			i+=2;
 			specifiedDetect = true;
 		}
 		else if ( flag == "-o" or flag == "--output" ){
+		
+			if (i == argc-1) throw TrailingFlag(flag);		
+		
  			std::string strArg( argv[ i + 1 ] );
 			args.outputFilename = strArg;
 			i+=2;
 			specifiedOutput = true;
 		}
 		else if (flag == "--order" ){
+
+			if (i == argc-1) throw TrailingFlag(flag);
+			
  			std::string strArg( argv[ i + 1 ] );
 			args.analogueOrder = strArg;
 			i+=2;
 			specifiedOrder = true;
 		}
 		else if ( flag == "-t" or flag == "--threads" ){
+
+			if (i == argc-1) throw TrailingFlag(flag);		
 
 			std::string strArg( argv[ i + 1 ] );
 			args.threads = std::stoi( strArg.c_str() );
@@ -251,7 +281,7 @@ std::vector<ReadSegment> stitchSegmentation(std::vector<ReadSegment> &primarySeg
 }
 
 
-void callSegmentation(DetectedRead &r){
+void callSegmentation(std::shared_ptr<DNAscent::detectedRead> r){
 
 	int minLength = 1000;
 
@@ -262,28 +292,28 @@ void callSegmentation(DetectedRead &r){
 	std::vector<ReadSegment> EdU_segments;
 	std::vector<ReadSegment> BrdU_segments;
 
-	for (size_t i = 0; i < r.positions.size(); i++){
+	for (size_t i = 0; i < r -> referenceCoords.size(); i++){
 
-		if (r.EdU_segment_label[i] == 1 and not inSegment){ //initialise the site
+		if (r -> EdU_segment_label[i] == 1 and not inSegment){ //initialise the site
 
-			startCoord = r.positions[i];
+			startCoord = r -> referenceCoords[i];
 			startIdx = i;
 			inSegment = true;
 		}
-		else if (inSegment and (r.thymidine_segment_label[i] == 1 or r.BrdU_segment_label[i] == 1)){//close if we've confidently moved to something else
+		else if (inSegment and (r -> thymidine_segment_label[i] == 1 or r -> BrdU_segment_label[i] == 1)){//close if we've confidently moved to something else
 		
-			endCoord = r.positions[i];
+			endCoord = r -> referenceCoords[i];
 			endIdx = i;
 
 			assert(startCoord != -1 and endCoord != -1);
 
 			if ( abs(endCoord - startCoord) >= minLength ){
 
-				std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
+				std::pair<int, int> trim = segmentationTrim(r -> referenceCoords, r -> EdUCalls, r -> BrdUCalls, startIdx, endIdx);
 				startIdx += trim.first;
 				endIdx -= trim.second;
-				startCoord = r.positions[startIdx];
-				endCoord = r.positions[endIdx];
+				startCoord = r -> referenceCoords[startIdx];
+				endCoord = r -> referenceCoords[endIdx];
 				
 				assert(startCoord < endCoord);
 				
@@ -303,17 +333,17 @@ void callSegmentation(DetectedRead &r){
 
 		assert(startCoord != -1);
 		if (endCoord == -1){
-			endCoord = r.positions.back();
-			endIdx = r.positions.size() - 1;
+			endCoord = r -> referenceCoords.back();
+			endIdx = r -> referenceCoords.size() - 1;
 		}
 
 		if ( abs(endCoord - startCoord) >= minLength ){
 
-			std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
+			std::pair<int, int> trim = segmentationTrim(r -> referenceCoords, r -> EdUCalls, r -> BrdUCalls, startIdx, endIdx);
 			startIdx += trim.first;
 			endIdx -= trim.second;
-			startCoord = r.positions[startIdx];
-			endCoord = r.positions[endIdx];
+			startCoord = r -> referenceCoords[startIdx];
+			endCoord = r -> referenceCoords[endIdx];
 			
 			assert(startCoord < endCoord);
 			
@@ -328,28 +358,28 @@ void callSegmentation(DetectedRead &r){
 	endIdx = -1;
 	inSegment = false;
 
-	for (size_t i = 0; i < r.positions.size(); i++){
+	for (size_t i = 0; i < r -> referenceCoords.size(); i++){
 
-		if (r.BrdU_segment_label[i] == 1 and not inSegment){ //initialise the site
+		if (r -> BrdU_segment_label[i] == 1 and not inSegment){ //initialise the site
 
-			startCoord = r.positions[i];
+			startCoord = r -> referenceCoords[i];
 			startIdx = i;
 			inSegment = true;
 		}
-		else if (inSegment and (r.thymidine_segment_label[i] == 1 or r.EdU_segment_label[i] == 1)){//close if we've confidently moved to something else
+		else if (inSegment and (r -> thymidine_segment_label[i] == 1 or r -> EdU_segment_label[i] == 1)){//close if we've confidently moved to something else
 		
-			endCoord = r.positions[i];
+			endCoord = r -> referenceCoords[i];
 			endIdx = i;
 
 			assert(startCoord != -1 and endCoord != -1);
 
 			if ( abs(endCoord - startCoord) >= minLength ){
 			
-				std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
+				std::pair<int, int> trim = segmentationTrim(r -> referenceCoords, r -> BrdUCalls, r -> EdUCalls, startIdx, endIdx);
 				startIdx += trim.first;
 				endIdx -= trim.second;
-				startCoord = r.positions[startIdx];
-				endCoord = r.positions[endIdx];
+				startCoord = r -> referenceCoords[startIdx];
+				endCoord = r -> referenceCoords[endIdx];
 				
 				assert(startCoord < endCoord);
 			
@@ -369,17 +399,17 @@ void callSegmentation(DetectedRead &r){
 
 		assert(startCoord != -1);
 		if (endCoord == -1){
-			endCoord = r.positions.back();
-			endIdx = r.positions.size() - 1;
+			endCoord = r -> referenceCoords.back();
+			endIdx = r -> referenceCoords.size() - 1;
 		}
 
 		if ( abs(endCoord - startCoord) >= minLength ){
 		
-			std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
+			std::pair<int, int> trim = segmentationTrim(r -> referenceCoords, r -> BrdUCalls, r -> EdUCalls, startIdx, endIdx);
 			startIdx += trim.first;
 			endIdx -= trim.second;
-			startCoord = r.positions[startIdx];
-			endCoord = r.positions[endIdx];
+			startCoord = r -> referenceCoords[startIdx];
+			endCoord = r -> referenceCoords[endIdx];
 			
 			assert(startCoord < endCoord);
 		
@@ -388,26 +418,26 @@ void callSegmentation(DetectedRead &r){
 		}
 	}
 	
-	r.BrdU_segment = stitchSegmentation(BrdU_segments, EdU_segments);
-	r.EdU_segment = stitchSegmentation(EdU_segments, BrdU_segments);
+	r -> BrdU_segment = stitchSegmentation(BrdU_segments, EdU_segments);
+	r -> EdU_segment = stitchSegmentation(EdU_segments, BrdU_segments);
 }
 
 
-std::string callOrigins(DetectedRead &r, forkSenseArgs args){
+std::string callOrigins(std::shared_ptr<DNAscent::detectedRead> r, forkSenseArgs args){
 
 	std::string outBed;
 
 	//match up regions
-	for ( size_t li = 0; li < r.leftForks.size(); li++ ){
+	for ( size_t li = 0; li < r -> leftForks.size(); li++ ){
 
 		//find the closest right fork region
 		int minDist = std::numeric_limits<int>::max();
 		int bestMatch = -1;
-		for ( size_t ri = 0; ri < r.rightForks.size(); ri++ ){
+		for ( size_t ri = 0; ri < r -> rightForks.size(); ri++ ){
 
-			if (r.rightForks[ri].rightmostCoord < r.leftForks[li].rightmostCoord) continue;
+			if (r -> rightForks[ri].rightmostCoord < r -> leftForks[li].rightmostCoord) continue;
 
-			int dist = r.rightForks[ri].rightmostCoord - r.leftForks[li].leftmostCoord;
+			int dist = r -> rightForks[ri].rightmostCoord - r -> leftForks[li].leftmostCoord;
 			assert(dist >= 0);
 			if (dist < minDist){
 				minDist = dist;
@@ -419,13 +449,13 @@ std::string callOrigins(DetectedRead &r, forkSenseArgs args){
 		bool failed = false;
 		if (bestMatch != -1){
 
-			for (size_t l2 = 0; l2 < r.leftForks.size(); l2++){
+			for (size_t l2 = 0; l2 < r -> leftForks.size(); l2++){
 
 				if (l2 == li) continue;
 
-				if (r.rightForks[bestMatch].rightmostCoord < r.leftForks[l2].rightmostCoord) continue;
+				if (r -> rightForks[bestMatch].rightmostCoord < r -> leftForks[l2].rightmostCoord) continue;
 
-				int dist = r.rightForks[bestMatch].rightmostCoord - r.leftForks[l2].leftmostCoord;
+				int dist = r -> rightForks[bestMatch].rightmostCoord - r -> leftForks[l2].leftmostCoord;
 				assert(dist >= 0);
 
 				if (dist < minDist){
@@ -438,22 +468,22 @@ std::string callOrigins(DetectedRead &r, forkSenseArgs args){
 		if (failed) continue;
 		else if (bestMatch != -1){
 
-			int orilb = std::min(r.leftForks[li].rightmostCoord, r.rightForks[bestMatch].leftmostCoord);
-			int oriub = std::max(r.leftForks[li].rightmostCoord, r.rightForks[bestMatch].leftmostCoord);
+			int orilb = std::min(r -> leftForks[li].rightmostCoord, r -> rightForks[bestMatch].leftmostCoord);
+			int oriub = std::max(r -> leftForks[li].rightmostCoord, r -> rightForks[bestMatch].leftmostCoord);
 			
-			int orilb_idx = std::min(r.leftForks[li].rightmostIdx, r.rightForks[bestMatch].leftmostIdx);
-			int oriub_idx = std::max(r.leftForks[li].rightmostIdx, r.rightForks[bestMatch].leftmostIdx);
+			int orilb_idx = std::min(r -> leftForks[li].rightmostIdx, r -> rightForks[bestMatch].leftmostIdx);
+			int oriub_idx = std::max(r -> leftForks[li].rightmostIdx, r -> rightForks[bestMatch].leftmostIdx);
 			
 			struct ReadSegment s = {orilb, orilb_idx, oriub, oriub_idx};
-			r.origins.push_back(s);
+			r -> origins.push_back(s);
 
-			outBed += r.chromosome + " " 
+			outBed += r -> referenceMappedTo + " " 
 			       + std::to_string(orilb) + " " 
 			       + std::to_string(oriub) + " "
-			       + r.readID.substr(1) + " "
-			       + std::to_string( r.mappingLower ) + " "
-			       + std::to_string( r.mappingUpper ) + " "
-			       + r.strand + "\n"; 
+			       + r -> readID + " "
+			       + std::to_string( r -> refStart ) + " "
+			       + std::to_string( r -> refEnd ) + " "
+			       + r -> strand + "\n"; 
 		}
 	}
 
@@ -461,21 +491,21 @@ std::string callOrigins(DetectedRead &r, forkSenseArgs args){
 }
 
 
-std::string callTerminations(DetectedRead &r, forkSenseArgs args){
+std::string callTerminations(std::shared_ptr<DNAscent::detectedRead> r, forkSenseArgs args){
 
 	std::string outBed;
 
 	//match up regions
-	for ( size_t li = 0; li < r.leftForks.size(); li++ ){
+	for ( size_t li = 0; li < r -> leftForks.size(); li++ ){
 
 		//find the closest right fork region
 		int minDist = std::numeric_limits<int>::max();
 		int bestMatch = -1;
-		for ( size_t ri = 0; ri < r.rightForks.size(); ri++ ){
+		for ( size_t ri = 0; ri < r -> rightForks.size(); ri++ ){
 
-			if (r.leftForks[li].rightmostCoord < r.rightForks[ri].rightmostCoord ) continue;
+			if (r -> leftForks[li].rightmostCoord < r -> rightForks[ri].rightmostCoord ) continue;
 
-			int dist = r.leftForks[li].rightmostCoord - r.rightForks[ri].leftmostCoord;
+			int dist = r -> leftForks[li].rightmostCoord - r -> rightForks[ri].leftmostCoord;
 			assert(dist >= 0);
 
 			if (dist < minDist){
@@ -489,13 +519,13 @@ std::string callTerminations(DetectedRead &r, forkSenseArgs args){
 		bool failed = false;
 		if (bestMatch != -1){
 
-			for (size_t l2 = 0; l2 < r.leftForks.size(); l2++){
+			for (size_t l2 = 0; l2 < r -> leftForks.size(); l2++){
 
 				if (li == l2) continue;
 
-				if (r.leftForks[l2].rightmostCoord < r.rightForks[bestMatch].rightmostCoord ) continue;
+				if (r -> leftForks[l2].rightmostCoord < r -> rightForks[bestMatch].rightmostCoord ) continue;
 
-				int dist = r.leftForks[l2].rightmostCoord - r.rightForks[bestMatch].leftmostCoord;
+				int dist = r -> leftForks[l2].rightmostCoord - r -> rightForks[bestMatch].leftmostCoord;
 				assert(dist >= 0);
 
 				if (dist < minDist){
@@ -508,22 +538,22 @@ std::string callTerminations(DetectedRead &r, forkSenseArgs args){
 		if (failed) continue;
 		else if (bestMatch != -1){
 
-			int termlb = std::min(r.leftForks[li].leftmostCoord,r.rightForks[bestMatch].rightmostCoord);
-			int termub = std::max(r.leftForks[li].leftmostCoord,r.rightForks[bestMatch].rightmostCoord);
+			int termlb = std::min(r -> leftForks[li].leftmostCoord, r -> rightForks[bestMatch].rightmostCoord);
+			int termub = std::max(r -> leftForks[li].leftmostCoord, r -> rightForks[bestMatch].rightmostCoord);
 			
-			int termlb_idx = std::min(r.leftForks[li].leftmostIdx,r.rightForks[bestMatch].rightmostIdx);
-			int termub_idx = std::max(r.leftForks[li].leftmostIdx,r.rightForks[bestMatch].rightmostIdx);
+			int termlb_idx = std::min(r -> leftForks[li].leftmostIdx, r -> rightForks[bestMatch].rightmostIdx);
+			int termub_idx = std::max(r -> leftForks[li].leftmostIdx, r -> rightForks[bestMatch].rightmostIdx);
 			
 			struct ReadSegment s = {termlb, termlb_idx, termub, termub_idx};
 
-			r.terminations.push_back(s);
-			outBed += r.chromosome + " " 
+			r -> terminations.push_back(s);
+			outBed += r -> referenceMappedTo + " " 
 			       + std::to_string(termlb) + " " 
 			       + std::to_string(termub) + " " 
-			       + r.readID.substr(1) + " "
-			       + std::to_string( r.mappingLower ) + " "
-			       + std::to_string( r.mappingUpper ) + " "
-			       + r.strand + "\n"; 
+			       + r -> readID + " "
+			       + std::to_string( r -> refStart ) + " "
+			       + std::to_string( r -> refEnd ) + " "
+			       + r -> strand + "\n"; 
 		}
 	}
 
@@ -531,40 +561,40 @@ std::string callTerminations(DetectedRead &r, forkSenseArgs args){
 }
 
 
-std::pair<std::string,std::string> writeAnalogueRegions(DetectedRead &r, bool segmentToForks){
+std::pair<std::string,std::string> writeAnalogueRegions(std::shared_ptr<DNAscent::detectedRead> r, bool segmentToForks){
 
 	std::string outBedEdU, outBedBrdU;
 
-	for (auto i = r.BrdU_segment.begin(); i < r.BrdU_segment.end(); i++){
+	for (auto i = r -> BrdU_segment.begin(); i < r -> BrdU_segment.end(); i++){
 	
 		if (segmentToForks and (i -> partners == 0)) continue;
 
-		outBedBrdU += r.chromosome + " " 
+		outBedBrdU += r -> referenceMappedTo + " " 
 		            + std::to_string(i -> leftmostCoord) + " " 
 		            + std::to_string(i -> rightmostCoord) + " " 
-		            + r.readID.substr(1) + " "
-		            + std::to_string( r.mappingLower ) + " "
-		            + std::to_string( r.mappingUpper ) + " "
-		            + r.strand + "\n"; 
+		            + r -> readID + " "
+		            + std::to_string( r -> refStart ) + " "
+		            + std::to_string( r -> refEnd ) + " "
+		            + r -> strand + "\n"; 
 	}
-	for (auto i = r.EdU_segment.begin(); i < r.EdU_segment.end(); i++){
+	for (auto i = r -> EdU_segment.begin(); i < r -> EdU_segment.end(); i++){
 	
 		if (segmentToForks and (i -> partners == 0)) continue;
 
-		outBedEdU += r.chromosome + " " 
+		outBedEdU += r -> referenceMappedTo + " " 
 		            + std::to_string(i -> leftmostCoord) + " " 
 		            + std::to_string(i -> rightmostCoord) + " " 
-		            + r.readID.substr(1) + " "
-		            + std::to_string( r.mappingLower ) + " "
-		            + std::to_string( r.mappingUpper ) + " "
-		            + r.strand + "\n"; 
+		            + r -> readID + " "
+		            + std::to_string( r -> refStart ) + " "
+		            + std::to_string( r -> refEnd ) + " "
+		            + r -> strand + "\n"; 
 	}
 
 	return std::make_pair(outBedBrdU,outBedEdU);
 }
 
 
-void callForks(DetectedRead &r, std::string analogueOrder){
+void callForks(std::shared_ptr<DNAscent::detectedRead> r, std::string analogueOrder, bool humanReadable){
 
 	//maximum distance in bp between EdU and BrdU segments that allow them to be matched
 	int maxGap = 5000;
@@ -574,13 +604,13 @@ void callForks(DetectedRead &r, std::string analogueOrder){
 	
 	if (analogueOrder == "EdU,BrdU"){
 
-		analogue1_segments = &(r.EdU_segment);
-		analogue2_segments = &(r.BrdU_segment);
+		analogue1_segments = &(r -> EdU_segment);
+		analogue2_segments = &(r -> BrdU_segment);
 	}
 	else{
 
-		analogue2_segments = &(r.EdU_segment);
-		analogue1_segments = &(r.BrdU_segment);
+		analogue2_segments = &(r -> EdU_segment);
+		analogue1_segments = &(r -> BrdU_segment);
 	}
 
 	std::vector<std::pair<size_t,size_t>> proto_rightForkPairs, proto_leftForkPairs;
@@ -722,8 +752,8 @@ void callForks(DetectedRead &r, std::string analogueOrder){
 		int attempts_EdU = 0;
 		for (int j = li; j < (*analogue1_segments)[p -> first].rightmostIdx; j++){
 		
-			if (r.brduCalls[j] > 0.5) BrdU_in_EdU++;
-			if (r.eduCalls[j] > 0.5) EdU_in_EdU++;
+			if (r -> BrdUCalls[j] > 0.5) BrdU_in_EdU++;
+			if (r -> EdUCalls[j] > 0.5) EdU_in_EdU++;
 			attempts_EdU++;
 		}
 
@@ -732,13 +762,36 @@ void callForks(DetectedRead &r, std::string analogueOrder){
 		int attempts_BrdU = 0;	
 		for (int j = (*analogue2_segments)[p -> second].leftmostIdx; j < ri; j++){
 		
-			if (r.brduCalls[j] > 0.5) BrdU_in_BrdU++;
-			if (r.eduCalls[j] > 0.5) EdU_in_BrdU++;
+			if (r -> BrdUCalls[j] > 0.5) BrdU_in_BrdU++;
+			if (r -> EdUCalls[j] > 0.5) EdU_in_BrdU++;
 			attempts_BrdU++;
 		}
 		
+		//calculate query span
+		int querySpan = -1;
+		if (not humanReadable){
+
+			if (r -> isReverse){
+
+				int refIndex_left = (r -> refEnd) - lc;
+				int refIndex_right = (r -> refEnd) - rc;
+				int queryIndex_left = r -> refToQuery.at(refIndex_left);
+				int queryIndex_right = r -> refToQuery.at(refIndex_right);
+				querySpan = std::abs(queryIndex_right - queryIndex_left);
+			}
+			else{
+			
+				int refIndex_left = lc - (r -> refStart);
+				int refIndex_right = rc - (r -> refStart);
+				int queryIndex_left = r -> refToQuery.at(refIndex_left);
+				int queryIndex_right = r -> refToQuery.at(refIndex_right);
+				querySpan = std::abs(queryIndex_right - queryIndex_left);
+			}
+		}
+
 		struct ReadSegment s = {lc, li, rc, ri};
 		s.partners = tipPartners;
+		s.querySpan = querySpan;
 		
 		double overallLength = rc-lc;
 		double sig4 = BrdU_in_EdU/(double) attempts_EdU;
@@ -752,7 +805,7 @@ void callForks(DetectedRead &r, std::string analogueOrder){
 					sig5, 
 					sig6, 
 					sig7};
-		r.rightForks.push_back(s);
+		r -> rightForks.push_back(s);
 	}
 	for (auto p = proto_leftForkPairs.begin(); p < proto_leftForkPairs.end(); p++){
 	
@@ -787,8 +840,8 @@ void callForks(DetectedRead &r, std::string analogueOrder){
 		
 		for (int j = (*analogue1_segments)[p -> second].leftmostIdx; j < ri; j++){
 		
-			if (r.brduCalls[j] > 0.5) BrdU_in_EdU++;
-			if (r.eduCalls[j] > 0.5) EdU_in_EdU++;
+			if (r -> BrdUCalls[j] > 0.5) BrdU_in_EdU++;
+			if (r -> EdUCalls[j] > 0.5) EdU_in_EdU++;
 			attempts_EdU++;
 		}
 		
@@ -798,12 +851,36 @@ void callForks(DetectedRead &r, std::string analogueOrder){
 		
 		for (int j = li; j < (*analogue2_segments)[p -> first].rightmostIdx; j++){
 		
-			if (r.brduCalls[j] > 0.5) BrdU_in_BrdU++;
-			if (r.eduCalls[j] > 0.5) EdU_in_BrdU++;
+			if (r -> BrdUCalls[j] > 0.5) BrdU_in_BrdU++;
+			if (r -> EdUCalls[j] > 0.5) EdU_in_BrdU++;
 			attempts_BrdU++;
 		}
+	
+		//calculate query span
+		int querySpan = -1;
+		if (not humanReadable){
+
+			if (r -> isReverse){
+
+				int refIndex_left = (r -> refEnd) - lc;
+				int refIndex_right = (r -> refEnd) - rc;
+				int queryIndex_left = r -> refToQuery.at(refIndex_left);
+				int queryIndex_right = r -> refToQuery.at(refIndex_right);
+				querySpan = std::abs(queryIndex_right - queryIndex_left);
+			}
+			else{
+			
+				int refIndex_left = lc - (r -> refStart);
+				int refIndex_right = rc - (r -> refStart);
+				int queryIndex_left = r -> refToQuery.at(refIndex_left);
+				int queryIndex_right = r -> refToQuery.at(refIndex_right);
+				querySpan = std::abs(queryIndex_right - queryIndex_left);
+			}
+		}	
 		
 		struct ReadSegment s = {lc, li, rc, ri};
+		s.partners = tipPartners;
+		s.querySpan = querySpan;
 		
 		double overallLength = rc-lc;
 		double sig4 = BrdU_in_EdU/(double) attempts_EdU;
@@ -818,27 +895,26 @@ void callForks(DetectedRead &r, std::string analogueOrder){
 					sig6, 
 					sig7};
 					
-		s.partners = tipPartners;
-		r.leftForks.push_back(s);
+		r -> leftForks.push_back(s);
 	}
 }
 
 
-std::pair< std::vector<int>, int > findNeighbours_mod( std::vector<int> &positions, std::vector< double > &calls, std::vector< double > &altCalls, int index, int epsilon ){
+std::pair< std::vector<int>, int > findNeighbours_mod( std::vector<int> &referenceCoords, std::vector< double > &calls, std::vector< double > &altCalls, int index, int epsilon ){
 
 	std::vector< int > neighbourIdx;
 	int positiveCalls = 0;
 	int positiveAltCalls = 0;
-	int ev = positions[index];
+	int ev = referenceCoords[index];
 	
 	int windowStart = index-epsilon;
 	int windowEnd = index+epsilon;
-	int numPositions = positions.size();
+	int numPositions = referenceCoords.size();
 	int startIdx = std::max(windowStart, 0);
 	int endIdx = std::min(windowEnd, numPositions-1);
 	
 	for ( int i = startIdx; i <= endIdx; i++ ){
-		int runningPos = positions[i];
+		int runningPos = referenceCoords[i];
 		int gap = std::abs(ev - runningPos);
 
 		if (gap <= epsilon){
@@ -861,15 +937,15 @@ std::pair< std::vector<int>, int > findNeighbours_mod( std::vector<int> &positio
 	return std::make_pair(neighbourIdx, netPositiveCalls);
 }
 
-std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double > &calls, std::vector< double > &altCalls, int epsilon, double minDensity ){
+std::map<int,int> DBSCAN_mod( std::vector< int > &referenceCoords, std::vector< double > &calls, std::vector< double > &altCalls, int epsilon, double minDensity ){
 
 	//initialise labels
 	std::map< int, int > index2label;
-	for ( size_t i = 0; i < positions.size(); i++ ) index2label[i] = -2;
+	for ( size_t i = 0; i < referenceCoords.size(); i++ ) index2label[i] = -2;
 
-	for ( size_t i = 0; i < positions.size(); i++ ){
+	for ( size_t i = 0; i < referenceCoords.size(); i++ ){
 	
-		std::pair<std::vector<int>, int> neighbourPair = findNeighbours_mod( positions, calls, altCalls, i, epsilon );
+		std::pair<std::vector<int>, int> neighbourPair = findNeighbours_mod( referenceCoords, calls, altCalls, i, epsilon );
 		std::vector<int> neighbourIndices = neighbourPair.first;
 		int neighbourCalls = neighbourPair.second;
 		int minPoints = neighbourIndices.size() * minDensity;
@@ -886,29 +962,19 @@ std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double
 }
 
 
-void runDBSCAN(DetectedRead &r, KMeansResult analougeIncorporation, std::string analogueOrder){
+void runDBSCAN(std::shared_ptr<DNAscent::detectedRead> r, KMeansResult analougeIncorporation){
 	
 	int epsilon = 500;
 	
-	double minBrdUDensity, minEdUDensity;
-	
-	if (analogueOrder == "EdU,BrdU"){
-
-		minBrdUDensity = std::max(0.1, analougeIncorporation.centroid_1_lowerBound);
-		minEdUDensity = std::max(0.1, analougeIncorporation.centroid_2_lowerBound);
-	}
-	else{
-
-		minBrdUDensity = std::max(0.1, analougeIncorporation.centroid_1_lowerBound);
-		minEdUDensity = std::max(0.1, analougeIncorporation.centroid_2_lowerBound);
-	}
+	double minBrdUDensity = std::max(0.1, analougeIncorporation.centroid_1_lowerBound);
+	double minEdUDensity = std::max(0.1, analougeIncorporation.centroid_2_lowerBound);
 	
 	
-	std::map<int,int> eduLabels = DBSCAN_mod( r.positions, r.eduCalls, r.brduCalls, epsilon, minEdUDensity );
-	std::map<int,int> brduLabels = DBSCAN_mod( r.positions, r.brduCalls, r.eduCalls, epsilon, minBrdUDensity );
+	std::map<int,int> eduLabels = DBSCAN_mod( r -> referenceCoords, r -> EdUCalls, r -> BrdUCalls, epsilon, minEdUDensity );
+	std::map<int,int> brduLabels = DBSCAN_mod( r -> referenceCoords, r -> BrdUCalls, r -> EdUCalls, epsilon, minBrdUDensity );
 	
 
-	for (size_t i = 0; i < r.positions.size(); i++){
+	for (size_t i = 0; i < r -> referenceCoords.size(); i++){
 	
 		int eduLabel = 0;
 		int brduLabel = 0;
@@ -930,9 +996,9 @@ void runDBSCAN(DetectedRead &r, KMeansResult analougeIncorporation, std::string 
 			thymLabel = 1;
 		}
 
-		r.EdU_segment_label.push_back(eduLabel);
-		r.BrdU_segment_label.push_back(brduLabel);
-		r.thymidine_segment_label.push_back(thymLabel);
+		r -> EdU_segment_label.push_back(eduLabel);
+		r -> BrdU_segment_label.push_back(brduLabel);
+		r -> thymidine_segment_label.push_back(thymLabel);
 	}
 }
 
@@ -941,7 +1007,7 @@ std::pair<int, int> segmentationTrim(std::vector< int > &positions, std::vector<
 
 	int epsilon = 500; //500 bp window
 	
-	if (positions[endIdx] - positions[startIdx] < 3*epsilon){
+	if (positions[endIdx] - positions[startIdx] < 10*epsilon){
 	
 		return std::make_pair(0,0);
 	}
@@ -997,18 +1063,18 @@ std::pair<int, int> segmentationTrim(std::vector< int > &positions, std::vector<
 }
 
 
-void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analougeIncorporation){
+void callStalls(std::shared_ptr<DNAscent::detectedRead> r, std::string analogueOrder, KMeansResult analougeIncorporation){
 
 	int filterSize = 2000;
 	
 	std::vector< double > secondAnalogueCalls;
 	if (analogueOrder == "EdU,BrdU"){
 	
-		secondAnalogueCalls = r.brduCalls;
+		secondAnalogueCalls = r -> BrdUCalls;
 	}
 	else{
 	
-		secondAnalogueCalls = r.eduCalls;
+		secondAnalogueCalls = r -> EdUCalls;
 	}
 
 	//non-linear scaling parameters for stall score
@@ -1016,7 +1082,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 	double alpha = 1./log(2./(1.+exp(-1.*beta))); //set alpha so that non-linear scaling of 1 is equal to 1
 
 	//check right forks
-	for (auto s = r.rightForks.begin(); s < r.rightForks.end(); s++){
+	for (auto s = r -> rightForks.begin(); s < r -> rightForks.end(); s++){
 	
 		if (s -> partners > 0){
 			s -> score = -1;
@@ -1024,10 +1090,9 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		}
 	
 		int forkTipIdx = s -> rightmostIdx;
-		int numPositions = r.positions.size();
+		int numPositions = r -> referenceCoords.size();
 		assert( forkTipIdx < numPositions);
 		double maximumScore = -3.0;
-		bool failOnAlignment = false;
 
 		if (forkTipIdx > filterSize and forkTipIdx < numPositions-filterSize){
 			
@@ -1035,9 +1100,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 			int attempts = 0;
 			for (int j = forkTipIdx-filterSize; j < forkTipIdx; j++){
 			
-				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
-
-					if (not r.alignmentQuality[j]) failOnAlignment = true;
+				if (std::abs(r -> referenceCoords[forkTipIdx] - r -> referenceCoords[j]) < filterSize){
 			
 					if (secondAnalogueCalls[j] > 0.5){
 						positiveCalls++;
@@ -1055,9 +1118,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 			attempts = 0;
 			for (int j = forkTipIdx; j < forkTipIdx+filterSize; j++){
 			
-				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
-
-					if (not r.alignmentQuality[j]) failOnAlignment = true;
+				if (std::abs(r -> referenceCoords[forkTipIdx] - r -> referenceCoords[j]) < filterSize){
 			
 					if (secondAnalogueCalls[j] > 0.5){
 						positiveCalls++;
@@ -1077,22 +1138,17 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 				score = -2.0;
 			}
 			
-			r.stallScore[forkTipIdx] = score;
+			r -> stallScore[forkTipIdx] = score;
 			if (score > maximumScore){
 				maximumScore = score;
 			}
-		}
-
-		if (failOnAlignment){
-			s -> score = -4.0; 
-			continue;
 		}
 
 		s -> score = maximumScore;
 	}
 	
 	//check left forks
-	for (auto s = r.leftForks.begin(); s < r.leftForks.end(); s++){
+	for (auto s = r -> leftForks.begin(); s < r -> leftForks.end(); s++){
 	
 		if (s -> partners > 0){
 			s -> score = -1;
@@ -1100,10 +1156,9 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		}
 	
 		int forkTipIdx = s -> leftmostIdx;
-		int numPositions = r.positions.size();
+		int numPositions = r -> referenceCoords.size();
 		assert( forkTipIdx < numPositions);
 		double maximumScore = -3.0;
-		bool failOnAlignment = false;
 
 		if (forkTipIdx > filterSize and forkTipIdx < numPositions-filterSize){
 			
@@ -1111,9 +1166,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 			int attempts = 0;
 			for (int j = forkTipIdx-filterSize; j < forkTipIdx; j++){
 			
-				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
-
-					if (not r.alignmentQuality[j]) failOnAlignment = true;
+				if (std::abs(r -> referenceCoords[forkTipIdx] - r -> referenceCoords[j]) < filterSize){
 				
 					if (secondAnalogueCalls[j] > 0.5){
 						positiveCalls++;
@@ -1129,9 +1182,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 			attempts = 0;
 			for (int j = forkTipIdx; j < forkTipIdx+filterSize; j++){
 			
-				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
-
-					if (not r.alignmentQuality[j]) failOnAlignment = true;
+				if (std::abs(r -> referenceCoords[forkTipIdx] - r -> referenceCoords[j]) < filterSize){
 			
 					if (secondAnalogueCalls[j] > 0.5){
 						positiveCalls++;
@@ -1153,15 +1204,10 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 			else{
 				score = -2.0;
 			}
-			r.stallScore[forkTipIdx] = score;
+			r -> stallScore[forkTipIdx] = score;
 			if (score > maximumScore){
 				maximumScore = score;
 			}
-		}
-
-		if (failOnAlignment){
-			s -> score = -4.0;
-			continue;
 		}
 
 		s -> score = maximumScore;
@@ -1169,12 +1215,12 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 }
 
 
-void emptyBuffer(std::vector< DetectedRead > &buffer, forkSenseArgs args, fs_fileManager &fm, KMeansResult analogueIncorporation){
+void emptyBuffer(std::vector< std::shared_ptr<DNAscent::detectedRead> > &buffer, forkSenseArgs args, fs_fileManager &fm, KMeansResult analogueIncorporation){
 
 	#pragma omp parallel for schedule(dynamic) shared(args, analogueIncorporation) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
-		runDBSCAN(*b,analogueIncorporation, args.analogueOrder);
+		runDBSCAN(*b, analogueIncorporation);
 		callSegmentation(*b);
 		
 		std::string termOutput, originOutput, leftForkOutput, rightForkOutput, leftForkOutput_signatures, rightForkOutput_signatures, BrdUOutput, EdUOutput;
@@ -1182,57 +1228,59 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, forkSenseArgs args, fs_fil
 
 		if (args.markOrigins or args.markTerms or args.markForks){
 
-			callForks(*b, args.analogueOrder);
+			callForks(*b, args.analogueOrder, args.humanReadable);
 			callStalls(*b, args.analogueOrder, analogueIncorporation);
 			
-			for (auto lf = (*b).leftForks.begin(); lf < (*b).leftForks.end(); lf++){
+			for (auto lf = (*b) -> leftForks.begin(); lf < (*b) -> leftForks.end(); lf++){
 			
-				leftForkOutput += (*b).chromosome + " " 
+				leftForkOutput += (*b) -> referenceMappedTo + " " 
 				               + std::to_string(lf -> leftmostCoord) + " " 
 				               + std::to_string(lf -> rightmostCoord) + " " 
-				               + (*b).readID.substr(1) + " "
-				               + std::to_string( (*b).mappingLower ) + " "
-				               + std::to_string( (*b).mappingUpper ) + " "
-				               + (*b).strand + " "
+				               + (*b) -> readID + " "
+				               + std::to_string( (*b) -> refStart ) + " "
+				               + std::to_string( (*b) -> refEnd ) + " "
+				               + (*b) -> strand + " "
+				               + std::to_string( lf -> querySpan ) + " "
 				               + std::to_string(lf -> score) + "\n"; 
 			}
 			
-			for (auto rf = (*b).rightForks.begin(); rf < (*b).rightForks.end(); rf++){
+			for (auto rf = (*b) -> rightForks.begin(); rf < (*b) -> rightForks.end(); rf++){
 			
-				rightForkOutput += (*b).chromosome + " " 
+				rightForkOutput += (*b) -> referenceMappedTo + " " 
 				               + std::to_string(rf -> leftmostCoord) + " " 
 				               + std::to_string(rf -> rightmostCoord) + " " 
-				               + (*b).readID.substr(1) + " "
-				               + std::to_string( (*b).mappingLower ) + " "
-				               + std::to_string( (*b).mappingUpper ) + " "
-				               + (*b).strand + " "
+				               + (*b) -> readID + " "
+				               + std::to_string( (*b) -> refStart ) + " "
+				               + std::to_string( (*b) -> refEnd ) + " "
+				               + (*b) -> strand + " "
+				               + std::to_string( rf -> querySpan ) + " "
 				               + std::to_string(rf -> score) + "\n"; 
 			}
 			
 			if (args.makeSignatures){
 			
-				for (auto lf = (*b).leftForks.begin(); lf < (*b).leftForks.end(); lf++){
+				for (auto lf = (*b) -> leftForks.begin(); lf < (*b) -> leftForks.end(); lf++){
 				
-					leftForkOutput_signatures += (*b).chromosome + " " 
+					leftForkOutput_signatures += (*b) -> referenceMappedTo + " " 
 						       + std::to_string(lf -> leftmostCoord) + " " 
 						       + std::to_string(lf -> rightmostCoord) + " " 
-						       + (*b).readID.substr(1) + " "
-						       + std::to_string( (*b).mappingLower ) + " "
-						       + std::to_string( (*b).mappingUpper ) + " "
-						       + (*b).strand + " ";
+						       + (*b) -> readID + " "
+						       + std::to_string( (*b) -> refStart ) + " "
+						       + std::to_string( (*b) -> refEnd ) + " "
+						       + (*b) -> strand + " ";
 					for (auto s = (lf -> stress_signature).begin(); s < (lf -> stress_signature).end(); s++) leftForkOutput_signatures += std::to_string(*s) + " ";
 					leftForkOutput_signatures += std::to_string(lf -> score) + "\n"; 
 				}
 				
-				for (auto rf = (*b).rightForks.begin(); rf < (*b).rightForks.end(); rf++){
+				for (auto rf = (*b) -> rightForks.begin(); rf < (*b) -> rightForks.end(); rf++){
 				
-					rightForkOutput_signatures += (*b).chromosome + " " 
+					rightForkOutput_signatures += (*b) -> referenceMappedTo + " " 
 						       + std::to_string(rf -> leftmostCoord) + " " 
 						       + std::to_string(rf -> rightmostCoord) + " " 
-						       + (*b).readID.substr(1) + " "
-						       + std::to_string( (*b).mappingLower ) + " "
-						       + std::to_string( (*b).mappingUpper ) + " "
-						       + (*b).strand + " ";
+						       + (*b) -> readID + " "
+						       + std::to_string( (*b) -> refStart ) + " "
+						       + std::to_string( (*b) -> refEnd ) + " "
+						       + (*b) -> strand + " ";
 					for (auto s = (rf -> stress_signature).begin(); s < (rf -> stress_signature).end(); s++) rightForkOutput_signatures += std::to_string(*s) + " ";
 					rightForkOutput_signatures += std::to_string(rf -> score) + "\n"; 
 				}			
@@ -1257,15 +1305,15 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, forkSenseArgs args, fs_fil
 		}
 		
 		//fix the analogue segment indices
-		std::vector<int> eduSegment_output( (b -> positions).size(), 0);
-		std::vector<int> brduSegment_output( (b -> positions).size(), 0);
-		for (auto s = (*b).EdU_segment.begin(); s < (*b).EdU_segment.end(); s++){
+		std::vector<int> eduSegment_output( (*b) -> referenceCoords.size(), 0);
+		std::vector<int> brduSegment_output( (*b) -> referenceCoords.size(), 0);
+		for (auto s = (*b) -> EdU_segment.begin(); s < (*b) -> EdU_segment.end(); s++){
 		
 			if ( (*s).partners == 0 ) continue;
 		
 			for (int i = (*s).leftmostIdx; i <= (*s).rightmostIdx; i++) eduSegment_output[i] = 1;
 		}
-		for (auto s = (*b).BrdU_segment.begin(); s < (*b).BrdU_segment.end(); s++){
+		for (auto s = (*b) -> BrdU_segment.begin(); s < (*b) -> BrdU_segment.end(); s++){
 		
 			if ( (*s).partners == 0 ) continue;
 		
@@ -1274,14 +1322,14 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, forkSenseArgs args, fs_fil
 		
 		//only output segmentation on non-trivial reads that have at least one analogue segment called on them
 		std::string readOutput;
-		if ( (*b).EdU_segment.size() > 0 or (*b).BrdU_segment.size() > 0){
+		if ( (*b) -> EdU_segment.size() > 0 or (*b) -> BrdU_segment.size() > 0){
 		
 			//write the read header
-			readOutput += (*b).readID + " " + (*b).chromosome + " " + std::to_string((*b).mappingLower) + " " + std::to_string((*b).mappingUpper) + " " + (*b).strand + "\n"; //header
+			readOutput += ">" + (*b) -> readID + " " + (*b) -> referenceMappedTo + " " + std::to_string((*b) -> refStart) + " " + std::to_string((*b) -> refEnd) + " " + (*b) -> strand + "\n"; //header
 
-			for (size_t i = 0; i < (*b).positions.size(); i++){
+			for (size_t i = 0; i < (*b) -> referenceCoords.size(); i++){
 			
-				readOutput += std::to_string((*b).positions[i]) + "\t" + std::to_string(eduSegment_output[i]) + "\t" + std::to_string(brduSegment_output[i]) + "\n";
+				readOutput += std::to_string((*b) -> referenceCoords[i]) + "\t" + std::to_string(eduSegment_output[i]) + "\t" + std::to_string(brduSegment_output[i]) + "\n";
 			}
 		}
 
@@ -1357,105 +1405,7 @@ KMeansResult twoMeans_fs( std::vector< double > &observations ){
 }
 
 
-int parseDetectLine(std::string line,
-			int &BrdUcalls,
-			int &EdUcalls,
-			int &attempts){
-
-	std::string column;
-	std::stringstream ssLine(line);
-	int position = -1, cIndex = 0;
-	AnalogueScore B, E;
-	while ( std::getline( ssLine, column, '\t' ) ){
-
-		if ( cIndex == 0 ){
-
-			position = std::stoi(column);
-		}
-		else if ( cIndex == 1 ){
-
-			E.set(std::stof(column));
-		}
-		else if ( cIndex == 2 ){
-
-			B.set(std::stof(column));
-		}
-		cIndex++;
-	}
-	assert(position != -1);
-
-
-	if ( B.get() > 0.5 ){
-		BrdUcalls++;
-		attempts++;
-	}
-	else if ( E.get() > 0.5 ){
-		EdUcalls++;
-		attempts++;
-	}
-	else{
-		attempts++;
-	}
-	return position;
-}
-
-KMeansResult estimateAnalogueIncorporation(std::string detectFilename, int readCount){
-
-	int readCap = readCount;
-
-	std::ifstream inFile( detectFilename );
-	if ( not inFile.is_open() ) throw IOerror( detectFilename );
-
-	std::cout << "Estimating analogue incorporation..." << std::endl;
-
-	std::vector< double > BrdU_callFractions, EdU_callFractions;
-	
-	int resolution = 2000; //look in 2 kb segments
-	
-	int startingPos = -1;
-	int progress = 0;
-	std::string line;
-	
-	progressBar pb(readCap,false);
-	
-	int BrdUcalls = 0;
-	int EdUcalls = 0;
-	int attempts = 0;
-	int gap = 0;
-	
-	while( std::getline( inFile, line ) ){
-
-		if (line.substr(0,1) == "#") continue; //ignore header
-		if ( line.substr(0,1) == ">" ){
-
-			progress++;
-			pb.displayProgress( progress, 0, 0 );
-			
-			if (progress >= readCap) break;
-			
-			BrdUcalls = 0, EdUcalls = 0, attempts = 0, gap = 0, startingPos = -1;
-			continue;
-		}
-
-		int position = parseDetectLine(line, BrdUcalls, EdUcalls, attempts);
-
-		if (position == -1) continue;
-
-		if ( startingPos == -1 ) startingPos = position;
-		gap = position - startingPos;
-
-		if ( gap > resolution and attempts >= resolution / 10 ){
-
-			double BrdU_frac = (double) BrdUcalls / (double) attempts;
-			BrdU_callFractions.push_back( BrdU_frac );
-
-			double EdU_frac = (double) EdUcalls / (double) attempts;
-			EdU_callFractions.push_back( EdU_frac );
-
-			BrdUcalls = 0, EdUcalls = 0, attempts = 0, gap = 0, startingPos = -1;
-		}
-	}
-	std::cout << std::endl << "Done." << std::endl;
+KMeansResult estimateAnalogueIncorporation(std::vector<double> &BrdU_callFractions, std::vector<double> &EdU_callFractions){
 
 	KMeansResult BrdU_KMeans = twoMeans_fs( BrdU_callFractions );
 	
@@ -1496,8 +1446,6 @@ KMeansResult estimateAnalogueIncorporation(std::string detectFilename, int readC
 	std::cerr << "Estimated BrdU substitution lower bound in BrdU-positive regions: " << BrdU_lowerBound << std::endl;
 	std::cerr << "Estimated fraction of EdU substitution in EdU-positive regions: " << EdU_p << std::endl;
 	std::cerr << "Estimated EdU substitution lower bound in EdU-positive regions: " << EdU_lowerBound << std::endl;
-
-	inFile.close();
 	
 	KMeansResult out = {BrdU_p, BrdU_lowerBound, BrdU_stdv, EdU_p, EdU_lowerBound, EdU_stdv};
 	
@@ -1505,125 +1453,327 @@ KMeansResult estimateAnalogueIncorporation(std::string detectFilename, int readC
 }
 
 
-int sense_main( int argc, char** argv ){
+void callFractions_HR(std::string detectFilename, std::vector<double> &BrdU_callFractions, std::vector<double> &EdU_callFractions, int &readCount){
 
-	forkSenseArgs args = parseSenseArguments( argc, argv );
+	std::ifstream inFile( detectFilename );
+	if ( not inFile.is_open() ) throw IOerror( detectFilename );
+	
+	int resolution = 2000; //look in 2 kb segments
+	
+	int startingPos = -1;
+	std::string line;
+	
+	int BrdUcalls = 0;
+	int EdUcalls = 0;
+	int attempts = 0;
+	int gap = 0;
+	
+	while( std::getline( inFile, line ) ){
+
+		if (line.substr(0,1) == "#" or line.length() == 0) continue; //ignore header and blank lines
+		if ( line.substr(0,1) == ">" ){
+
+			readCount++;			
+			
+			BrdUcalls = 0, EdUcalls = 0, attempts = 0, gap = 0, startingPos = -1;
+			continue;
+		}
+
+		//parse a regular line
+		std::string column;
+		std::stringstream ssLine(line);
+		int cIndex = 0, position = -1;
+		double B=0., E=0.;
+		while ( std::getline( ssLine, column, '\t' ) ){
+
+			if ( cIndex == 0 ){
+
+				position = std::stoi(column);
+			}
+			else if ( cIndex == 1 ){
+
+				E = std::stof(column);
+			}
+			else if ( cIndex == 2 ){
+
+				B = std::stof(column);
+			}
+			cIndex++;
+		}
+
+		if ( B > 0.5 ){
+			BrdUcalls++;
+			attempts++;
+		}
+		else if ( E > 0.5 ){
+			EdUcalls++;
+			attempts++;
+		}
+		else{
+			attempts++;
+		}
+
+		if (position == -1) continue;
+
+		if ( startingPos == -1 ) startingPos = position;
+		gap = position - startingPos;
+
+		if ( gap > resolution and attempts >= resolution / 10 ){
+
+			double BrdU_frac = (double) BrdUcalls / (double) attempts;
+			BrdU_callFractions.push_back( BrdU_frac );
+
+			double EdU_frac = (double) EdUcalls / (double) attempts;
+			EdU_callFractions.push_back( EdU_frac );
+
+			BrdUcalls = 0, EdUcalls = 0, attempts = 0, gap = 0, startingPos = -1;
+		}
+	}
+	inFile.close();
+}
+
+
+void callFractions_modbam(std::string detectFilename, std::vector<double> &BrdU_callFractions, std::vector<double> &EdU_callFractions, int &readCount, int threads){
+
+	unsigned int maxBufferSize = 20*threads;
+
+	htsFile* bam_fh;
+	bam_hdr_t* bam_hdr;
+
+	//load the bam
+	bam_fh = sam_open(detectFilename.c_str(), "r");
+	if (bam_fh == NULL) throw IOerror(detectFilename);
+
+	//load the header
+	bam_hdr = sam_hdr_read(bam_fh);
+
+	//initialise the record and get the record from the file iterator
+	bam1_t *record = bam_init1();
+	
+	std::vector<bam1_t *> buffer;	
+	while(sam_read1(bam_fh, bam_hdr, record) >= 0){
+		
+		bam1_t *record_dup = bam_dup1(record);
+		buffer.push_back(record_dup);
+		
+		if (buffer.size() >= maxBufferSize){
+		
+			#pragma omp parallel for shared(bam_hdr,readCount,BrdU_callFractions,EdU_callFractions) num_threads(threads)
+			for (size_t i = 0; i < buffer.size(); i++){
+			
+				#pragma omp atomic 
+				readCount++;
+			
+				DNAscent::detectedRead r(buffer[i], bam_hdr);
+				auto callFractions = r.getCallFractions();
+				
+				#pragma omp critical 
+				{
+					BrdU_callFractions.insert( BrdU_callFractions.end(), callFractions.first.begin(), callFractions.first.end() );
+					EdU_callFractions.insert( EdU_callFractions.end(), callFractions.second.begin(), callFractions.second.end() );				
+				}
+				bam_destroy1(buffer[i]);				
+			}
+			buffer.clear();
+		}
+		if (readCount % 10*maxBufferSize == 0){
+		
+			std::cout << "\rProcessed " << readCount << " reads..." << std::flush;	
+		}
+	}
+
+	//empty the buffer at the end	
+	if (buffer.size() > 0){
+	
+		#pragma omp parallel for shared(bam_hdr,readCount,BrdU_callFractions,EdU_callFractions) num_threads(threads)
+		for (size_t i = 0; i < buffer.size(); i++){
+		
+			#pragma omp atomic 
+			readCount++;
+		
+			DNAscent::detectedRead r(buffer[i], bam_hdr);
+			auto callFractions = r.getCallFractions();
+			
+			#pragma omp critical 
+			{
+				BrdU_callFractions.insert( BrdU_callFractions.end(), callFractions.first.begin(), callFractions.first.end() );
+				EdU_callFractions.insert( EdU_callFractions.end(), callFractions.second.begin(), callFractions.second.end() );				
+			}
+			bam_destroy1(buffer[i]);				
+		}
+		buffer.clear();
+	}
+	
+	std::cout << std::endl;
+	
+	bam_destroy1(record);
+	bam_hdr_destroy(bam_hdr);
+	hts_close(bam_fh);
+}
+
+
+void iterateOnHumanReadable(forkSenseArgs &args, fs_fileManager &fm, KMeansResult &analogueIncorporation, int readCount){
+
+	progressBar pb(readCount,true);
+
+	std::ifstream inFile( args.detectFilename );
+	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
 
 	unsigned int maxBufferSize = 20*(args.threads);
 
-	//get a read count
-	int readCount = 0;
-	std::string line;
-	std::ifstream inFile( args.detectFilename );
-	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
-	while( std::getline( inFile, line ) ){
+	std::vector<double> BrdUCalls, EdUCalls;
+	std::vector<int> refCoords;
 
-		if ( line.substr(0,1) == ">" ) readCount++;
-	}	
-	progressBar pb(readCount,true);
-	inFile.close();
-	
-	//estimate analogue incorporation
-	KMeansResult analogueIncorporation = estimateAnalogueIncorporation(args.detectFilename, readCount);
-
-	//open all the files
- 	inFile.open( args.detectFilename );
-	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
- 	std::ofstream outFile( args.outputFilename );
- 	
- 	fs_fileManager fm(args, analogueIncorporation);
-
+	std::vector< std::shared_ptr<DNAscent::detectedRead> > buffer;
 	int failed = 0;
-
-	std::vector< DetectedRead > readBuffer;
 	int progress = 0;
+	std::string line;
 	while( std::getline( inFile, line ) ){
 
-		if ( line.substr(0,1) == "#"){
+		if ( line.substr(0,1) == "#" or line.length() == 0){
 			continue;
 		}
 		else if ( line.substr(0,1) == ">" ){
 
-			//check the read length on the back of the buffer
-			if (readBuffer.size() > 0){
-
-				if (readBuffer.back().positions.size() < 2000){
-					failed++;
-					readBuffer.pop_back();
-				}
-			}
-
-			//empty the buffer if it's full
-			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer, args, fm, analogueIncorporation);
-
 			progress++;
 			pb.displayProgress( progress, failed, 0 );
 
-			DetectedRead d;
-			d.header = line;
 			std::stringstream ssLine(line);
 			std::string column;
 			int cIndex = 0;
+			std::string readID, chromosome, strand;
+			int mappingLower, mappingUpper;
 			while ( std::getline( ssLine, column, ' ' ) ){
 
-				if ( cIndex == 0 ) d.readID = column;
-				else if ( cIndex == 1 ) d.chromosome = column;
-				else if ( cIndex == 2 ) d.mappingLower = std::stoi(column);
-				else if ( cIndex == 3 ) d.mappingUpper = std::stoi(column);
-				else if ( cIndex == 4 ) d.strand = column;
+				if ( cIndex == 0 ) readID = column;
+				else if ( cIndex == 1 ) chromosome = column;
+				else if ( cIndex == 2 ) mappingLower = std::stoi(column);
+				else if ( cIndex == 3 ) mappingUpper = std::stoi(column);
+				else if ( cIndex == 4 ) strand = column;
 				else throw DetectParsing();
 				cIndex++;
 			}
+			
+			//add this read to the buffer if it's sufficiently long enough
+			if (refCoords.size() > 2000){
+			
+				std::shared_ptr<DNAscent::detectedRead> r = std::make_shared<DNAscent::detectedRead>(readID, chromosome, mappingLower, mappingUpper, strand, refCoords, EdUCalls, BrdUCalls);
+				buffer.push_back(r);
+			}
+			else{
+				failed++;
+			}
 
-			assert(d.mappingUpper > d.mappingLower);
-			readBuffer.push_back(d);
+
+			//empty the buffer if it's full
+			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer, args, fm, analogueIncorporation);
+
+			//clear the analogue and reference vectors
+			BrdUCalls.clear();
+			EdUCalls.clear();
+			refCoords.clear();
 		}
 		else{
 
 			std::string column;
 			std::stringstream ssLine(line);
-			int position = -1, cIndex = 0;
-			AnalogueScore B, E;
-			bool qualityOK = true;
+			int position = -1;
+			int cIndex = 0;
+			double B = 0, E = 0;
 			while ( std::getline( ssLine, column, '\t' ) ){
-
+			
 				if ( cIndex == 0 ){
 
 					position = std::stoi(column);
 				}
 				else if ( cIndex == 1 ){
 
-					E.set(std::stof(column));
+					E = std::stof(column);
 				}
 				else if ( cIndex == 2 ){
 
-					B.set(std::stof(column));
-				}
-				else if ( cIndex == 4 ){
-					assert(column == "*");
-					qualityOK = false;
+					B = std::stof(column);
 				}
 				cIndex++;
 			}
-
-			readBuffer.back().alignmentQuality.push_back(qualityOK);
-			readBuffer.back().positions.push_back(position);
-			readBuffer.back().brduCalls.push_back(B.get());
-			readBuffer.back().eduCalls.push_back(E.get());
+			
+			assert(position != -1);
+			
+			refCoords.push_back(position);
+			BrdUCalls.push_back(B);
+			EdUCalls.push_back(E);
 		}
 	}
 
 	//empty the buffer at the end
-	if (readBuffer.back().positions.size() < 2000){
-		readBuffer.pop_back();
-	}
-	emptyBuffer(readBuffer, args, fm, analogueIncorporation);
+	if (buffer.size() > 0) emptyBuffer(buffer, args, fm, analogueIncorporation);
 
 	inFile.close();
+}
+
+
+void iterateOnModbam(forkSenseArgs &args, fs_fileManager &fm, KMeansResult &analogueIncorporation, int readCount){
+
+	progressBar pb(readCount,true);
+
+	std::vector< std::shared_ptr<DNAscent::detectedRead> > buffer;
+	unsigned int maxBufferSize = 20*(args.threads);
+	
+	htsFile* bam_fh;
+	bam_hdr_t* bam_hdr;
+
+	//load the bam
+	std::cout << "Opening bam file... ";
+	bam_fh = sam_open(args.detectFilename.c_str(), "r");
+	if (bam_fh == NULL) throw IOerror(args.detectFilename);
+
+	//load the header
+	bam_hdr = sam_hdr_read(bam_fh);
+
+	//initialise the record and get the record from the file iterator
+	bam1_t *record = bam_init1();
+	
+	int progress = 0;
+	while(sam_read1(bam_fh, bam_hdr, record) >= 0){
+	
+		progress++;
+		pb.displayProgress( progress, 0, 0 );
+
+		std::shared_ptr<DNAscent::detectedRead> r = std::make_shared<DNAscent::detectedRead>(record, bam_hdr);
+		buffer.push_back(r);
+
+		//empty the buffer if it's full
+		if (buffer.size() >= maxBufferSize) emptyBuffer(buffer, args, fm, analogueIncorporation);	
+	}
+
+	//empty the buffer at the end	
+	if (buffer.size() > 0) emptyBuffer(buffer, args, fm, analogueIncorporation);	
+	
+	bam_destroy1(record);
+	bam_hdr_destroy(bam_hdr);
+	hts_close(bam_fh);
+}
+
+
+int sense_main( int argc, char** argv ){
+
+	forkSenseArgs args = parseSenseArguments( argc, argv );
+
+	//get call fractions and estimate analogue incorporation
+	std::vector< double > BrdU_callFractions, EdU_callFractions;
+	int readCount = 0;
+	if (args.humanReadable)	callFractions_HR(args.detectFilename, BrdU_callFractions, EdU_callFractions, readCount);
+	else callFractions_modbam(args.detectFilename, BrdU_callFractions, EdU_callFractions, readCount, args.threads);
+
+	KMeansResult analogueIncorporation = estimateAnalogueIncorporation(BrdU_callFractions, EdU_callFractions);
+
+ 	fs_fileManager fm(args, analogueIncorporation);
+
+	if (args.humanReadable) iterateOnHumanReadable(args, fm, analogueIncorporation, readCount);
+	else iterateOnModbam(args, fm, analogueIncorporation, readCount);
+
 	fm.closeAll();
-
-	std::cout << std::endl << "Done." << std::endl;
-
+	std::cout << std::endl;
 	return 0;
 }
 

@@ -26,8 +26,7 @@
 #include "gitcommit.h"
 #include "common.h"
 #include "softwarepath.h"
-#include "forkSense.h"
-#include "config.h"
+#include "error_handling.h"
 
 
 std::string writeDetectHeader(std::string alignmentFilename,
@@ -315,7 +314,7 @@ std::vector< std::pair< double, double > > import_poreModel_fitStdv( std::string
 	return indexedPoreModel;
 }
 
-void parseIndex( std::string indexFilename, std::map< std::string, std::string > &readID2path ){
+void parseIndex( std::string indexFilename, std::map< std::string, IndexEntry > &readID2entry ){
 
 	std::cout << "Loading DNAscent index... ";
 	std::ifstream indexFile( indexFilename );
@@ -324,10 +323,18 @@ void parseIndex( std::string indexFilename, std::map< std::string, std::string >
 
 	//get the readID to path map
 	while ( std::getline( indexFile, line) ){
-
-		std::string readID = line.substr(0, line.find('\t'));
-		std::string path = line.substr(line.find('\t')+1);
-		readID2path[readID] = path;
+	
+		std::stringstream ss_line(line);
+		std::string readID, batch_str, row_str, path;
+		
+		std::getline(ss_line,readID,'\t');
+		std::getline(ss_line,batch_str,'\t');		
+		std::getline(ss_line,row_str,'\t');		
+		std::getline(ss_line,path,'\n');
+		
+		struct IndexEntry i = {stoul(batch_str), stoul(row_str), path};
+		readID2entry[readID] = i;
 	}
+	
 	std::cout << "ok." << std::endl;
 }

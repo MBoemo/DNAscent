@@ -17,17 +17,6 @@
 
 int sense_main( int argc, char** argv );
 
-struct ReadSegment{
-	int leftmostCoord = 0;
-	int leftmostIdx = 0;
-	int rightmostCoord = 0;
-	int rightmostIdx = 0;
-	int partners = 0;
-	double score = 0.0;
-	std::vector<double> stress_signature;
-};
-
-
 struct KMeansResult{
 	double centroid_1;
 	double centroid_1_lowerBound;
@@ -47,39 +36,8 @@ struct forkSenseArgs {
 	bool markForks = false;
 	bool markAnalogues = false;
 	bool makeSignatures = false;
+	bool humanReadable = false;
 	unsigned int threads = 1;
-};
-
-class AnalogueScore{
-
-	private:
-		double _score = 0.0;
-		bool _isSet = false;
-	public:
-		void set(double s){
-			_score = s;
-			_isSet = true;
-		}
-		double get(void){
-			assert(_isSet);
-			return _score;
-		}
-};
-
-class DetectedRead{
-
-	public:
-		std::vector< int > positions;
-		std::vector< bool > alignmentQuality;
-		std::vector< double > brduCalls, eduCalls;
-		std::map< int, double > stallScore;
-		std::string readID, chromosome, strand, header;
-		int mappingLower, mappingUpper;
-		std::vector< int > EdU_segment_label, BrdU_segment_label, thymidine_segment_label;
-		std::vector<ReadSegment> EdU_segment, BrdU_segment;
-		std::vector<ReadSegment> origins, terminations, leftForks, rightForks;
-		std::vector<double> tensorInput;
-		int64_t inputSize;
 };
 
 

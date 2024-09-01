@@ -168,3 +168,11 @@ int argMax(std::vector< double > vec){
 	}
 	return index;
 }
+
+
+const char *get_ext(const char *filename){
+
+	const char *ext = strrchr(filename, '.');
+	if(!ext || ext == filename) return "";
+	return ext + 1;
+}

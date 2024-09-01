@@ -9,30 +9,34 @@
 #include <fstream>
 #include <omp.h>
 #include <stdio.h>
+#include <cmath>
+#include <omp.h>
 #include "../tinydir/tinydir.h"
 #include "../fast5/include/fast5.hpp"
 #include "common.h"
-#include "data_IO.h"
 #include "error_handling.h"
-#include <cmath>
+#include "fast5.h"
+#include "pod5.h"
+
 #define _USE_MATH_DEFINES
 
  static const char *help=
 "index: DNAscent executable that builds an index file for DNAscent detect.\n"
 "To run DNAscent index, do:\n"
-"   DNAscent index -f /path/to/fast5Directory\n"
+"   DNAscent index -f /path/to/directory\n"
 "Required arguments are:\n"
-"  -f,--files                full path to fast5 files,\n"
-"  -s,--sequencing-summary   path to sequencing summary file from Guppy.\n"
+"  -f,--files                full path to fast5 or pod5 files.\n"
 "Optional arguments are:\n"
+"  -s,--sequencing-summary   (legacy) path to sequencing summary file from using Guppy on fast5 files,\n"
 "  -o,--output               output file name (default is index.dnascent).\n"
-"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"DNAscent is under active development by the Boemo Group, Department of Pathology, University of Cambridge (https://www.boemogroup.org/).\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
  struct Arguments {
 	std::string sigfilesPath;
 	std::string seqssumPath;
 	std::string outfile;
+	bool hasSeqSum = false;
 };
 
 
@@ -46,7 +50,7 @@ Arguments parseIndexArguments( int argc, char** argv ){
  		std::cout << help << std::endl;
 		exit(EXIT_SUCCESS);
 	}
-	else if( argc < 3 ){
+	else if( argc < 2 ){
  		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent index." << std::endl;
 		exit(EXIT_FAILURE);
 	}
@@ -57,6 +61,9 @@ Arguments parseIndexArguments( int argc, char** argv ){
 	for ( int i = 1; i < argc; ){
  		std::string flag( argv[ i ] );
  		if ( flag == "-f" or flag == "--files" ){
+ 		
+ 			if (i == argc-1) throw TrailingFlag(flag);		
+ 		
  			std::string strArg( argv[ i + 1 ] );
 			char trailing = strArg.back();
 			if (trailing == '/') strArg.pop_back();
@@ -65,166 +72,24 @@ Arguments parseIndexArguments( int argc, char** argv ){
 		}
 		else if ( flag == "-s" or flag == "--sequencing-summary" ){
 
+ 			if (i == argc-1) throw TrailingFlag(flag);		
+
 			std::string strArg( argv[ i + 1 ] );
 			args.seqssumPath = strArg;
+			args.hasSeqSum = true;
 			i+=2;
 		}
 		else if ( flag == "-o" or flag == "--output" ){
+
+			if (i == argc-1) throw TrailingFlag(flag);		
 
 			std::string strArg( argv[ i + 1 ] );
 			args.outfile = strArg;
 			i+=2;
 		}
-		else if ( flag == "--GridION" ){
-
-			std::cerr << "Note: GridION flag is no longer necessary and will be ignored." << std::endl;
-			i+=1;
-		}
-		else if ( flag == "--P2Solo" ){
-
-			std::cerr << "Note: P2Solo flag is no longer necessary and will be ignored." << std::endl;
-			i+=1;
-		}
 		else throw InvalidOption( flag );
 	}
 	return args;
-}
-
-
-const char *get_ext(const char *filename){
-
-	const char *ext = strrchr(filename, '.');
-	if(!ext || ext == filename) return "";
-	return ext + 1;
-}
-
-
-void countSignalFiles(std::string path, int &count){
-
-	tinydir_dir dir;
-	unsigned int i;
-	if (tinydir_open_sorted(&dir, path.c_str()) == -1){
-		std::string error = "Error opening directory: "+path;
-		perror(error.c_str());
-		goto fail;
-	}
-
-	for (i = 0; i < dir.n_files; i++){
-
-		tinydir_file file;
-		if (tinydir_readfile_n(&dir, &file, i) == -1){
-			std::string error = "Error opening file in: "+path;
-			perror(error.c_str());
-			goto fail;
-		}
-
-		if (file.is_dir){
-
-			if (strcmp(file.name,".") != 0 and strcmp(file.name,"..") != 0){
-
-				std::string newPath = path + "/" + file.name;
-				countSignalFiles(newPath, count);
-			}
-		}
-		else{
-		
-			const char *ext = get_ext(file.name);
-			if ( strcmp(ext,"fast5") == 0 or strcmp(ext,"pod5") == 0 ) count++;
-		}
-	}
-
-	fail:
-	tinydir_close(&dir);
-}
-
-
-void readDirectory(std::string path, std::map<std::string,std::string> &sigfile2fullpath){
-
-	tinydir_dir dir;
-	unsigned int i;
-	if (tinydir_open_sorted(&dir, path.c_str()) == -1){
-		std::string error = "Error opening directory: "+path;
-		perror(error.c_str());
-		goto fail;
-	}
-
-	for (i = 0; i < dir.n_files; i++){
-
-		tinydir_file file;
-		if (tinydir_readfile_n(&dir, &file, i) == -1){
-			std::string error = "Error opening file in: "+path;
-			perror(error.c_str());
-			goto fail;
-		}
-
-		if (file.is_dir){
-
-			if (strcmp(file.name,".") != 0 and strcmp(file.name,"..") != 0){
-
-				char &trail = path.back();
-				if (trail == '/') path.pop_back();
-
-				std::string newPath = path + "/" + file.name;
-				readDirectory(newPath, sigfile2fullpath);
-			}
-		}
-		else{
-			const char *ext = get_ext(file.name);
-			if ( strcmp(ext,"fast5") == 0 or strcmp(ext,"pod5") == 0 ){
-
-				char &trail = path.back();
-				if (trail == '/') path.pop_back();
-
-				sigfile2fullpath[file.name] = path + "/" + file.name;
-			}
-		}
-	}
-
-	fail:
-	tinydir_close(&dir);
-}
-
-
-std::vector<std::string> fast5_get_multi_read_groups(hid_t &hdf5_file){
-    std::vector<std::string> out;
-    ssize_t buffer_size = 0;
-    char* buffer = NULL;
-
-    // get the number of groups in the root group
-    H5G_info_t group_info;
-    int ret = H5Gget_info_by_name(hdf5_file, "/", &group_info, H5P_DEFAULT);
-    if(ret < 0) {
-        fprintf(stderr, "error getting group info\n");
-        exit(EXIT_FAILURE);
-    }
-
-    for(size_t group_idx = 0; group_idx < group_info.nlinks; ++group_idx) {
-
-        // retrieve the size of this group name
-        ssize_t size = H5Lget_name_by_idx(hdf5_file, "/", H5_INDEX_NAME, H5_ITER_INC, group_idx, NULL, 0, H5P_DEFAULT);
-	
-        if(size < 0) {
-            fprintf(stderr, "error getting group name size\n");
-            exit(EXIT_FAILURE);
-        }
-        size += 1; // for null terminator
-           
-        if(size > buffer_size) {
-            buffer = (char*)realloc(buffer, size);
-            buffer_size = size;
-        }
-    
-        // copy the group name
-        H5Lget_name_by_idx(hdf5_file, "/", H5_INDEX_NAME, H5_ITER_INC, group_idx, buffer, buffer_size, H5P_DEFAULT);
-        buffer[size] = '\0';
-        out.push_back(buffer);
-	
-    }
-
-    free(buffer);
-    buffer = NULL;
-    buffer_size = 0;
-    return out;
 }
 
 
@@ -278,6 +143,104 @@ std::map<std::string,std::string> parseSequencingSummary(Arguments &args){
 }
 
 
+void countSignalFiles(std::string path, int &count){
+
+	tinydir_dir dir;
+	unsigned int i;
+	if (tinydir_open_sorted(&dir, path.c_str()) == -1){
+		std::string error = "Error opening directory: "+path;
+		perror(error.c_str());
+		goto fail;
+	}
+
+	for (i = 0; i < dir.n_files; i++){
+
+		tinydir_file file;
+		if (tinydir_readfile_n(&dir, &file, i) == -1){
+			std::string error = "Error opening file in: "+path;
+			perror(error.c_str());
+			goto fail;
+		}
+
+		if (file.is_dir){
+
+			if (strcmp(file.name,".") != 0 and strcmp(file.name,"..") != 0){
+
+				std::string newPath = path + "/" + file.name;
+				countSignalFiles(newPath, count);
+			}
+		}
+		else{
+		
+			const char *ext = get_ext(file.name);
+			if ( strcmp(ext,"fast5") == 0 or strcmp(ext,"pod5") == 0 ) count++;
+		}
+	}
+
+	fail:
+	tinydir_close(&dir);
+}
+
+
+void readDirectory(std::string path, std::vector<std::string> &signalFilePaths){
+
+	tinydir_dir dir;
+	unsigned int i;
+	if (tinydir_open_sorted(&dir, path.c_str()) == -1){
+		std::string error = "Error opening directory: "+path;
+		perror(error.c_str());
+		goto fail;
+	}
+
+	for (i = 0; i < dir.n_files; i++){
+
+		tinydir_file file;
+		if (tinydir_readfile_n(&dir, &file, i) == -1){
+			std::string error = "Error opening file in: "+path;
+			perror(error.c_str());
+			goto fail;
+		}
+
+		if (file.is_dir){
+
+			if (strcmp(file.name,".") != 0 and strcmp(file.name,"..") != 0){
+
+				char &trail = path.back();
+				if (trail == '/') path.pop_back();
+
+				std::string newPath = path + "/" + file.name;
+				readDirectory(newPath, signalFilePaths);
+			}
+		}
+		else{
+			const char *ext = get_ext(file.name);
+			if ( strcmp(ext,"fast5") == 0 or strcmp(ext,"pod5") == 0 ){
+
+				char &trail = path.back();
+				if (trail == '/') path.pop_back();
+
+				signalFilePaths.push_back(path + "/" + file.name);
+			}
+		}
+	}
+
+	fail:
+	tinydir_close(&dir);
+}
+
+
+bool isFileNameInPaths(const std::string& path, const std::string& fileNameToCheck) {
+
+	size_t lastSlashPos = path.find_last_of("/\\");
+
+	std::string extractedFileName = (lastSlashPos != std::string::npos) 
+		? path.substr(lastSlashPos + 1) 
+		: path;
+
+	return extractedFileName == fileNameToCheck;
+}
+
+
 int index_main( int argc, char** argv ){
 
  	Arguments args = parseIndexArguments( argc, argv );
@@ -291,31 +254,67 @@ int index_main( int argc, char** argv ){
 	std::ofstream outFile( args.outfile );
 	if ( not outFile.is_open() ) throw IOerror( args.outfile );
 
-	//iterate on the filesystem to find the full path for each fast5 file
-	std::map<std::string,std::string> sigfile2fullpath;
-	readDirectory(args.sigfilesPath.c_str(), sigfile2fullpath);
+	//iterate on the filesystem to find the full path for each signal file
+	std::vector<std::string> signalFilePaths;
+	readDirectory(args.sigfilesPath.c_str(), signalFilePaths);
 
-	std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args);
-
-	for (auto idpair = readID2fast5.begin(); idpair != readID2fast5.end(); idpair++){
-
-		//check that the path we need is in the map and exit gracefully if not
-		if ( sigfile2fullpath.count(idpair->second) == 0 ){
+	//if a user specified a sequencing summary for Guppy/fast5, use it instead of crawling through files
+	if (args.hasSeqSum){
+	
+		std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args);
 		
-			const char *ext = get_ext((idpair->second).c_str());
-			if (strcmp(ext,"fast5") != 0){
-		
-				std::cerr << "This doesn't look like a fast5 or pod5 file: " << idpair->second << std::endl;
-				std::cerr << "- Ensure all files are decompressed." << std::endl;
-				std::cerr << "- Use the --GridION flag or --P2Solo flags if appropriate." << std::endl;
+		for (auto idpair = readID2fast5.begin(); idpair != readID2fast5.end(); idpair++){
+
+			std::string fn = idpair->second;
+
+			auto it = std::find_if(signalFilePaths.begin(), signalFilePaths.end(), [&fn](const std::string& path) {
+				return isFileNameInPaths(path, fn);
+			});
+			
+			//check that we have the file we need and exit gracefully if not
+			if ( it == signalFilePaths.end() ){
+			
+				const char *ext = get_ext((idpair->second).c_str());
+				if (strcmp(ext,"fast5") != 0){
+			
+					std::cerr << "This isn't a fast5 file: " << idpair->second << std::endl;
+				}
+			
+				throw MissingFast5(idpair->second);
 			}
-		
-			throw MissingFast5(idpair->second);
-		}
+			
+			progress++;
+			pb.displayProgress( progress, 0, 0 );
 
-		outFile << idpair->first << "\t" << sigfile2fullpath.at(idpair->second) << std::endl;
-		progress++;
-		pb.displayProgress( progress, 0, 0 );
+			outFile << idpair->first << "\t-1\t-1\t" << *it << std::endl;
+		}
+	}
+	else{
+
+		for (size_t fi = 0; fi < signalFilePaths.size(); fi++){
+
+			const char *ext = get_ext((signalFilePaths[fi]).c_str());
+			if (strcmp(ext,"fast5") == 0){
+			
+				std::vector<std::string> IDs_in_file = fast5_extract_readIDs(signalFilePaths[fi]);
+				for (size_t i = 0; i < IDs_in_file.size(); i++){
+					outFile << IDs_in_file[i] << "\t-1\t-1\t" << signalFilePaths[fi] << std::endl;
+				}
+			}
+			else if (strcmp(ext,"pod5") == 0){
+
+				std::vector<std::string> IDs_in_file = pod5_extract_readIDs(signalFilePaths[fi]);
+				for (size_t i = 0; i < IDs_in_file.size(); i++){
+					outFile << IDs_in_file[i] << "\t" << signalFilePaths[fi] << std::endl;
+				}		
+			}
+			else{
+				std::cerr << "This doesn't look like a fast5 or pod5 file: " << signalFilePaths[fi] << std::endl;
+				throw MissingFast5(signalFilePaths[fi]);
+			}
+			progress++;
+			pb.displayProgress( progress, 0, 0 );
+		}
 	}
 
 	outFile.close();

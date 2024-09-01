@@ -9,3 +9,7 @@
 [submodule "tinydir"]
 	path = tinydir
 	url = https://github.com/cxong/tinydir.git
+
+[submodule "pod5-file-format"]
+	path = pod5-file-format
+	url = https://github.com/nanoporetech/pod5-file-format.git

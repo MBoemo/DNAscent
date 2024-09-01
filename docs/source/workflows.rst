@@ -3,56 +3,46 @@
 Workflow
 ===============================
 
-The following is a full DNAscent workflow, where we'll start off after Guppy has finished running (users that need help with Guppy should refer to the `Oxford Nanopore webpages <https://nanoporetech.com/nanopore-sequencing-data-analysis>`_). The recommended Guppy basecalling configuration file for v4.0.2 is ``dna_r10.4.1_e8.2_400bps_5khz_hac.cfg``.
+The following is a full DNAscent workflow, where we'll start off after Dorado has finished running. The recommended Dorado basecalling model for v4.0.3 is ``dna_r10.4.1_e8.2_400bps_fast@v5.0.0``.
 In particular, we assume the following:
 
-* You have a directory of R10.4.1 Oxford Nanopore FAST5 reads (which may be in subdirectories) that you want to use for detection. Currently, DNAscent only supports FAST5 format. You can convert POD5 to FAST5 using the ``pod5 convert to_fast5`` utility (https://pypi.org/project/pod5/#pod5-convert-to_fast5).
-* Reads have been basecalled to fastq format using Guppy (available from Oxford Nanopore).
-* You have a reference/genome file (in fasta format) for your reads.
+* You have a directory of R10.4.1 Oxford Nanopore POD5 files (which may be in subdirectories) that you want to use for detection.
+* These POD5 files and a reference/genome file have been passed to Dorado (available from Oxford Nanopore) to produce a bam file.
 
 Example Workflow
 ----------------
 
-Download and compile DNAscent:
+Pull the Singularity image:
+
+.. code-block:: console
+
+   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.0.3
+
+Alternatively, you can download and compile DNAscent:
 
 .. code-block:: console
 
    git clone --recursive https://github.com/MBoemo/DNAscent.git
    cd DNAscent
-   git checkout 4.0.2
+   git checkout 4.0.3
    make
    cd ..
 
-Concatenate the fastq files from Guppy:
+Let's index the run:
 
 .. code-block:: console
 
-   cat /path/to/GuppyOutDirectory/*.fastq > reads.fastq
+   DNAscent index -f /full/path/to/pod5
 
-Align the reads with `minimap2 <https://github.com/lh3/minimap2>`_ and sort with `samtools <http://www.htslib.org/>`_:
+This should only take a few seconds to run and will put a file called ``index.dnascent`` in the current directory.  
 
-.. code-block:: console
-
-   minimap2 -ax map-ont -o alignment.sam /path/to/reference.fasta reads.fastq
-   samtools view -Sb -o alignment.bam alignment.sam
-   samtools sort alignment.bam alignment.sorted
-   samtools index alignment.sorted.bam
-
-Now we're ready to use DNAscent.  Let's index the run:
+Suppose we have an output from Dorado called ``alignment.bam`` (which doesn't need to be sorted or indexed). You can run DNAscent detect (on 10 threads, for example) by running:
 
 .. code-block:: console
 
-   DNAscent index -f /full/path/to/fast5 -s /full/path/to/GuppyOutDirectory/sequencing_summary.txt
+   DNAscent detect -b alignment.bam -r /full/path/to/reference.fasta -i index.dnascent -o detect_output.bam -t 10
 
-This should put a file called ``index.dnascent`` in the current directory.  
-
-You can run DNAscent detect (on 10 threads, for example) by running:
-
-.. code-block:: console
-
-   DNAscent detect -b alignment.sorted.bam -r /full/path/to/reference.fasta -i index.dnascent -o output.detect -t 10
-
-Alternatively, if the system has a CUDA-compatible GPU in it, we can run ``nvidia-smi`` to get an output that looks like the following:
+If the system has a CUDA-compatible GPU in it, we can run ``nvidia-smi`` to get an output that looks like the following:
 
 .. code-block:: console
 
@@ -81,17 +71,17 @@ From this, we can see that the GPU's device ID is 0 (just to the left of Tesla) 
 
 .. code-block:: console
 
-   DNAscent detect -b alignment.sorted.bam -r /full/path/to/reference.fasta -i index.dnascent -o output.detect -t 10 --GPU 0
+   DNAscent detect -b alignment.bam -r /full/path/to/reference.fasta -i index.dnascent -o detect_output.bam -t 10 --GPU 0
 
 Note that we're assuming the CUDA libraries for the GPU have been set up properly (see :ref:`installation`). If these libraries can't be accessed, DNAscent will splash a warning saying so and default back to using CPUs.
 
-When ``DNAscent detect`` is finished, it will should put a file called ``output.detect`` in the current directory.  At this point, we can make bedgraphs out of the ``DNAscent detect`` output (see :ref:`visualisation`) which can also be loaded into IGV or the UCSC Genome Browser.
+When ``DNAscent detect`` is finished, it will should put a file in modbam format called ``detect_output.bam`` in the current directory. 
 
 Lastly, we can run ``DNAscent forkSense`` on the output of ``DNAscent detect`` to measure replication fork movement.  Suppose that in our experimental protocol, we pulsed BrdU first followed by EdU.  Let's run it on four threads and specify that we want it to keep track of replication origins, forks, and termination sites:
 
 .. code-block:: console
 
-   DNAscent forkSense -d output.detect -o output.forkSense -t 4 --markOrigins --markTerminations --markForks --order BrdU,EdU
+   DNAscent forkSense -d detect_output.bam -o output.forkSense -t 4 --markOrigins --markTerminations --markForks --order BrdU,EdU
 
 This will make the following files: 
 
@@ -100,26 +90,10 @@ This will make the following files:
 * four bed files (leftForks_DNAscent_forkSense.bed, leftForksStressed_DNAscent_forkSense.bed, rightForks_DNAscent_forkSense.bed, rightForksStressed_DNAscent_forkSense.bed) with our fork calls,
 * output.forkSense. 
 
-We can load the bed files directly into IGV to see where origins, forks, and terminiations were called in the genome.
-
-We can visualise (see :ref:`visualisation`) output.forkSense by turning them into bedgraphs:
-
-.. code-block:: console
-
-   python dnascent2bedgraph.py -d output.detect -f output.forkSense -o newBedgraphDirectory
-
-This will create a new directory called ``newBedgraphDirectory``.  By passing both a ``forkSense`` and ``detect`` file to dnascent2bedgraph.py, the utility will convert them both into bedgraphs and organise them so that for each read, we can see the bp-resolution BrdU detection output from ``DNAscent detect`` right next to the left- and rightward-moving fork probabilities from ``DNAscent forkSense``.  These bedgraphs can then be loaded into IGV or the UCSC Genome Browser. 
-
-Perhaps, however, we are only interested in viewing reads with origin calls on them. In this case, we can use the bed file generated above (origins_DNAscent_forkSense.bed) to specify that we only want bedgraphs of reads with origin calls on them.
-
-.. code-block:: console
-
-   python dnascent2bedgraph.py -d output.detect -f output.forkSense -o newBedgraphDirectory --targets origins_DNAscent_forkSense.bed
-   
-This strategy works equally well for any of the bed files generated by DNAscent forkSense.
+We can load ``detect_output.bam`` as well as the above bed files files directly into IGV to see where origins, forks, and terminiations were called in the genome.
 
 Barcoding
 ---------
 
-The workflow for a barcoded run is very similar to the workflow above with a few minor changes. If you're using a barcoded run that you demultiplexed with Guppy, make a fastq file for each barcode and align each of them to the reference to make as many bam files as you have barcodes. Then run ``DNAscent detect`` on the bam file for each barcode. You only have to run ``DNAscent index`` once per run, and the same ``index.dnascent`` file can be passed to ``DNAscent detect`` regardless of which barcode you're working with.
+The workflow for a barcoded run is very similar to the workflow above. Rather than using the bam file directly from the ``Dorado basecaller`` executable, this bam file is first passed to the ``Dorado demux`` executable and the resulting bam files are sorted and passed to ``DNAscent detect``.
 

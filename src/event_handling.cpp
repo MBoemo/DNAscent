@@ -12,94 +12,13 @@
 #include <iterator>
 #include <algorithm>
 #include <math.h>
+#include "scrappie/event_detection.h"
 #include "probability.h"
 #include "error_handling.h"
 #include "event_handling.h"
-#include "../fast5/include/fast5.hpp"
-#include <chrono>
+#include "common.h"
 #include "config.h"
-
-#include "scrappie/event_detection.h"
-#include "scrappie/scrappie_common.h"
-
-// #include "../pod5-file-format/c++/pod5_format/c_api.h"
-
-
-#define _USE_MATH_DEFINES
-
-//from scrappie
-float fast5_read_float_attribute(hid_t group, const char *attribute) {
-	float val = NAN;
-	if (group < 0) {
-#ifdef DEBUG_FAST5_IO
-		fprintf(stderr, "Invalid group passed to %s:%d.", __FILE__, __LINE__);
-#endif
-		return val;
-	}
-
-	hid_t attr = H5Aopen(group, attribute, H5P_DEFAULT);
-	if (attr < 0) {
-#ifdef DEBUG_FAST5_IO
-		fprintf(stderr, "Failed to open attribute '%s' for reading.", attribute);
-#endif
-		return val;
-	}
-
-	H5Aread(attr, H5T_NATIVE_FLOAT, &val);
-	H5Aclose(attr);
-
-	return val;
-}
-//end scrappie
-
-
-void fast5_getSignal( read &r ){
-
-	//open the file
-	hid_t hdf5_file = H5Fopen(r.filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-	if (hdf5_file < 0) throw IOerror(r.filename.c_str());
-
-	//get the channel parameters
-	std::string scaling_path = "/read_" + r.readID + "/channel_id";
-	hid_t scaling_group = H5Gopen(hdf5_file, scaling_path.c_str(), H5P_DEFAULT);
-	float digitisation = fast5_read_float_attribute(scaling_group, "digitisation");
-	float offset = fast5_read_float_attribute(scaling_group, "offset");
-	float range = fast5_read_float_attribute(scaling_group, "range");
-	//float sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
-	H5Gclose(scaling_group);
-
-	//get the raw signal
-	hid_t space;
-	hsize_t nsample;
-	float raw_unit;
-	float *rawptr = NULL;
-
-	std::string signal_path = "/read_" + r.readID + "/Raw/Signal";
-	hid_t dset = H5Dopen(hdf5_file, signal_path.c_str(), H5P_DEFAULT);
-	if (dset < 0 ) throw BadFast5Field(); 
-	space = H5Dget_space(dset);
-	if (space < 0 ) throw BadFast5Field(); 
-	H5Sget_simple_extent_dims(space, &nsample, NULL);
-   	rawptr = (float*)calloc(nsample, sizeof(float));
-    	herr_t status = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, rawptr);
-
-	if ( status < 0 ){
-		free(rawptr);
-		H5Dclose(dset);
-		return;
-	}
-	H5Dclose(dset);
-	
-	raw_unit = range / digitisation;
-	r.raw.reserve(nsample);
-	for ( size_t i = 0; i < nsample; i++ ){
-
-		r.raw.push_back( (rawptr[i] + offset) * raw_unit );
-	}
-
-	free(rawptr);
-	H5Fclose(hdf5_file);
-}
+#include <chrono>
 
 
 PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vector<unsigned int> &kmer_ranks, PoreParameters s, bool useFitPoreModel){
@@ -226,7 +145,7 @@ inline float logProbabilityMatch(unsigned int kmerIndex, event e, double shift, 
 #define move_down(curr_band) { curr_band.event_idx + 1, curr_band.kmer_idx }
 #define move_right(curr_band) { curr_band.event_idx, curr_band.kmer_idx + 1 }
 
-std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple_event_align( read &r, std::vector<unsigned int> &kmer_ranks_query, std::vector<unsigned int> &kmer_ranks_ref, bool useFitPoreModel ){
+std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple_event_align( DNAscent::read &r, std::vector<unsigned int> &kmer_ranks_query, std::vector<unsigned int> &kmer_ranks_ref, bool useFitPoreModel ){
 
 	//benchmarking
 	//std::chrono::steady_clock::time_point tp1 = std::chrono::steady_clock::now();
@@ -622,17 +541,8 @@ PoreParameters estimateScaling_quantiles(std::vector< double > &signal_means, st
 }
 
 
-void normaliseEvents( read &r, bool useFitPoreModel ){
+void normaliseEvents( DNAscent::read &r, bool useFitPoreModel ){
 
-	try{
-
-		fast5_getSignal(r);
-	}
-	catch ( BadFast5Field &bf5 ){
-
-		return;
-	}
-	
 	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
 	assert(et.n > 0);
 	

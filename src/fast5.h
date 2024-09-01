@@ -1,18 +1,18 @@
 //----------------------------------------------------------
 // Copyright 2019-2020 University of Oxford
-// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
 
-#ifndef DATA_H
-#define DATA_H
+#ifndef FAST5_H
+#define FAST5_H
 
-#include <utility>
-#include <string>
 #include <vector>
+#include <string>
+#include "reads.h"
 
-int data_main( int argc, char** argv );
+void fast5_getSignal( DNAscent::read & );
+std::vector<std::string> fast5_extract_readIDs(std::string);
 
 #endif

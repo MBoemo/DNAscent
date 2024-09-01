@@ -29,15 +29,20 @@ HTS_INCLUDE = -I./htslib
 
 #tensorflow
 TENS_DEPEND = tensorflow/include/tensorflow/c/c_api.h
-TENS_LIB = -Wl,-rpath,${PATH_SPACEFIX}tensorflow/lib -L tensorflow/lib
+TENS_LIB = -Wl,-rpath,${PATH_SPACEFIX}tensorflow/lib -L tensorflow/lib -ltensorflow
 TENS_INCLUDE = -I./tensorflow/include
-LIBFLAGS = -ltensorflow
 
 #fast5
 FAST5_INCLUDE = -I./fast5/include
 
+#pod5
+POD5_DEPEND = pod5-file-format/build/Release/lib/libpod5_format.a
+POD5_INCLUDE = -I./pod5-file-format/build/c++
+POD5_LIB = -L${PATH_SPACEFIX}pod5-file-format/build/Release/lib -lpod5_format 
+POD5_LIB += -L${PATH_SPACEFIX}pod5-file-format/build/third_party/libs -larrow -ljemalloc_pic -lzstd
+
 #add include flags for each library
-CPPFLAGS += $(H5_INCLUDE) $(HTS_INCLUDE) $(FAST5_INCLUDE) $(TENS_INCLUDE)
+CPPFLAGS += $(H5_INCLUDE) $(HTS_INCLUDE) $(FAST5_INCLUDE) $(TENS_INCLUDE) $(POD5_INCLUDE)
 
 DNASCENT_EXECUTABLE = bin/DNAscent
 
@@ -45,7 +50,9 @@ all: depend $(DNASCENT_EXECUTABLE)
 
 #all each library if they're not already built
 htslib/libhts.a:
-	cd htslib && make && cd .. || exit 255
+	cd htslib; \
+	make || exit 255; \
+	cd ..;
 
 hdf5-1.8.14/hdf5/lib/libhdf5.a:
 	if [ ! -e hdf5-1.8.14/hdf5/lib/libhdf5.a ]; then \
@@ -63,7 +70,22 @@ tensorflow/include/tensorflow/c/c_api.h:
 		wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-linux-x86_64-2.4.1.tar.gz; \
 		tar -xzf libtensorflow-gpu-linux-x86_64-2.4.1.tar.gz || exit 255; \
 		cd ..; \
-	fi 
+	fi
+	
+pod5-file-format/build/Release/lib/libpod5_format.a:
+	if [ ! -e pod5-file-format/build/Release/lib/libpod5_format.a ]; then \
+		pip install "conan<2" build; \
+		conan --version; \
+		cd pod5-file-format; \
+		git submodule update --init --recursive; \
+		pip install setuptools_scm==7.1.0; \
+		python3 -m setuptools_scm; \
+		python3 -m pod5_make_version; \
+		mkdir build; \
+		cd build; \
+		conan install --build=missing -s build_type=Release .. && cmake -DENABLE_CONAN=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake .. && make -j; \
+		cd ../..; \
+	fi
 	
 SUBDIRS = src src/scrappie src/pfasta src/sgsmooth
 CPP_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.cpp))
@@ -84,10 +106,9 @@ C_OBJ = $(C_SRC:.c=.o)
 
 DNASCENT_OBJ = $(DNA_EXE_SRC:..cpp=.0)
 
-
 depend: .depend
 
-.depend: $(CPP_SRC) $(C_SRC) $(H5_LIB) $(TENS_DEPEND) src/gitcommit.h src/softwarepath.h
+.depend: $(CPP_SRC) $(C_SRC) $(H5_LIB) $(TENS_DEPEND) $(POD5_DEPEND) src/gitcommit.h src/softwarepath.h
 	rm -f ./.depend
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -MM $(CPP_SRC) $(C_SRC) > ./.depend;
 
@@ -102,8 +123,8 @@ src/main/DNAscent.o: src/gitcommit.h src/softwarepath.h
 	$(CXX) -o $@ -c $(CXXFLAGS) $(CPPFLAGS) -fPIC $<
 
 #compile the main executables
-$(DNASCENT_EXECUTABLE): src/main/DNAscent.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(TENS_DEPEND) src/gitcommit.h src/softwarepath.h
-	$(CXX) -o $@ $(CXXFLAGS) $(CPPFLAGS) -fPIC $(DNASCENT_OBJ) $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(TENS_LIB) $(LIBFLAGS) $(LDFLAGS)
+$(DNASCENT_EXECUTABLE): src/main/DNAscent.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(TENS_DEPEND) $(POD5_DEPEND) src/gitcommit.h src/softwarepath.h
+	$(CXX) -o $@ $(CXXFLAGS) $(CPPFLAGS) -fPIC $(DNASCENT_OBJ) $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(TENS_LIB) $(POD5_LIB) $(LIBFLAGS) $(LDFLAGS)
 
 clean:
-	rm -f $(DNASCENT_EXECUTABLE) $(CPP_OBJ) $(C_OBJ) src/main/DNAscent.o src/gitcommit.h src/softwarepath.h
+	rm -f $(DNASCENT_EXECUTABLE) $(CPP_OBJ) $(C_OBJ) src/main/DNAscent.o src/gitcommit.h

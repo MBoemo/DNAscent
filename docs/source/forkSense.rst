@@ -13,7 +13,7 @@ Usage
    To run DNAscent forkSense, do:
       DNAscent forkSense -d /path/to/output.detect -o /path/to/output.forkSense --order EdU,BrdU
    Required arguments are:
-     -d,--detect               path to output file from DNAscent detect,
+     -d,--detect               path to output file from DNAscent detect with `detect` or `bam` extension,
      -o,--output               path to output file for forkSense,
         --order                order in which the analogues were pulsed (EdU,BrdU or BrdU,EdU).
    Optional arguments are:
@@ -25,8 +25,8 @@ Usage
         --makeSignatures          writes replication stress signatures to a bed files (default: off).
 
 
-The only required inputs of ``DNAscent forkSense`` is the output file produced by ``DNAscent detect`` and the order in which the analogues were pulsed.  
-In the example command above, the ``--order`` flag indicates that EdU was pulsed first, and BrdU was pulsed second.  No information about the pulse length is needed.  
+The only required inputs of ``DNAscent forkSense`` is the output file produced by ``DNAscent detect`` and the order in which the analogues were pulsed. The output file from ``DNAscent detect`` can be in human-readable or modbam format.
+In the example command above, the ``--order`` flag indicates that EdU was pulsed first and BrdU was pulsed second.  No information about the pulse length is needed.  
 
 
 Output
@@ -44,7 +44,7 @@ Main Output File
    #Compute CPU
    #SystemStartTime 10/02/2024 13:04:33
    #Software /path/to/DNAscent
-   #Version 4.0.2
+   #Version 4.0.3
    #Commit b9598a9e5bfa5f8314f92ba0f4fed39be1aee0be
    #EstimatedRegionBrdU 0.559506
    #EstimatedRegionEdU 0.202767
@@ -87,13 +87,16 @@ If the ``--markForks flag`` is passed, two bed files will be created in the work
 All output bed files have the following space-separated columns:
 
 * chromosome name,
-* 5' boundary of the origin (or terminiation site, or fork),
-* 3' boundary of the origin (or terminiation site, or fork),
+* 5' boundary on the reference of the origin (or terminiation site, or fork),
+* 3' boundary on the reference of the origin (or terminiation site, or fork),
 * readID,
-* 5' boundary of the mapped read,
-* 3' boundary of the mapped read,
+* 5' boundary on the reference of the mapped read,
+* 3' boundary on the reference of the mapped read,
 * strand mapped to (fwd or rev),
-* fork stall score (for forks only; see below).
+* For forks only: span of the fork call on the query sequence (in bp),
+* For forks only: fork stall score (see below).
+
+For fork speed calculations, we recommend using the span of the fork call on the query sequence as the distance travelled by the fork during the analoguee pulse. This helps avoid bias from insertions or deletions with respect to the reference genome.
 
 For origins and termination sites, the “resolution” of the calls (i.e., the third column minus the second column) will depend on your experimental setup. In synchronised early S-phase cells, the genomic distance between the 5’ and 3’ boundaries likely to be small for origins and large for termination sites, as the leftward- and rightward-moving forks should be together near the origin. In asynchronous or mid/late S-phase cells, the origin calls may appear to be a “lower’’ resolution (i.e., larger differences between the 5’ and 3’ boundaries) as the forks from a single origin will have travelled some distance before the pulses. When both forks are together at an origin, the origin bed file will record the midpoint of the analogue segment for the analogue that was pulsed first.
 

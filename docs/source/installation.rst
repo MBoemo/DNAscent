@@ -11,13 +11,13 @@ We recommend running DNAscent using one of our supported Singularity images. The
 
 .. code-block:: console
 
-   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.0.2
+   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.0.3
    
 You can run DNAscent from the image by passing the desired executable and arguments. The following example shows how to run DNAscent :ref:`detect`:
 
 .. code-block:: console
 
-   singularity run --nv DNAscent.sif detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect
+   singularity run --nv DNAscent.sif detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.bam
 
 
 Building from Source
@@ -34,7 +34,7 @@ The DNAscent directory will appear in your current directory. Switch to the late
 .. code-block:: console
 
    cd DNAscent
-   git checkout 4.0.2
+   git checkout 4.0.3
    make
 
 This will put the DNAscent executable into the DNAscent/bin directory. Compilation requires a version of gcc that supports C++14, and a typical compile time for DNAscent and all of its dependencies is 5-7 minutes.
@@ -43,6 +43,7 @@ Cloning the repository recursively (see above) will provide all the required dep
 
 * pfasta (https://github.com/kloetzl/pfasta)
 * fast5 (https://github.com/mateidavid/fast5.git)
+* pod5 (https://github.com/nanoporetech/pod5-file-format)
 * htslib (https://github.com/samtools/htslib.git)
 * hdf5lib (https://support.hdfgroup.org/HDF5/)
 * tinydir (https://github.com/cxong/tinydir.git)
@@ -74,4 +75,3 @@ The ``DNAscent detect`` executable can make use of a GPU, although this is optio
 * cuDNN: https://developer.nvidia.com/cudnn
 * CUDA: https://developer.nvidia.com/cuda-11.0-download-archive
 
-Always discuss any installation or version changes with your system administrator.

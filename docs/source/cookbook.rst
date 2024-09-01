@@ -31,7 +31,7 @@ The following barebones script parses the output of ``DNAscent detect``.  We ite
 		posOnRef = int(splitLine[0])
 		probEdU = float(splitLine[1])
 		probBrdU = float(splitLine[2])
-		sixMerOnRef = splitLine[3]
+		kmerOnRef = splitLine[3]
 
 		#add these values to a container or do some processing here
 
@@ -62,10 +62,9 @@ The following example plots a histogram of fork track lengths from bed files gen
 		#split the line into a list by whitespace
 		splitLine = line.rstrip().split()
 		
-		lbound = int(splitLine[1])
-		rbound = int(splitLine[2])
+		spanOnQuery = int(splitLine[7])
 		
-		forkLengths.append(rbound-lbound)
+		forkLengths.append(spanOnQuery)
 
 	   f.close()
 
@@ -101,7 +100,7 @@ The following example plots a histogram of fork stress scores from bed files gen
 		#split the line into a list by whitespace
 		splitLine = line.rstrip().split()
 		
-		score = float(splitLine[7])
+		score = float(splitLine[8])
 		
 		#ignore cases where a stress call was declined by only plotting non-negative scores
 		if score >= 0.:	
@@ -142,7 +141,7 @@ The following example pulls out stressed forks from the fork bed file.
 		#split the line into a list by whitespace
 		splitLine = line.rstrip().split()
 		
-		score = float(splitLine[7])
+		score = float(splitLine[8])
 		
 		if score >= stressThreshold:	
 			f_out.write(line)

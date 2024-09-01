@@ -18,16 +18,20 @@
 #include "common.h"
 #include "event_handling.h"
 #include "../fast5/include/fast5.hpp"
+#include "../pod5-file-format/c++/pod5_format/c_api.h"
 #include "alignment.h"
 #include "error_handling.h"
 #include "probability.h"
 #include "htsInterface.h"
+#include "pod5.h"
+#include "fast5.h"
+#include "config.h"
 
 
 static const char *help=
-"align: DNAscent executable that generates a BrdU-aware event alignment.\n"
+"align: DNAscent executable that generates a BrdU- and EdU-aware event alignment.\n"
 "To run DNAscent align, do:\n"
-"   DNAscent align -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
+"   DNAscent align -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.align\n"
 "Required arguments are:\n"
 "  -b,--bam                  path to alignment BAM file,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
@@ -88,11 +92,15 @@ Arguments parseAlignArguments( int argc, char** argv ){
 
 		if ( flag == "-b" or flag == "--bam" ){
 
+			if (i == argc-1) throw TrailingFlag(flag);
+
 			std::string strArg( argv[ i + 1 ] );
 			args.bamFilename = strArg;
 			i+=2;
 		}
 		else if ( flag == "-r" or flag == "--reference" ){
+
+			if (i == argc-1) throw TrailingFlag(flag);
 
 			std::string strArg( argv[ i + 1 ] );
 			args.referenceFilename = strArg;
@@ -100,11 +108,15 @@ Arguments parseAlignArguments( int argc, char** argv ){
 		}
 		else if ( flag == "-t" or flag == "--threads" ){
 
+			if (i == argc-1) throw TrailingFlag(flag);
+
 			std::string strArg( argv[ i + 1 ] );
 			args.threads = std::stoi( strArg.c_str() );
 			i+=2;
 		}
 		else if ( flag == "-q" or flag == "--quality" ){
+
+			if (i == argc-1) throw TrailingFlag(flag);
 
 			std::string strArg( argv[ i + 1 ] );
 			args.minQ = std::stoi( strArg.c_str() );
@@ -112,11 +124,15 @@ Arguments parseAlignArguments( int argc, char** argv ){
 		}
 		else if ( flag == "-l" or flag == "--length" ){
 
+			if (i == argc-1) throw TrailingFlag(flag);
+
 			std::string strArg( argv[ i + 1 ] );
 			args.minL = std::stoi( strArg.c_str() );
 			i+=2;
 		}
 		else if ( flag == "-i" or flag == "--index" ){
+
+			if (i == argc-1) throw TrailingFlag(flag);
 
 			std::string strArg( argv[ i + 1 ] );
 			args.indexFilename = strArg;
@@ -124,11 +140,15 @@ Arguments parseAlignArguments( int argc, char** argv ){
 		}
 		else if ( flag == "-o" or flag == "--output" ){
 
+			if (i == argc-1) throw TrailingFlag(flag);
+
 			std::string strArg( argv[ i + 1 ] );
 			args.outputFilename = strArg;
 			i+=2;
 		}
 		else if ( flag == "-m" or flag == "--maxReads" ){
+
+			if (i == argc-1) throw TrailingFlag(flag);
 
 			std::string strArg( argv[ i + 1 ] );
 			args.capReads = true;
@@ -524,36 +544,30 @@ bool referenceDefined(std::string &readSnippet){
 }
 
 
-std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength, std::map<unsigned int, std::pair<double,double>> &analogueCalls){
+void eventalign( DNAscent::read &r, unsigned int totalWindowLength){
 
-	//get the positions on the reference subsequence where we could attempt to make a call
-	std::string strand;
 	int readHead = 0;
-	if ( r.isReverse ) strand = "rev";
-	else strand = "fwd";
 
 	unsigned int k = Pore_Substrate_Config.kmer_len;
 
-	std::shared_ptr<AlignedRead> ar = std::make_shared<AlignedRead>(AlignedRead(r.readID, r.referenceMappedTo, strand, r.refStart, r.refEnd, (r.eventAlignment).size()));
+	r.humanReadable_eventalignOut += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + r.strand + "\n";
 
-	ar -> stdout += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
-
-	unsigned int posOnRef = 0;
-	while ( posOnRef < r.referenceSeqMappedTo.size() - k + 1){
+	unsigned int reference_index = 0;
+	while ( reference_index < r.referenceSeqMappedTo.size() - k + 1){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
-		unsigned int basesToEnd = r.referenceSeqMappedTo.size() - posOnRef ;
+		unsigned int basesToEnd = r.referenceSeqMappedTo.size() - reference_index ;
 		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
 
 		//find good breakpoints
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
 
-			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef, 1.5*windowLength);
+			std::string breakSnippet = (r.referenceSeqMappedTo).substr(reference_index, 1.5*windowLength);
 
 			bool isDefined = referenceDefined(breakSnippet);
 			if (not isDefined){
-				posOnRef += windowLength;
+				reference_index += windowLength;
 				continue;
 			}
 
@@ -580,44 +594,45 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 			}
 		}
 
-		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
+		std::string readSnippet = (r.referenceSeqMappedTo).substr(reference_index, windowLength);
 
 		bool isDefined = referenceDefined(readSnippet);
 		if (not isDefined){
 
-			posOnRef += windowLength;
+			reference_index += windowLength;
 			continue;
 		}
 
 		std::vector< double > eventSnippet_means;
 		std::vector< event > eventSnippet;
 
-		/*get the events that correspond to the read snippet */
-		//ar -> stdout += "readHead at start: " + std::to_string(readHead) + "\n";
+		//get the events that correspond to the read snippet
 		bool firstMatch = true;
-		int eventIdx = 0;
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
-			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k + 1] ){
+			//if an event has been aligned to a position in the window, add it 
+			if ( (r.refToQuery)[reference_index] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[reference_index + windowLength - k + 1] ){
 
 				if (firstMatch){
 					readHead = j;
 					firstMatch = false;
 				}
-
-				std::vector<double> raw = (r.events)[(r.eventAlignment)[j].first].raw;
-				eventSnippet_means.push_back((r.events)[(r.eventAlignment)[j].first].mean);
-				eventSnippet.push_back((r.events)[(r.eventAlignment)[j].first]);
-				eventIdx++;
+				
+				double event_mean = (r.events)[(r.eventAlignment)[j].first].mean;
+				
+				//guard on bad signal
+				if (0. < event_mean and event_mean < 250.){ 
+					eventSnippet_means.push_back(event_mean);
+					eventSnippet.push_back((r.events)[(r.eventAlignment)[j].first]);
+				}
 			}
 
-			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k + 1] ) break;
+			//stop once we get to the end of the window
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[reference_index + windowLength - k + 1] ) break;
 		}
 		
 		//flag large insertions
-		int querySpan = (r.refToQuery)[posOnRef + windowLength - k + 1] - (r.refToQuery)[posOnRef];
+		int querySpan = (r.refToQuery)[reference_index + windowLength - k + 1] - (r.refToQuery)[reference_index];
 		assert(querySpan >= 0);
 		int referenceSpan = windowLength - k + 1;
 		int indelScore = querySpan - referenceSpan;
@@ -625,14 +640,14 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 		//pass on this window if we have a deletion
 		if ( eventSnippet_means.size() < 2){
 
-			posOnRef += windowLength;
+			reference_index += windowLength;
 			continue;
 		}
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
-		int globalPosOnRef;
-		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - k;
-		else globalPosOnRef = r.refStart + posOnRef;
+		int reference_coord;
+		if ( r.isReverse ) reference_coord = r.refEnd - reference_index - k/2;
+		else reference_coord = r.refStart + reference_index + k/2;
 		
 		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet_means, readSnippet, r.scalings, false);
 
@@ -665,42 +680,47 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 
 			if (label == "D") continue; //silent states don't emit an event
 
-			std::string kmerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, k);
+			std::string kmerStrand = (r.referenceSeqMappedTo).substr(reference_index + pos, k);
 
-			unsigned int evPos;
+			//calculate the kmer on the strand as well as the reference coordinate for this event
+			unsigned int event_coord;
 			std::string kmerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef - pos + k - 1;
+				event_coord = reference_coord - pos - 1;
 				kmerRef = reverseComplement(kmerStrand);
 			}
 			else{
-				evPos = globalPosOnRef + pos;
+				event_coord = reference_coord + pos;
 				kmerRef = kmerStrand;
 			}
-
+			
+			//calculate the query (0-based) index from this reference position
+			unsigned int event_indexRef = reference_index + pos + k/2;
+			unsigned event_indexQuery = r.refToQuery.at(event_indexRef);
+			
 			if (label == "M"){
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmerStrand, k)];
 
 				for (unsigned int idx_raw = 0; idx_raw < eventSnippet[evIdx].raw.size(); idx_raw++){
 					double scaledEvent = (eventSnippet[evIdx].raw[idx_raw] - r.scalings.shift) / r.scalings.scale;
-					if (analogueCalls.count(evPos) > 0){
-						ar -> stdout += std::to_string(evPos) 
+					if (r.refCoordToCalls.count(event_coord) > 0){
+						r.humanReadable_eventalignOut += std::to_string(event_coord) 
 							      + "\t" + kmerRef 
 							      + "\t" + std::to_string(scaledEvent) 
 							      + "\t" + kmerStrand 
 							      + "\t" + std::to_string(meanStd.first) 
-							      + "\t" + std::to_string(analogueCalls.at(evPos).first) 
-							      + "\t" + std::to_string(analogueCalls.at(evPos).second) 					          
+							      + "\t" + std::to_string(r.refCoordToCalls.at(event_coord).first) 
+							      + "\t" + std::to_string(r.refCoordToCalls.at(event_coord).second) 					          
 							      + "\n";
 					}
 					else{
-						ar -> stdout += std::to_string(evPos) 
+						r.humanReadable_eventalignOut += std::to_string(event_coord) 
 							      + "\t" + kmerRef 
 							      + "\t" + std::to_string(scaledEvent) 
 							      + "\t" + kmerStrand 
 							      + "\t" + std::to_string(meanStd.first) 
 							      + "\n";
-						ar -> addSignal(kmerStrand, evPos, scaledEvent, indelScore);
+						r.addSignal(kmerStrand, event_coord, event_indexQuery, event_indexRef, scaledEvent, indelScore);
 					}
 				}
 
@@ -708,26 +728,19 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
 				for (unsigned int idx_raw = 0; idx_raw < eventSnippet[evIdx].raw.size(); idx_raw++){
 					double scaledEvent = (eventSnippet[evIdx].raw[idx_raw] - r.scalings.shift) / r.scalings.scale;
-					ar -> stdout += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::string(k, 'N') + "\t" + "0" + "\n";
+					r.humanReadable_eventalignOut += std::to_string(event_coord) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::string(k, 'N') + "\t" + "0" + "\n";
 				}
 			}
 			
 			evIdx ++;
 		}
 
-		//TESTING - make sure nothing sketchy happens at the breakpoint
-		//if (not found) out += "BREAKPOINT\n";
-		//else ar.stdout += "BREAKPOINT PRIME " + break1 + " " + break2 + "\n";
-
 		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
-		//readHead += rawIdx2eventIdx[lastM_ev] + 1;
 		readHead += lastM_ev + 1;
-		posOnRef += lastM_ref + 1;
+		reference_index += lastM_ref + 1;
 	}
 	
-	ar -> QCpassed = true;
-
-	return ar;
+	r.QCpassed = true;
 }
 
 
@@ -736,7 +749,7 @@ int align_main( int argc, char** argv ){
 	Arguments args = parseAlignArguments( argc, argv );
 
 	//load DNAscent index
-	std::map< std::string, std::string > readID2path;
+	std::map< std::string, IndexEntry > readID2path;
 	parseIndex( args.indexFilename, readID2path );
 
 	//import fasta reference
@@ -745,48 +758,42 @@ int align_main( int argc, char** argv ){
 	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
-	htsFile* bam_fh;
-	hts_idx_t* bam_idx;
-	bam_hdr_t* bam_hdr;
-	hts_itr_t* itr;
-
 	//load the bam
 	std::cout << "Opening bam file... ";
-	bam_fh = sam_open((args.bamFilename).c_str(), "r");
-	if (bam_fh == NULL) throw IOerror(args.bamFilename);
-
-	//load the index
-	bam_idx = sam_index_load(bam_fh, (args.bamFilename).c_str());
-	if (bam_idx == NULL) throw IOerror("index for "+args.bamFilename);
+	htsFile *bam_fh_cr = sam_open((args.bamFilename).c_str(), "r");
+	if (bam_fh_cr == NULL) throw IOerror(args.bamFilename);
 
 	//load the header
-	bam_hdr = sam_hdr_read(bam_fh);
+	bam_hdr_t *bam_hdr_cr = sam_hdr_read(bam_fh_cr);
 	std::cout << "ok." << std::endl;
 
 	/*initialise progress */
 	int numOfRecords = 0, prog = 0, failed = 0;
-	countRecords( bam_fh, bam_idx, bam_hdr, numOfRecords, args.minQ, args.minL );
+	countRecords( bam_fh_cr, bam_hdr_cr, numOfRecords, args.minQ, args.minL );
 	if (args.capReads){
 		numOfRecords = std::min(numOfRecords,args.maxReads);
 	}
 	progressBar pb(numOfRecords,true);
+	bam_hdr_destroy(bam_hdr_cr);
+	hts_close(bam_fh_cr);
 
-	//build an iterator for all reads in the bam file
-	const char *allReads = ".";
-	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
+	pod5_init();
 
-	std::map<unsigned int, std::pair<double,double>> placeholder_analogueCalls;
-	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
 	std::vector< bam1_t * > buffer;
 	if ( args.threads <= 4 ) maxBufferSize = args.threads;
 	else maxBufferSize = 4*(args.threads);
 
-	do {
-		//initialise the record and get the record from the file iterator
-		bam1_t *record = bam_init1();
-		result = sam_itr_next(bam_fh, itr, record);
+	htsFile *bam_fh = sam_open((args.bamFilename).c_str(), "r");
+	if (bam_fh == NULL) throw IOerror(args.bamFilename);
+	bam_hdr_t *bam_hdr = sam_hdr_read(bam_fh);
+	bam1_t *itr_record = bam_init1();
+	int result = sam_read1(bam_fh, bam_hdr, itr_record);
+
+	while(result >= 0){
+	
+		bam1_t *record = bam_dup1(itr_record);
 
 		//add the record to the buffer if it passes the user's criteria, otherwise destroy it cleanly
 		int mappingQual = record -> core.qual;
@@ -796,48 +803,29 @@ int align_main( int argc, char** argv ){
 
 		if ( mappingQual >= args.minQ and refEnd - refStart >= args.minL and queryLen != 0 ){
 
-			buffer.push_back( record );
+			buffer.push_back(record);
 		}
 		else{
 			bam_destroy1(record);
 		}
 
-		/*if we've filled up the buffer with short reads, compute them in parallel */
+		result = sam_read1(bam_fh, bam_hdr, itr_record);
+
+		//if we've filled up the buffer with reads, compute them in parallel
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,placeholder_analogueCalls) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
-				read r;
+				DNAscent::read r(buffer[i], bam_hdr, readID2path, reference);
 
-				//get the read name (which will be the ONT readID from Albacore basecall)
-				const char *queryName = bam_get_qname(buffer[i]);
-				if (queryName == NULL) continue;
-				std::string s_queryName(queryName);
-				r.readID = s_queryName;
-
-				//iterate on the cigar string to fill up the reference-to-query coordinate map
-				parseCigar(buffer[i], r.refToQuery, r.queryToRef, r.refStart, r.refEnd);
-
-				//get the name of the reference mapped to
-				std::string mappedTo(bam_hdr -> target_name[buffer[i] -> core.tid]);
-				r.referenceMappedTo = mappedTo;
-
-				//open fast5 and normalise events to pA
-				r.filename = readID2path[s_queryName];
-
-				/*get the subsequence of the reference this read mapped to */
-				r.referenceSeqMappedTo = reference.at(r.referenceMappedTo).substr(r.refStart, r.refEnd - r.refStart);
-
-				//fetch the basecall from the bam file
-				r.basecall = getQuerySequence(buffer[i]);
-
-				//account for reverse complements
-				if ( bam_is_rev(buffer[i]) ){
-
-					r.basecall = reverseComplement( r.basecall );
-					r.referenceSeqMappedTo = reverseComplement( r.referenceSeqMappedTo );
-					r.isReverse = true;
+				const char *ext = get_ext(r.filename.c_str());
+				
+				if (strcmp(ext,"pod5") == 0){
+					pod5_getSignal(r);
+				}
+				else if (strcmp(ext,"fast5") == 0){
+					fast5_getSignal(r);
 				}
 
 				bool useFitPoreModel = false;
@@ -851,9 +839,9 @@ int align_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls);
+				eventalign(r, Pore_Substrate_Config.windowLength_align);
 
-				if (not ar -> QCpassed){
+				if (not r.QCpassed){
 					failed++;
 					prog++;
 					continue;
@@ -861,21 +849,25 @@ int align_main( int argc, char** argv ){
 
 				#pragma omp critical
 				{
-					outFile << ar -> stdout;
+					outFile << r.humanReadable_eventalignOut;
 					prog++;
 					pb.displayProgress( prog, failed, failedEvents );
 				}
 			}
-			for ( unsigned int i = 0; i < buffer.size(); i++ ) bam_destroy1(buffer[i]);
 			buffer.clear();
 		}
 		pb.displayProgress( prog, failed, failedEvents );
 		if (args.capReads and prog > args.maxReads){
-			sam_itr_destroy(itr);
+			bam_destroy1(itr_record);
+			bam_hdr_destroy(bam_hdr);
+			hts_close(bam_fh);
 			return 0;
 		}
-	} while (result > 0);
-	sam_itr_destroy(itr);
+	}
+	bam_destroy1(itr_record);
+	bam_hdr_destroy(bam_hdr);
+	hts_close(bam_fh);
 	std::cout << std::endl;
+	pod5_terminate();
 	return 0;
 }

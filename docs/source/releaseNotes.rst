@@ -3,6 +3,15 @@
 Release Notes
 ===============================
 
+v4.0.3
+-----------------
+
+* DNAscent is now fully compatible with Dorado and POD5. These are now recommended over Guppy and FAST5.
+* DNAscent outputs BrdU and EdU calls in modbam format. This is now recommended over the previous human-readable table of BrdU and EdU probabilities.
+* The workflow and visualisation pages of the documentation have been revamped to show how to use these changes.
+* Guppy, FAST5, and human-readable detection outputs are all still supported to avoid breaking users' previous workflows.
+* The modbam MM tag for EdU and BrdU specifies ``N+e?`` and ``N+b?``, respectively. Users familiar with the SAM optional fields specification will notice that these are actually the one-letter codes for 5fU and 5caU. We have done this as a temporary measure so that BrdU and EdU can be easily shaded and viewed in IGV (View --> Preferences --> Base Mods). We will replace these one-letter codes with the ChEBI IDs for BrdU and EdU as soon as this is supported by IGV.  
+
 v4.0.2
 -----------------
 
