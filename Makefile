@@ -74,11 +74,11 @@ tensorflow/include/tensorflow/c/c_api.h:
 	
 pod5-file-format/build/Release/lib/libpod5_format.a:
 	if [ ! -e pod5-file-format/build/Release/lib/libpod5_format.a ]; then \
-		pip install "conan<2" build; \
+		pip3 install "conan<2" build; \
 		conan --version; \
 		cd pod5-file-format; \
 		git submodule update --init --recursive; \
-		pip install setuptools_scm==7.1.0; \
+		pip3 install setuptools_scm==7.1.0; \
 		python3 -m setuptools_scm; \
 		python3 -m pod5_make_version; \
 		mkdir build; \
