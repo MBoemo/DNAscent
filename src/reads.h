@@ -216,17 +216,17 @@ namespace DNAscent {
 				std::string s_queryName(queryName);
 				readID = s_queryName;
 				readID_fetch = readID; //fetch ID is readID by default unless we have a parent (below)
-					
+				
 				//signal length
 				std::string numSignalsTag = "ns";
 				uint8_t *numSignals = bam_aux_get(record, numSignalsTag.c_str());
-				signalLength =  bam_aux2i(numSignals);
-				
+				if (numSignals != NULL) signalLength =  bam_aux2i(numSignals);
+							
 				//coordinates trimmed from signal start
 				std::string trimSignalsTag = "ts";
 				uint8_t *trimSignal = bam_aux_get(record, trimSignalsTag.c_str());
-				signalTrim =  bam_aux2i(trimSignal);
-				
+				if (trimSignal != NULL) signalTrim =  bam_aux2i(trimSignal);
+											
 				//check if this read was split - if so, get the parentID
 				std::string parentIDTag = "pi";
 				uint8_t *parentID = bam_aux_get(record, parentIDTag.c_str());
@@ -235,25 +235,29 @@ namespace DNAscent {
 					//index in parent signal where the signal for this read starts
 					std::string startCoordTag = "sp";
 					uint8_t *startCoord = bam_aux_get(record, startCoordTag.c_str());
-					signalStartCoord =  bam_aux2i(startCoord);
-				
+					if (startCoord != NULL) signalStartCoord =  bam_aux2i(startCoord);
+					else{
+						std::cerr << "Missing sp tag on readID: " << readID;
+						std::cerr << ". Continuing but this read might fail." << std::endl;
+					}
+																
 					//get the parent readID and use this one to fetch the raw signal
 					char *parentID_char = bam_aux2Z(parentID);
 					std::string parentID_str(parentID_char);
 					if (parentID_str.size() > 0){
-					
+												
 						//readID to fetch from pod5 will be the parent readID
 						readID_fetch = parentID_str;
 					}								
 				}
-				
+															
 				//iterate on the cigar string to fill up the reference-to-query coordinate map
 				parseCigar(record, refToQuery, queryToRef, refToDel, refStart, refEnd);
 
 				//get the name of the reference mapped to
 				std::string mappedTo(bam_hdr -> target_name[record -> core.tid]);
 				referenceMappedTo = mappedTo;
-
+															
 				//unpack index
 				IndexEntry ie = readID2path[readID_fetch];
 				filename = ie.filepath;

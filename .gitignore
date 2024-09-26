@@ -32,7 +32,6 @@ src/gitcommit.h
 src/softwarepath.h
 
 #plots
-*.png
 *.pdf
 
 #images
