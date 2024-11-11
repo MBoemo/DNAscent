@@ -26,6 +26,7 @@ htslib/
 .cproject
 .pydevproject
 .settings/*
+.vscode/settings.json
 
 #commit log file and path
 src/gitcommit.h

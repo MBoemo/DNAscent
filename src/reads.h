@@ -451,6 +451,7 @@ namespace DNAscent {
 				uint8_t *tagData_MM = bam_aux_get(record, "MM");
 				if (tagData_MM != nullptr) {
 					existing_MMtag = bam_aux2Z(tagData_MM);
+					bam_aux_del(record,tagData_MM);
 				}
 				
 				//build the base analogue MM tag for this read and populate vectors of analogue calls
@@ -491,7 +492,8 @@ namespace DNAscent {
 					for (uint32_t i = 0; i < tagLength_ML; i++){
 					
 						probabilities_concat.push_back( bam_auxB2i(tagData_ML,i) );
-					}		
+					}
+					bam_aux_del(record,tagData_ML);		
 				}
 				
 				//concatenate the base analogue calls onto the existing tag (if there is one)

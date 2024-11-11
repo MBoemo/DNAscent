@@ -1380,7 +1380,7 @@ KMeansResult twoMeans_fs( std::vector< double > &observations ){
 
 			if ( std::abs(C2_points_old[i] - C1_old) < std::abs(C2_points_old[i] - C2_old) ) C1_points_new.push_back(C2_points_old[i]);
 			else C2_points_new.push_back(C2_points_old[i]);
-		}	
+		}
 
 		C1_new = vectorMean(C1_points_new);
 		C2_new = vectorMean(C2_points_new);
@@ -1390,7 +1390,7 @@ KMeansResult twoMeans_fs( std::vector< double > &observations ){
 
 		iter++;
 	}while (iter < maxIter and (std::abs(C1_old - C1_new)>tol or std::abs(C2_old - C2_new)>tol));
-	
+
 	//calculate lower bounds from K-means segmentation
 	auto C1_lowerBound = std::min_element( C1_points_old.begin(), C1_points_old.end() );
 	auto C2_lowerBound = std::min_element( C2_points_old.begin(), C2_points_old.end() );
@@ -1398,7 +1398,7 @@ KMeansResult twoMeans_fs( std::vector< double > &observations ){
 	//more conservative option - lower bound is mean - 1 stdv
 	double C1_stdv = vectorStdv( C1_points_old, C1_new );
 	double C2_stdv = vectorStdv( C2_points_old, C2_new );
-	
+
 	KMeansResult out = {C1_new, *C1_lowerBound, C1_stdv, C2_new, *C2_lowerBound, C2_stdv};
 
 	return out;
@@ -1624,6 +1624,9 @@ void iterateOnHumanReadable(forkSenseArgs &args, fs_fileManager &fm, KMeansResul
 	std::vector<double> BrdUCalls, EdUCalls;
 	std::vector<int> refCoords;
 
+	std::string readID, chromosome, strand;
+	int mappingLower, mappingUpper;
+
 	std::vector< std::shared_ptr<DNAscent::detectedRead> > buffer;
 	int failed = 0;
 	int progress = 0;
@@ -1638,11 +1641,19 @@ void iterateOnHumanReadable(forkSenseArgs &args, fs_fileManager &fm, KMeansResul
 			progress++;
 			pb.displayProgress( progress, failed, 0 );
 
+			//add this read to the buffer if it's sufficiently long enough
+			if (refCoords.size() > 2000){
+			
+				std::shared_ptr<DNAscent::detectedRead> r = std::make_shared<DNAscent::detectedRead>(readID, chromosome, mappingLower, mappingUpper, strand, refCoords, EdUCalls, BrdUCalls);
+				buffer.push_back(r);
+			}
+
+			//empty the buffer if it's full
+			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer, args, fm, analogueIncorporation);
+
 			std::stringstream ssLine(line);
 			std::string column;
 			int cIndex = 0;
-			std::string readID, chromosome, strand;
-			int mappingLower, mappingUpper;
 			while ( std::getline( ssLine, column, ' ' ) ){
 
 				if ( cIndex == 0 ) readID = column;
@@ -1653,20 +1664,6 @@ void iterateOnHumanReadable(forkSenseArgs &args, fs_fileManager &fm, KMeansResul
 				else throw DetectParsing();
 				cIndex++;
 			}
-			
-			//add this read to the buffer if it's sufficiently long enough
-			if (refCoords.size() > 2000){
-			
-				std::shared_ptr<DNAscent::detectedRead> r = std::make_shared<DNAscent::detectedRead>(readID, chromosome, mappingLower, mappingUpper, strand, refCoords, EdUCalls, BrdUCalls);
-				buffer.push_back(r);
-			}
-			else{
-				failed++;
-			}
-
-
-			//empty the buffer if it's full
-			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer, args, fm, analogueIncorporation);
 
 			//clear the analogue and reference vectors
 			BrdUCalls.clear();
@@ -1703,6 +1700,13 @@ void iterateOnHumanReadable(forkSenseArgs &args, fs_fileManager &fm, KMeansResul
 			BrdUCalls.push_back(B);
 			EdUCalls.push_back(E);
 		}
+	}
+
+	//add this read to the buffer if it's sufficiently long enough
+	if (refCoords.size() > 2000){
+	
+		std::shared_ptr<DNAscent::detectedRead> r = std::make_shared<DNAscent::detectedRead>(readID, chromosome, mappingLower, mappingUpper, strand, refCoords, EdUCalls, BrdUCalls);
+		buffer.push_back(r);
 	}
 
 	//empty the buffer at the end
@@ -1764,6 +1768,8 @@ int sense_main( int argc, char** argv ){
 	int readCount = 0;
 	if (args.humanReadable)	callFractions_HR(args.detectFilename, BrdU_callFractions, EdU_callFractions, readCount);
 	else callFractions_modbam(args.detectFilename, BrdU_callFractions, EdU_callFractions, readCount, args.threads);
+
+	if (BrdU_callFractions.size() < 10 or EdU_callFractions.size() < 10) throw ForkSenseData();
 
 	KMeansResult analogueIncorporation = estimateAnalogueIncorporation(BrdU_callFractions, EdU_callFractions);
 

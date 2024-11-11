@@ -34,6 +34,26 @@ struct IOerror : public std::exception {
 	}	
 };
 
+struct VBZError : public std::exception {
+	std::string filename;	
+	VBZError( std::string s ){
+
+		filename = s;
+	}
+	const char* what () const throw () {
+		const char* message = "This fast5 file is compressed with vbz: ";
+		const char* message2 = "\nSee documentation (https://dnascent.readthedocs.io/en/latest/installation.html#building-from-source) for how to load vbz plugin.";
+		const char* specifier = filename.c_str();
+		char* result;
+		result = static_cast<char*>(calloc(strlen(message)+strlen(message2)+strlen(specifier)+1, sizeof(char)));
+		strcpy( result, message);
+		strcat( result, specifier );
+		strcat( result, message2 );
+
+		return result;
+	}	
+};
+
 
 struct InvalidExtension : public std::exception {
 	std::string badFilename;	
@@ -206,6 +226,13 @@ struct BadPod5Field : public std::exception {
 struct MismatchedDimensions : public std::exception {
 	const char * what () const throw () {
 		return "Gaussian elimination on A*x=b.  Rows in A must equal length of b.";
+	}
+};
+
+
+struct ForkSenseData : public std::exception {
+	const char * what () const throw () {
+		return "Not enough data was passed to forkSense to reliably segment analogue regions. Data passed in bam or detect format and should include at least several hundred reads.";
 	}
 };
 
