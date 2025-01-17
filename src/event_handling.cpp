@@ -27,7 +27,7 @@ PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vec
 
 	size_t maxPoints = 1000;
 	size_t trimSize = 50;
-	size_t minLength = maxPoints;
+	size_t minLength = 100;
 	
 	//for short reads, exit without doing refinement of scaling parameters	
 	if (kmer_ranks.size() < minLength) return s;
@@ -435,7 +435,7 @@ std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple
 		return aligned_segmentation;
 	}
 	
-	if ( cleanedSignals.size() < 1000 or cleanedRanks.size() < 1000){
+	if ( cleanedSignals.size() < 100 or cleanedRanks.size() < 100){
 		r.eventAlignment.clear();
 		return aligned_segmentation;
 	}
