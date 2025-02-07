@@ -550,7 +550,7 @@ void eventalign( DNAscent::read &r, unsigned int totalWindowLength){
 
 	unsigned int k = Pore_Substrate_Config.kmer_len;
 
-	r.humanReadable_eventalignOut += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + r.strand + "\n";
+	r.humanReadable_eventalignOut = ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + r.strand + "\n";
 
 	unsigned int reference_index = 0;
 	while ( reference_index < r.referenceSeqMappedTo.size() - k + 1){

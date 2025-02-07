@@ -349,11 +349,7 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, int windowLength ){
 }
 
 
-HMMdetection llAcrossRead( DNAscent::read &r, unsigned int windowLength){
-                          
-	HMMdetection hmm_out;
-
-	std::map<unsigned int, double> refPos2likelihood;
+void llAcrossRead( DNAscent::read &r, unsigned int windowLength){
 
 	unsigned int k = Pore_Substrate_Config.kmer_len;
 
@@ -373,7 +369,7 @@ HMMdetection llAcrossRead( DNAscent::read &r, unsigned int windowLength){
 		readHead = 0;
 	}
 
-	hmm_out.stdout += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
+	r.humanReadable_detectOut = ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 
@@ -488,9 +484,9 @@ HMMdetection llAcrossRead( DNAscent::read &r, unsigned int windowLength){
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
 		assert(posOnQuery < (r.basecall).size());
-		std::string kmerQuery = (r.basecall).substr(posOnQuery, k);
+		std::string kmerQuery = (r.basecall).substr(posOnQuery-k/2, k);
 		assert(posOnRef < (r.referenceSeqMappedTo).size());		
-		std::string kmerRef = (r.referenceSeqMappedTo).substr(posOnRef, k);
+		std::string kmerRef = (r.referenceSeqMappedTo).substr(posOnRef-k/2, k);
 		if ( r.isReverse ){
 
 			globalPosOnRef = r.refEnd - posOnRef - 1;
@@ -530,21 +526,10 @@ std::cerr << std::endl;
 std::cerr << logLikelihoodRatio << std::endl;
 #endif
 
-		hmm_out.stdout += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
-
-		//adjust reference position so that we make the call at the middle of the kmer
-		if ( r.isReverse ){
-
-			globalPosOnRef += (int) k/2;
-		}
-		else{
-
-			globalPosOnRef -= (int) k/2;
-		}
+		r.humanReadable_detectOut += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
 		
-		hmm_out.refposToLikelihood[globalPosOnRef] = std::make_pair(logLikelihoodRatio,0.);
+		r.refCoordToCalls[globalPosOnRef] = std::make_pair(logLikelihoodRatio,0.);
 	}
-	return hmm_out;
 }
 
 
@@ -828,10 +813,6 @@ int detect_main( int argc, char** argv ){
 					fast5_getSignal(r);
 				}
 
-				//for HMM
-				//bool useFitPoreModel = true;
-				//normaliseEvents(r, useFitPoreModel);
-
 				//for DNN
 				bool useFitPoreModel = false;
 				normaliseEvents( r, useFitPoreModel);
@@ -843,18 +824,19 @@ int detect_main( int argc, char** argv ){
 					continue;
 				}
 
-				//HMMdetection hmm_likelihood = llAcrossRead(r, 12);
-				//readOut = hmm_likelihood.stdout;
+				if (args.useHMM) llAcrossRead(r, 12);
+				else{
 				
-				eventalign( r, Pore_Substrate_Config.windowLength_align);
+					eventalign( r, Pore_Substrate_Config.windowLength_align);
 
-				if (not r.QCpassed){
-					failed++;
-					prog++;
-					continue;
+					if (not r.QCpassed){
+						failed++;
+						prog++;
+						continue;
+					}
+
+					runCNN(r,session,inputOps,args.humanReadable);
 				}
-
-				runCNN(r,session,inputOps,args.humanReadable);
 
 				prog++;
 				pb.displayProgress( prog, failed, failedEvents );
