@@ -176,3 +176,13 @@ const char *get_ext(const char *filename){
 	if(!ext || ext == filename) return "";
 	return ext + 1;
 }
+
+
+std::string strip_extension(const std::string& filename) {
+    size_t dot_position = filename.find_last_of('.');
+    if (dot_position == std::string::npos) {
+        return filename;
+    } else {
+        return filename.substr(0, dot_position);
+    }
+}

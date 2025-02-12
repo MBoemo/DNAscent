@@ -189,5 +189,6 @@ std::vector<double> movingAvgFilter(std::vector<double> &, unsigned int);
 std::vector<double> movingAvgFilterLogistic(std::vector<double> &, unsigned int);
 std::vector<double> normVectorSum(std::vector<double>);
 const char *get_ext(const char *);
+std::string strip_extension(const std::string& );
 
 #endif

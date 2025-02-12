@@ -30,7 +30,7 @@
 #include "error_handling.h"
 #include "config.h"
 #include <omp.h>
-
+#include <mutex>
 
 static const char *help=
 "detect: DNAscent executable that detects BrdU and EdU in Oxford Nanopore reads.\n"
@@ -756,6 +756,15 @@ int detect_main( int argc, char** argv ){
 		writer -> writeHeader_sam(bam_hdr_cr);
 	}
 
+	//open a log file
+	std::cout << "Opening log file... ";
+	std::string logFilename = strip_extension(args.outputFilename);
+	logFilename += ".detect.log";
+	std::ofstream logfile(logFilename);
+	if (logfile.is_open()) std::cout << "ok." << std::endl;
+	else throw IOerror(logFilename);
+	std::mutex mtx;
+
 	//initialise progress
 	int numOfRecords = 0, prog = 0, failed = 0;
 	countRecords( bam_fh_cr, bam_hdr_cr, numOfRecords, args.minQ, args.minL );
@@ -803,6 +812,14 @@ int detect_main( int argc, char** argv ){
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				DNAscent::read r(buffer[i], bam_hdr, readID2path, reference);
+
+				if (r.missing){
+
+					std::lock_guard<std::mutex> lock(mtx);
+					logfile << "ReadID " << r.readID << " missing from index. Skipping." << std::endl;
+					prog++;
+					continue;
+				}
 
 				const char *ext = get_ext(r.filename.c_str());
 
@@ -857,5 +874,6 @@ int detect_main( int argc, char** argv ){
 	writer -> close();
 	std::cout << std::endl;
 	pod5_terminate();
+	logfile.close();
 	return 0;
 }

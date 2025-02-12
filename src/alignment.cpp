@@ -26,7 +26,7 @@
 #include "pod5.h"
 #include "fast5.h"
 #include "config.h"
-
+#include <mutex>
 
 static const char *help=
 "align: DNAscent executable that generates a BrdU- and EdU-aware event alignment.\n"
@@ -767,7 +767,16 @@ int align_main( int argc, char** argv ){
 	bam_hdr_t *bam_hdr_cr = sam_hdr_read(bam_fh_cr);
 	std::cout << "ok." << std::endl;
 
-	/*initialise progress */
+	//open a log file
+	std::cout << "Opening log file... ";
+	std::string logFilename = strip_extension(args.outputFilename);
+	logFilename += ".align.log";
+	std::ofstream logfile(logFilename);
+	if (logfile.is_open()) std::cout << "ok." << std::endl;
+	else throw IOerror(logFilename);
+	std::mutex mtx;
+
+	//initialise progress
 	int numOfRecords = 0, prog = 0, failed = 0;
 	countRecords( bam_fh_cr, bam_hdr_cr, numOfRecords, args.minQ, args.minL );
 	if (args.capReads){
@@ -819,6 +828,21 @@ int align_main( int argc, char** argv ){
 
 				DNAscent::read r(buffer[i], bam_hdr, readID2path, reference);
 
+				if (r.missing){
+
+					std::lock_guard<std::mutex> lock(mtx);
+					logfile << "ReadID " << r.readID << " missing from index. Skipping." << std::endl;
+					prog++;
+					continue;
+				}
+
+				if (r.missing){
+
+					std::cerr << "ReadID " << r.readID << " missing from index. Skipping." << std::endl;
+					prog++;
+					continue;
+				}
+
 				const char *ext = get_ext(r.filename.c_str());
 				
 				if (strcmp(ext,"pod5") == 0){
@@ -869,5 +893,6 @@ int align_main( int argc, char** argv ){
 	hts_close(bam_fh);
 	std::cout << std::endl;
 	pod5_terminate();
+	logfile.close();
 	return 0;
 }
