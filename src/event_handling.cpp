@@ -151,6 +151,60 @@ void getEvents( std::string fast5Filename, std::vector<double> &raw, float &samp
 }
 
 
+std::vector<std::string> fast5_extract_readIDs(std::string filepath){
+
+    hid_t hdf5_file = H5Fopen(filepath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    if (hdf5_file < 0) throw IOerror(filepath.c_str());
+
+    std::vector<std::string> out;
+    ssize_t buffer_size = 0;
+    char* buffer = NULL;
+
+    // get the number of groups in the root group
+    H5G_info_t group_info;
+    int ret = H5Gget_info_by_name(hdf5_file, "/", &group_info, H5P_DEFAULT);
+    if(ret < 0) {
+        fprintf(stderr, "error getting group info\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for(size_t group_idx = 0; group_idx < group_info.nlinks; ++group_idx) {
+
+        // retrieve the size of this group name
+        ssize_t size = H5Lget_name_by_idx(hdf5_file, "/", H5_INDEX_NAME, H5_ITER_INC, group_idx, NULL, 0, H5P_DEFAULT);
+	
+        if(size < 0) {
+            fprintf(stderr, "error getting group name size\n");
+            exit(EXIT_FAILURE);
+        }
+        size += 1; // for null terminator
+           
+        if(size > buffer_size) {
+            buffer = (char*)realloc(buffer, size);
+            buffer_size = size;
+        }
+    
+        // copy the group name
+        H5Lget_name_by_idx(hdf5_file, "/", H5_INDEX_NAME, H5_ITER_INC, group_idx, buffer, buffer_size, H5P_DEFAULT);
+        buffer[size] = '\0';
+        
+        char prefix[] = "read_";
+	size_t len = strlen(prefix);
+	if (strncmp(buffer, prefix, len) == 0) {
+		memmove(buffer, buffer + len, strlen(buffer + len) + 1);
+	}       
+        
+        out.push_back(buffer);
+	
+    }
+
+    free(buffer);
+    buffer = NULL;
+    buffer_size = 0;
+    return out;
+}
+
+
 std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A, std::vector< double > b ){
 /*crude but functional algorithm that solves the linear system A*x = b by building an augmented matrix and transforming to reduced row echelon form */
 	

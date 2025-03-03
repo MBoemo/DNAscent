@@ -14,6 +14,7 @@
 #include "common.h"
 #include "data_IO.h"
 #include "error_handling.h"
+#include "event_handling.h"
 #include <cmath>
 #define _USE_MATH_DEFINES
 
@@ -23,18 +24,17 @@
 "   DNAscent index -f /path/to/fast5Directory\n"
 "Required arguments are:\n"
 "  -f,--files                full path to fast5 files,\n"
-"  -s,--sequencing-summary   path to sequencing summary file Guppy.\n"
 "Optional arguments are:\n"
-"  -o,--output               output file name (default is index.dnascent),\n"
-"     --GridION              account for the different sequencing summary format used by in-built GridION basecalling.\n"
+"  -s,--sequencing-summary   path to sequencing summary file Guppy,\n"
+"  -o,--output               output file name (default is index.dnascent).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
  struct Arguments {
 	std::string fast5path;
-	std::string ssPath;
+	std::string seqssumPath;
 	std::string outfile;
-	bool GridION = false;
+	bool hasSeqSum = false;
 };
 
 
@@ -67,24 +67,30 @@ Arguments parseIndexArguments( int argc, char** argv ){
 		}
 		else if ( flag == "-s" or flag == "--sequencing-summary" ){
 
+			if (i == argc-1) throw TrailingFlag(flag);		
+
 			std::string strArg( argv[ i + 1 ] );
-			args.ssPath = strArg;
+			args.seqssumPath = strArg;
+			args.hasSeqSum = true;
 			i+=2;
-		}
+	   }
 		else if ( flag == "-o" or flag == "--output" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			args.outfile = strArg;
 			i+=2;
 		}
-		else if ( flag == "--GridION" ){
-
-			args.GridION = true;
-			i+=1;
-		}
 		else throw InvalidOption( flag );
 	}
 	return args;
+}
+
+
+const char *get_ext(const char *filename){
+
+	const char *ext = strrchr(filename, '.');
+	if(!ext || ext == filename) return "";
+	return ext + 1;
 }
 
 
@@ -115,7 +121,10 @@ void countFast5(std::string path, int &count){
 				countFast5(newPath, count);
 			}
 		}
-		else count++;
+		else{
+			const char *ext = get_ext(file.name);
+			if (strcmp(ext,"fast5") == 0) count++;
+		} 
 	}
 
 	fail:
@@ -123,15 +132,19 @@ void countFast5(std::string path, int &count){
 }
 
 
-const char *get_ext(const char *filename){
+bool isFileNameInPaths(const std::string& path, const std::string& fileNameToCheck) {
 
-	const char *ext = strrchr(filename, '.');
-	if(!ext || ext == filename) return "";
-	return ext + 1;
+	size_t lastSlashPos = path.find_last_of("/\\");
+
+	std::string extractedFileName = (lastSlashPos != std::string::npos) 
+		? path.substr(lastSlashPos + 1) 
+		: path;
+
+	return extractedFileName == fileNameToCheck;
 }
 
 
-void readDirectory(std::string path, std::map<std::string,std::string> &allfast5paths){
+void readDirectory(std::string path, std::vector<std::string> &signalFilePaths){
 
 	tinydir_dir dir;
 	unsigned int i;
@@ -158,17 +171,17 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 				if (trail == '/') path.pop_back();
 
 				std::string newPath = path + "/" + file.name;
-				readDirectory(newPath, allfast5paths);
+				readDirectory(newPath, signalFilePaths);
 			}
 		}
 		else{
 			const char *ext = get_ext(file.name);
-			if ( strcmp(ext,"fast5") == 0 ){
+			if ( strcmp(ext,"fast5") == 0 or strcmp(ext,"pod5") == 0 ){
 
 				char &trail = path.back();
 				if (trail == '/') path.pop_back();
 
-				allfast5paths[file.name] = path + "/" + file.name;
+				signalFilePaths.push_back(path + "/" + file.name);
 			}
 		}
 	}
@@ -221,51 +234,50 @@ std::vector<std::string> fast5_get_multi_read_groups(hid_t &hdf5_file){
 }
 
 
-std::map<std::string,std::string> parseSequencingSummary(std::string path, bool &bulk, bool &useGridION){
+std::map<std::string,std::string> parseSequencingSummary(Arguments &args){
 
 	std::map<std::string,std::string> readID2fast5;
 	std::map<std::string,std::vector<std::string>> fast52readID;
 	
- 	std::ifstream inFile( path );
-	if ( not inFile.is_open() ) throw IOerror( path );
+ 	std::ifstream inFile( args.seqssumPath );
+	if ( not inFile.is_open() ) throw IOerror( args.seqssumPath );
 	std::string line;
-	std::getline(inFile,line);//header
-
-	bulk = false;
-
+	
+	//parse header
+	int column_filename = -1;
+	int column_readID = -1;
+	int cIndex = 0;
+	std::string col_header;
+	std::getline(inFile,line);
+	std::stringstream ssHeader(line);
+	while( std::getline( ssHeader, col_header, '\t' ) ){
+	
+		if (col_header == "filename" or col_header == "filename_fast5") column_filename = cIndex;
+		else if (col_header == "read_id") column_readID = cIndex;
+		cIndex++;
+	}
+	
+	if (column_filename == -1 or column_readID == -1){
+	
+		std::cerr << "Failed to parse sequencing summary file." << std::endl;
+		std::cerr << "Please raise this as an issue on GitHub (https://github.com/MBoemo/DNAscent/issues) and paste the first few lines of the sequencing summary file." << std::endl;
+		throw IOerror( args.seqssumPath );
+	}
+	
 	while ( std::getline( inFile, line ) ){
 
 		std::string readID, fast5, column;
 		std::stringstream ssLine(line);
-		int cIndex = 0;
+		cIndex = 0;
 		
 		while( std::getline( ssLine, column, '\t' ) ){
 		
-			if (useGridION){
-
-				if (cIndex == 1) fast5 = column;
-				else if (cIndex == 2) readID = column;
-				else if (cIndex > 2) break;
-			}
-			else{
-			
-				if (cIndex == 0) fast5 = column;
-				else if (cIndex == 1) readID = column;
-				else if (cIndex > 1) break;
-			}
+			if (cIndex == column_filename) fast5 = column;
+			else if (cIndex == column_readID) readID = column;
 			cIndex++;
 		}
 		readID2fast5[readID] = fast5;
 		fast52readID[fast5].push_back(readID);
-	}
-
-	for ( auto idpair = fast52readID.begin(); idpair != fast52readID.end(); idpair++ ){
-
-		if ( (idpair->second).size() > 1 ){
-
-			bulk = true;
-			break;
-		}
 	}
 
 	return readID2fast5;
@@ -285,35 +297,63 @@ int index_main( int argc, char** argv ){
 	std::ofstream outFile( args.outfile );
 	if ( not outFile.is_open() ) throw IOerror( args.outfile );
 
+	//individual fast5 files are deprecated
+	outFile << "#bulk" << std::endl;
+
 	//iterate on the filesystem to find the full path for each fast5 file
-	std::map<std::string,std::string> fast52fullpath;
-	readDirectory(args.fast5path.c_str(), fast52fullpath);
+	std::vector<std::string> signalFilePaths;
+	readDirectory(args.fast5path.c_str(), signalFilePaths);
 
-	bool isBulkFast5;
-	std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args.ssPath, isBulkFast5, args.GridION);
-
-	if (isBulkFast5) outFile << "#bulk" << std::endl;
-	else outFile << "#individual" << std::endl;
-
-	for (auto idpair = readID2fast5.begin(); idpair != readID2fast5.end(); idpair++){
-
-		//check that the path we need is in the map and exit gracefully if not
-		if ( fast52fullpath.count(idpair->second) == 0 ){
+	//if a user specified a sequencing summary for Guppy/fast5, use it instead of crawling through files
+	if (args.hasSeqSum){
+	
+		std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args);
 		
-			const char *ext = get_ext((idpair->second).c_str());
-			if (strcmp(ext,"fast5") != 0){
-		
-				std::cerr << "This doesn't look like a fast5 file: " << idpair->second << std::endl;
-				std::cerr << "- Ensure all files are decompressed." << std::endl;
-				std::cerr << "- Use the --GridION flag if the sequencing summary file was generated by a GridION." << std::endl;
+		for (auto idpair = readID2fast5.begin(); idpair != readID2fast5.end(); idpair++){
+
+			std::string fn = idpair->second;
+
+			auto it = std::find_if(signalFilePaths.begin(), signalFilePaths.end(), [&fn](const std::string& path) {
+				return isFileNameInPaths(path, fn);
+			});
+			
+			//check that we have the file we need and exit gracefully if not
+			if ( it == signalFilePaths.end() ){
+			
+				const char *ext = get_ext((idpair->second).c_str());
+				if (strcmp(ext,"fast5") != 0){
+			
+					std::cerr << "This isn't a fast5 file: " << idpair->second << std::endl;
+				}
+			
+				throw MissingFast5(idpair->second);
 			}
-		
-			throw MissingFast5(idpair->second);
-		}
+			
+			progress++;
+			pb.displayProgress( progress, 0, 0 );
 
-		outFile << idpair->first << "\t" << fast52fullpath.at(idpair->second) << std::endl;
-		progress++;
-		pb.displayProgress( progress, 0, 0 );
+			outFile << idpair->first << "\t" << *it << std::endl;
+		}
+	}
+	else{
+
+		for (size_t fi = 0; fi < signalFilePaths.size(); fi++){
+
+			const char *ext = get_ext((signalFilePaths[fi]).c_str());
+			if (strcmp(ext,"fast5") == 0){
+			
+				std::vector<std::string> IDs_in_file = fast5_extract_readIDs(signalFilePaths[fi]);
+				for (size_t i = 0; i < IDs_in_file.size(); i++){
+					outFile << IDs_in_file[i] << "\t" << signalFilePaths[fi] << std::endl;
+				}
+			}
+			else{
+				std::cerr << "This isn't a fast5 file: " << signalFilePaths[fi] << std::endl;
+				throw MissingFast5(signalFilePaths[fi]);
+			}
+			progress++;
+			pb.displayProgress( progress, 0, 0 );
+		}
 	}
 
 	outFile.close();

@@ -39,6 +39,25 @@ struct IOerror : public std::exception {
 };
 
 
+struct TrailingFlag : public std::exception {
+	std::string msg;
+	TrailingFlag( std::string s ){
+
+		msg = s;
+	}
+	const char* what () const throw () {
+		const char* message = "Expected input for flag: ";
+		const char* specifier = msg.c_str();
+		char* result;
+		result = static_cast<char*>(calloc(strlen(message)+strlen(specifier)+1, sizeof(char)));
+		strcpy( result, message);
+		strcat( result, specifier );
+
+		return result;
+	}
+};
+
+
 struct InvalidOption : public std::exception {
 	std::string badOption;	
 	InvalidOption( std::string s ){

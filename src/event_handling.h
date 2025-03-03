@@ -23,5 +23,6 @@ struct eventDataForRead {
 void normaliseEvents( read &, bool );
 void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<double> &raw );
 void getEvents( std::string fast5Filename, std::vector<double> &raw );
+std::vector<std::string> fast5_extract_readIDs(std::string );
 
 #endif
