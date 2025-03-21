@@ -1307,22 +1307,25 @@ void emptyBuffer(std::vector< std::shared_ptr<DNAscent::detectedRead> > &buffer,
 		//fix the analogue segment indices
 		std::vector<int> eduSegment_output( (*b) -> referenceCoords.size(), 0);
 		std::vector<int> brduSegment_output( (*b) -> referenceCoords.size(), 0);
+		bool writeToOutput = false;
 		for (auto s = (*b) -> EdU_segment.begin(); s < (*b) -> EdU_segment.end(); s++){
 		
 			if ( (*s).partners == 0 ) continue;
 		
 			for (int i = (*s).leftmostIdx; i <= (*s).rightmostIdx; i++) eduSegment_output[i] = 1;
+			writeToOutput = true;
 		}
 		for (auto s = (*b) -> BrdU_segment.begin(); s < (*b) -> BrdU_segment.end(); s++){
 		
 			if ( (*s).partners == 0 ) continue;
 		
 			for (int i = (*s).leftmostIdx; i <= (*s).rightmostIdx; i++) brduSegment_output[i] = 1;
+			writeToOutput = true;
 		}
 		
 		//only output segmentation on non-trivial reads that have at least one analogue segment called on them
 		std::string readOutput;
-		if ( (*b) -> EdU_segment.size() > 0 or (*b) -> BrdU_segment.size() > 0){
+		if (writeToOutput){
 		
 			//write the read header
 			readOutput += ">" + (*b) -> readID + " " + (*b) -> referenceMappedTo + " " + std::to_string((*b) -> refStart) + " " + std::to_string((*b) -> refEnd) + " " + (*b) -> strand + "\n"; //header
