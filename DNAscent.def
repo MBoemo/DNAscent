@@ -62,12 +62,12 @@ From: nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04
 %environment
 
     # cuda paths
-    export CUDA_HOME=/usr/local/cuda-11.0
-    export CPATH=/usr/local/cuda-11.0/include:$CPATH
-    export CUDA_PATH=/usr/local/cuda-11.0
-    export LIBRARY_PATH=/usr/local/cuda-11.0/lib64:$LIBRARY_PATH
-    export LD_LIBRARY_PATH=/usr/local/cuda-11.0/compat:$LD_LIBRARY_PATH
-    export PATH=/usr/local/cuda-11.0/bin:$PATH
+    export CUDA_HOME=/usr/local/cuda
+    export CPATH=/usr/local/cuda/include:$CPATH
+    export CUDA_PATH=/usr/local/cuda
+    export LIBRARY_PATH=/usr/local/cuda/lib64:$LIBRARY_PATH
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+    export PATH=/usr/local/cuda/bin:$PATH
     
     # vbz plugin path
     export HDF5_PLUGIN_PATH=/plugin/ont-vbz-hdf-plugin-1.0.1-Linux/usr/local/hdf5/lib/plugin
