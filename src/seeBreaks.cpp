@@ -1,0 +1,581 @@
+//----------------------------------------------------------
+// Copyright 2025 University of Cambridge
+// This software is licensed under GPL-3.0.  You should have
+// received a copy of the license with this software.  If
+// not, please Email the author.
+//----------------------------------------------------------
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <unordered_set>
+#include <cstdlib>  
+#include <ctime>    
+#include <cmath>
+#include "seeBreaks.h"
+#include "common.h"
+#include "error_handling.h"
+#include "htsInterface.h"
+#include "event_handling.h"
+#include <numeric>
+#include <random>
+
+
+static const char *help=
+"seeBreaks: DNAscent executable that detects an elevated frequency of DNA breaks at replication forks.\n"
+"To run DNAscent seeBreaks, do:\n"
+"   DNAscent seeBreaks -l /path/to/leftForks_DNAscent_forksense.bed -r /rightForks_DNAscent_forksense.bed -d /path/to/detectOutput.bam -o /path/to/output.seeBreaks \n"
+"Required arguments are:\n"
+"  -l,--left                 path to leftForks file from forkSense detect with `bed` extension,\n"
+"  -r,--right                path to rightFork file from forkSense detect with `bed` extension,\n"
+"  -d,--detect               path to output from detect with `detect` or `bam` extension,\n"
+"  -o,--output               path to output file for seeBreaks,\n"
+"DNAscent is under active development by the Boemo Group, Department of Pathology, University of Cambridge (https://www.boemogroup.org/).\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
+
+
+struct Arguments {
+	std::string lForkInput;
+	std::string rForkInput;
+	std::string HeadersInput;
+	std::string output;
+    bool specifiedLeft = false;
+    bool specifiedRight = false;
+    bool specifiedDetect = false;
+    bool specifiedBam = false;
+	bool specifiedOutput = false; 
+};
+
+
+Arguments parseBreaksArguments( int argc, char** argv ) {
+
+    if( argc < 2 ){
+ 		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent seeBreaks." << std::endl << help << std::endl;
+		exit(EXIT_FAILURE);
+	}
+ 	if ( std::string( argv[ 1 ] ) == "-h" or std::string( argv[ 1 ] ) == "--help" ){
+ 		std::cout << help << std::endl;
+		exit(EXIT_SUCCESS);
+	}
+
+    int lPresent = 0;
+    int rPresent = 0;
+
+	Arguments args;
+
+	for ( int i = 1; i < argc; ){
+
+ 		std::string flag( argv[ i ] );
+
+ 		if ( flag == "-l" or flag == "--left" ){
+
+            lPresent++;
+
+ 			std::string strArg( argv[ i + 1 ] );
+ 			const char *ext = get_ext(strArg.c_str());
+
+            if (lPresent > 1) throw InvalidExtension(ext);
+ 			if (i == argc-1) throw TrailingFlag(flag);		
+ 		
+			args.lForkInput = strArg;
+			i+=2;
+			args.specifiedLeft = true;
+		}
+        else if ( flag == "-r" or flag == "--right" ){
+
+            rPresent++;
+
+ 			std::string strArg( argv[ i + 1 ] );
+            const char *ext = get_ext(strArg.c_str());
+
+            if (rPresent > 1) throw InvalidExtension(ext);
+ 			if (i == argc-1) throw TrailingFlag(flag);		
+ 					
+			args.rForkInput = strArg;
+			i+=2;
+			args.specifiedRight = true;
+        }
+        else if ( flag == "-h" or flag == "--help" ){
+            std::cout << help << std::endl;
+            exit(EXIT_SUCCESS);
+		}
+        else if ( flag == "-d" or flag == "--detect" ){
+ 		
+ 			if (i == argc-1) throw TrailingFlag(flag);		
+ 		
+ 			std::string strArg( argv[ i + 1 ] );
+ 			
+ 			const char *ext = get_ext(strArg.c_str());
+				
+			if (strcmp(ext,"bam") == 0){
+				args.specifiedBam = true;
+			}
+			else if (strcmp(ext,"detect") == 0){
+				args.specifiedDetect = true;
+			}
+			else{
+				throw InvalidExtension(ext);
+			}
+			
+			args.HeadersInput = strArg;
+			i+=2;
+		}
+		else if ( flag == "-o" or flag == "--output" ){
+		
+			if (i == argc-1) throw TrailingFlag(flag);		
+		
+ 			std::string strArg( argv[ i + 1 ] );
+			args.output = strArg;
+			i+=2;
+			args.specifiedOutput = true;
+		}
+		else throw InvalidOption( flag );
+	}
+    if ( !args.specifiedOutput or (!args.specifiedLeft and !args.specifiedRight) or (!args.specifiedDetect and !args.specifiedBam) ) {
+        std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent seeBreaks." << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    return args;
+}
+
+
+void detectUnpack (Arguments &args, std::vector<std::string> &dlines, int &dnCounter) {
+
+    std::ifstream detectFile(args.HeadersInput);
+
+    std::string dline;
+
+    while (std::getline(detectFile, dline)) {
+        dlines.push_back(dline);
+        dnCounter++;
+    }
+    detectFile.close();
+
+    if (dlines.empty()) {
+        std::cerr << "Error: Detect file is empty or not formatted correctly." << std::endl;
+        exit(EXIT_FAILURE);
+    }    
+}
+
+
+void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3Prime, int &dnCounter) {
+
+    htsFile *bam_fh = sam_open((args.HeadersInput).c_str(), "r");
+
+    if (bam_fh == NULL) throw IOerror(args.HeadersInput);
+
+    std::cout << "BAM file opened successfully.\n";
+
+    bam_hdr_t *bam_hdr = sam_hdr_read(bam_fh);
+    bam1_t *itr_record = bam_init1();
+    int result = sam_read1(bam_fh, bam_hdr, itr_record);
+
+    while(result >= 0){
+                        
+        bam1_t *record = bam_dup1(itr_record);
+
+        int refStart,refEnd;
+        getRefEnd(record,refStart,refEnd);
+
+        v5Prime.push_back(refStart);
+        v3Prime.push_back(refEnd);
+
+        result = sam_read1(bam_fh, bam_hdr, itr_record);
+    }
+}
+
+
+void forkUnpack(std::string input, Arguments &args, std::vector<int> &ForkLength, std::vector<double> &StallScore, int &nCounter) {
+
+    std::string fileInput = (input == "left") ? args.lForkInput : args.rForkInput;
+    
+    std::cout << "Processing " << input << " fork file: " << fileInput << std::endl;
+
+    std::ifstream file(fileInput);
+
+    if (!file.is_open()) 
+    {
+        std::cerr << "Error: Could not open file " << fileInput << "\n";
+        exit(EXIT_FAILURE);
+    }
+    
+    std::unordered_set<std::string> ReadIDs; 
+    std::string line; 
+
+    while (std::getline(file, line)) {
+
+        if (!line.empty() && line[0] != '#') {
+
+            std::istringstream iss(line);
+            std::vector<std::string> parts;
+            std::string word;
+
+            while (iss >> word) {
+                parts.push_back(word);
+            }
+                                
+            double stallScore = 0.0;
+            std::string readID = parts[3];
+
+            if (ReadIDs.find(readID) == ReadIDs.end()) {
+
+                int pulse5Prime = std::stoi(parts[1]);
+                int pulse3Prime = std::stoi(parts[2]);
+
+                int pulseLength = pulse3Prime - pulse5Prime;
+                                    
+                if (parts.size() == 8) {  // R9
+
+                    stallScore = std::stod(parts[7]);
+                } 
+
+                else if (parts.size() == 9)  { //R10
+
+                    stallScore = std::stod(parts[8]);
+                }
+                else {
+                    std::cerr << "Error: Unexpected number of columns in the input file." << std::endl;
+                    continue;
+                }
+
+                if (stallScore != -3) {
+
+                    ForkLength.push_back(pulseLength);
+                }
+
+                StallScore.push_back(stallScore);
+                ReadIDs.insert(readID);
+                nCounter++; 
+            }
+        }
+    }
+    file.close();
+}
+
+    
+
+void simulation (std::vector<std::string> &dlines, 
+                std::vector<int> &v5Prime, 
+                std::vector<int> &v3Prime, 
+                std::vector<int> &forkLength,
+                std::vector<double> &stallScore,
+                bool specifiedDetect, 
+                bool specifiedBam,
+                bool runLeft, 
+                bool runRight,
+                std::vector<double> &totalRunOffs) { 
+
+    // Random number generator
+    std::random_device rd;
+    std::mt19937 gen(221005);
+
+    // Fork simulation
+    for (int i = 0; i < 5000; i++) {    
+
+        // Counter 
+        if (i > 0 && (i+1) % 1000 == 0) {
+
+            std::cout << "Completed " << i+1 << " iterations of left fork simulation.\n";
+        }
+            
+        int runOff = 0;
+            
+        for (size_t j = 0; j < stallScore.size(); ++j) {
+                
+            int read5Prime;
+            int read3Prime;
+
+            // Detect
+
+            if (specifiedDetect == true) {
+
+                // Random draw on detect read headers
+                std::uniform_int_distribution<> distrib(0, dlines.size() - 1);
+                int randomIndex = distrib(gen);
+                std::string randomRow = dlines[randomIndex];
+                    
+                // Interpret row 
+                std::istringstream iss(randomRow);
+                std::vector<std::string> parts;
+                std::string part;
+
+                while (iss >> part) {
+
+                    parts.push_back(part);
+                }
+                read5Prime = std::stoi(parts[2]);
+                read3Prime = std::stoi(parts[3]);
+            }
+
+            else if (specifiedBam == true) {
+
+                std::uniform_int_distribution<> distrib(0, v5Prime.size()-1);
+                int randomIndex = distrib(gen);
+                read5Prime = v5Prime[randomIndex];
+                read3Prime = v3Prime[randomIndex];
+                    
+            }
+
+            if (runLeft == true) {
+
+                // Randomly select a starting point on the read
+                std::uniform_int_distribution<> distrib(read5Prime + 2000 , read3Prime-1);
+                int randomStart = distrib(gen);
+
+                // Randomly select a pulse length
+                std::uniform_int_distribution<> random(0 , forkLength.size()-1);
+                int randomIndex2 = random(gen);
+                int randomLength = forkLength[randomIndex2];
+
+                // Check if there is a run off
+                if (randomStart - read5Prime < randomLength) {
+
+                    runOff++;    
+                }
+            }
+            else if (runRight == true) {
+
+                // Randomly select a starting point on the read
+                std::uniform_int_distribution<> distrib(read5Prime , read3Prime -2000);
+                int randomStart = distrib(gen);
+
+                // Randomly select a pulse length 
+                std::uniform_int_distribution<> random(1 , forkLength.size()-1);
+                int randomIndex2 = random(gen);
+                int randomLength = forkLength[randomIndex2];
+
+                // Check if there is a run off
+                if (read3Prime - randomStart < randomLength) {
+
+                    runOff++;
+                }  
+            }
+        }
+
+            // Convert to proportion and store proportion
+
+        double probRunOff = static_cast<double>(runOff) / stallScore.size();
+        totalRunOffs.push_back(probRunOff);
+
+        if (i > 0 && (i+1) % 1000 == 0) {
+
+            std::cout << "Lsim: " << probRunOff << "\n" ;
+        }       
+    }
+}
+
+void observation(std::vector<double> stallScore, std::vector<double> &totalObsRunOff) {
+
+    std::random_device rd;
+    std::mt19937 gen(221005);
+
+    for (int i = 0; i < 5000; ++i) {
+                
+        if (i > 0 && (i+1) % 1000 == 0) {
+            std::cout << "Completed " << i+1 << " iterations of right fork observation.\n";
+        }
+
+        int obsRunOffs = 0;
+        int noObsRunOffs = 0;
+
+        for (size_t j = 0; j < (trunc(stallScore.size() / 4)); ++j) {
+
+            std::uniform_int_distribution<> distrib(0 , stallScore.size()-1);
+            int randomIndex = distrib(gen);
+            double randomScore = stallScore[randomIndex];
+
+            if (randomScore == -3.0) {
+                obsRunOffs += 1;
+            }
+            else if (randomScore >= 0.0) {
+                noObsRunOffs += 1;
+            }
+        }
+        double probObsRunOff = static_cast<double>(obsRunOffs) / (obsRunOffs + noObsRunOffs);
+        totalObsRunOff.push_back(probObsRunOff);
+    }
+}
+
+
+void meanAndStdDev(std::vector<double> totalRunOffs, double &mean, double &stdDev) {
+
+    // Calculate mean
+    double sum = std::accumulate(totalRunOffs.begin(), totalRunOffs.end(), 0.0);
+    mean = sum / totalRunOffs.size();
+
+    // Calculate standard deviation
+    double sqSum = 0.0;
+    for (double val : totalRunOffs) {
+        sqSum += (val - mean) * (val - mean);
+    }
+    stdDev = std::sqrt(sqSum / (totalRunOffs.size() - 1));
+}
+
+
+int seeBreaks_main(int argc, char** argv) {
+
+    Arguments args = parseBreaksArguments(argc, argv);
+
+    // Read left forks file
+    int lnCounter = 0;
+    std::vector<int> lForkLength;
+    std::vector<double> lStallScore;
+
+    if (args.specifiedLeft == true) {
+
+        std::string input = "left";
+        forkUnpack("left", args, lForkLength, lStallScore, lnCounter);
+    }
+
+    // Read right forks file
+    std::vector<int> rForkLength;
+    std::vector<double> rStallScore;
+    int rnCounter = 0;
+
+    if (args.specifiedRight == true) {
+
+        std::string input = "right";
+        forkUnpack("right", args, rForkLength, rStallScore, rnCounter);
+    }
+
+    // Parse detect output
+    std::vector<int> v5Prime;
+    std::vector<int> v3Prime;
+    std::vector<std::string> dlines;
+    int dnCounter = 0;
+
+    if (args.specifiedDetect == true) {
+
+        detectUnpack(args, dlines, dnCounter);
+    }
+    else if (args.specifiedBam == true){
+
+        bamUnpack(args, v5Prime, v3Prime, dnCounter);        
+    }
+
+    //left forks
+    std::vector<double> lRunOffs; 
+    bool runLeft = false;
+    bool runRight = false;
+
+    if (args.specifiedLeft == true) {
+
+        runLeft = true;
+
+        simulation (dlines, v5Prime, v3Prime, lForkLength, lStallScore, args.specifiedDetect, args.specifiedBam, runLeft = true, runRight = false, lRunOffs);        
+    }
+
+    //right forks
+    std::vector<double> rRunOffs;
+
+    if (args.specifiedRight == true) {
+
+        runRight = true;
+
+        simulation (dlines, v5Prime, v3Prime, rForkLength, rStallScore, args.specifiedDetect, args.specifiedBam, runLeft = false, runRight = true, rRunOffs);
+    }
+
+    // Combine Simulation Run Offs
+    std::vector<double> totalSimRunOffs;
+
+    if (args.specifiedLeft == true && args.specifiedRight == true) {
+
+        totalSimRunOffs.insert(totalSimRunOffs.end(), lRunOffs.begin(), lRunOffs.end());
+        totalSimRunOffs.insert(totalSimRunOffs.end(), rRunOffs.begin(), rRunOffs.end());
+    }
+    else if (args.specifiedLeft == true) {
+
+        totalSimRunOffs = lRunOffs;
+    }
+    else if (args.specifiedRight == true) {
+
+        totalSimRunOffs = rRunOffs;
+    }
+
+    // Left Fork Observations
+    std::vector<double> lObsRunOffs;
+    if (args.specifiedLeft == true) {
+        
+        observation(lStallScore, lObsRunOffs);
+    }
+
+    // Right Fork Observations
+    std::vector<double> rObsRunOffs;
+    if (args.specifiedRight == true) {
+        
+        observation(rStallScore, rObsRunOffs);
+    }
+
+    // Combine Run Offs
+    std::vector<double> totalObsRunOffs;
+    if (args.specifiedLeft == true && args.specifiedRight == true) {
+
+        totalObsRunOffs.insert(totalObsRunOffs.end(), lObsRunOffs.begin(), lObsRunOffs.end());
+        totalObsRunOffs.insert(totalObsRunOffs.end(), rObsRunOffs.begin(), rObsRunOffs.end());
+    }
+    else if (args.specifiedLeft == true) {
+
+        totalObsRunOffs = lObsRunOffs;
+    }
+    else if (args.specifiedRight == true) {
+
+        totalObsRunOffs = rObsRunOffs;
+    }
+
+    // Calculate Simulation mean and standard deviation
+    double simMean;
+    double simStdDev;
+
+    meanAndStdDev(totalSimRunOffs, simMean, simStdDev);
+
+    // Calculate Observation mean abd standard deviation
+    double obsMean;
+    double obsStdDev;
+    
+    meanAndStdDev(totalObsRunOffs, obsMean, obsStdDev);
+
+    std::cout << "Simulation Mean: " << simMean << "\n";
+    std::cout << "Simulation Standard Deviation: " << simStdDev << "\n";
+    std::cout << "Observation Mean: " << obsMean << "\n";
+    std::cout << "Observation Standard Deviation: " << obsStdDev << "\n";
+
+    // Output data
+
+    if (args.specifiedOutput == true) {
+
+        std::ofstream outFile(args.output);
+        
+        outFile << "#seeBreaks Output Data:  \n";
+        outFile << "#n " << lnCounter + rnCounter << "\n";
+        outFile << "#Simulation Mean " << simMean << "\n";
+        outFile << "#Simulation Standard Deviation " << simStdDev << "\n";
+        outFile << "#Observation Mean " << obsMean << "\n";
+        outFile << "#Observation Standard Deviation " << obsStdDev << "\n";
+
+        outFile << "\n";
+
+        outFile << "simulation\n";
+
+        for (const auto& val : totalSimRunOffs) {
+
+            outFile << val;
+            outFile << "\n";
+        }
+
+        outFile << "\n observation\n";
+
+        for (const auto& val : totalObsRunOffs) {
+
+            outFile << val;
+            outFile << "\n";
+        }
+
+        outFile << "\n";
+    }
+
+    return 0;
+    
+}

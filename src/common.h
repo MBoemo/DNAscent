@@ -9,7 +9,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define VERSION "4.0.3"
+#define VERSION "4.1.0"
 
 #include <algorithm>
 #include <vector>
