@@ -187,10 +187,6 @@ void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3
     }
 }
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 2d5e5ac (includes difference between simulated and observed)
 void forkUnpack(std::string input, Arguments &args, std::vector<int> &ForkLength, std::vector<double> &StallScore, int &nCounter) {
 
     std::string fileInput = (input == "left") ? args.lForkInput : args.rForkInput;
@@ -258,11 +254,7 @@ void forkUnpack(std::string input, Arguments &args, std::vector<int> &ForkLength
     file.close();
 }
 
-<<<<<<< HEAD
-    
 
-=======
->>>>>>> 2d5e5ac (includes difference between simulated and observed)
 void simulation (std::vector<std::string> &dlines, 
                 std::vector<int> &v5Prime, 
                 std::vector<int> &v3Prime, 
@@ -291,13 +283,8 @@ void simulation (std::vector<std::string> &dlines,
             
         for (size_t j = 0; j < stallScore.size(); ++j) {
                 
-<<<<<<< HEAD
-            int read5Prime;
-            int read3Prime;
-=======
             int read5Prime = 0;
             int read3Prime = 0;
->>>>>>> 2d5e5ac (includes difference between simulated and observed)
 
             // Detect
 
@@ -325,10 +312,7 @@ void simulation (std::vector<std::string> &dlines,
 
                 std::uniform_int_distribution<> distrib(0, v5Prime.size()-1);
                 int randomIndex = distrib(gen);
-<<<<<<< HEAD
-=======
 
->>>>>>> 2d5e5ac (includes difference between simulated and observed)
                 read5Prime = v5Prime[randomIndex];
                 read3Prime = v3Prime[randomIndex];
                     
@@ -552,6 +536,23 @@ int seeBreaks_main(int argc, char** argv) {
     
     meanAndStdDev(totalObsRunOffs, obsMean, obsStdDev);
 
+    // difference between simulated and observed
+
+    std::mt19937 gen(221005);
+    std::vector<double> difference;
+    double difMean;
+    double difStdDev;
+
+    for (size_t i = 0; i < totalSimRunOffs.size(); ++i) {
+        std::normal_distribution<double> obsDistribution(obsMean, obsStdDev);
+        std::normal_distribution<double> simDistribution(simMean, simStdDev);   
+        difference.push_back(obsDistribution(gen) - simDistribution(gen));
+    
+    }
+    meanAndStdDev(difference, difMean, difStdDev);
+    double leftTail = difMean - 1.96 * difStdDev;
+    double rightTail = difMean + 1.96 * difStdDev;
+
     std::cout << "Simulation Mean: " << simMean << "\n";
     std::cout << "Simulation Standard Deviation: " << simStdDev << "\n";
     std::cout << "Observation Mean: " << obsMean << "\n";
@@ -565,10 +566,13 @@ int seeBreaks_main(int argc, char** argv) {
         
         outFile << "#seeBreaks Output Data:  \n";
         outFile << "#n " << lnCounter + rnCounter << "\n";
-        outFile << "#Simulation Mean " << simMean << "\n";
-        outFile << "#Simulation Standard Deviation " << simStdDev << "\n";
-        outFile << "#Observation Mean " << obsMean << "\n";
-        outFile << "#Observation Standard Deviation " << obsStdDev << "\n";
+        outFile << "#ExpectedMean " << simMean << "\n";
+        outFile << "#ExpectedStdv " << simStdDev << "\n";
+        outFile << "#ObservedMean " << obsMean << "\n";
+        outFile << "#ObservedStdv " << obsStdDev << "\n";
+        outFile << "#DifferenceMean " << difMean << "\n";
+        outFile << "#DifferenceStdv " << difStdDev << "\n";
+        outFile << "#95ConfidenceInterval " << leftTail << " " << rightTail << "\n";
 
         outFile << "\n";
 
