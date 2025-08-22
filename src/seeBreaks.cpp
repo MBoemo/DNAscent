@@ -187,7 +187,10 @@ void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3
     }
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 2d5e5ac (includes difference between simulated and observed)
 void forkUnpack(std::string input, Arguments &args, std::vector<int> &ForkLength, std::vector<double> &StallScore, int &nCounter) {
 
     std::string fileInput = (input == "left") ? args.lForkInput : args.rForkInput;
@@ -255,8 +258,11 @@ void forkUnpack(std::string input, Arguments &args, std::vector<int> &ForkLength
     file.close();
 }
 
+<<<<<<< HEAD
     
 
+=======
+>>>>>>> 2d5e5ac (includes difference between simulated and observed)
 void simulation (std::vector<std::string> &dlines, 
                 std::vector<int> &v5Prime, 
                 std::vector<int> &v3Prime, 
@@ -285,8 +291,13 @@ void simulation (std::vector<std::string> &dlines,
             
         for (size_t j = 0; j < stallScore.size(); ++j) {
                 
+<<<<<<< HEAD
             int read5Prime;
             int read3Prime;
+=======
+            int read5Prime = 0;
+            int read3Prime = 0;
+>>>>>>> 2d5e5ac (includes difference between simulated and observed)
 
             // Detect
 
@@ -314,6 +325,10 @@ void simulation (std::vector<std::string> &dlines,
 
                 std::uniform_int_distribution<> distrib(0, v5Prime.size()-1);
                 int randomIndex = distrib(gen);
+<<<<<<< HEAD
+=======
+
+>>>>>>> 2d5e5ac (includes difference between simulated and observed)
                 read5Prime = v5Prime[randomIndex];
                 read3Prime = v3Prime[randomIndex];
                     
