@@ -300,25 +300,23 @@ void simulation (std::vector<int> &v5Prime,
         int runOff = 0;
             
         for (size_t j = 0; j < stallScore.size(); ++j) {
-                
-            int read5Prime = 0;
-            int read3Prime = 0;
 
+            // Randomly select a pulse length
+            std::uniform_int_distribution<> random(0 , forkLength.size()-1);
+            int randomIndex2 = random(gen);
+            int randomLength = forkLength[randomIndex2];
+
+            // Randomly select a read
             std::uniform_int_distribution<> distrib(0, v5Prime.size()-1);
             int randomIndex = distrib(gen);
-            read5Prime = v5Prime[randomIndex];
-            read3Prime = v3Prime[randomIndex];
+            int read5Prime = v5Prime[randomIndex];
+            int read3Prime = v3Prime[randomIndex];
 
             if (runLeft == true) {
 
                 // Randomly select a starting point on the read
                 std::uniform_int_distribution<> distrib(read5Prime + 2000 , read3Prime-1);
                 int randomStart = distrib(gen);
-
-                // Randomly select a pulse length
-                std::uniform_int_distribution<> random(0 , forkLength.size()-1);
-                int randomIndex2 = random(gen);
-                int randomLength = forkLength[randomIndex2];
 
                 // Check if there is a run off
                 if (randomStart - read5Prime < randomLength) runOff++;
@@ -328,11 +326,6 @@ void simulation (std::vector<int> &v5Prime,
                 // Randomly select a starting point on the read
                 std::uniform_int_distribution<> distrib(read5Prime , read3Prime -2000);
                 int randomStart = distrib(gen);
-
-                // Randomly select a pulse length 
-                std::uniform_int_distribution<> random(1 , forkLength.size()-1);
-                int randomIndex2 = random(gen);
-                int randomLength = forkLength[randomIndex2];
 
                 // Check if there is a run off
                 if (read3Prime - randomStart < randomLength) runOff++;  
