@@ -16,7 +16,7 @@ Pull the Singularity image:
 
 .. code-block:: console
 
-   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.0.3
+   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.1.1
 
 Alternatively, you can download and compile DNAscent:
 
@@ -24,7 +24,7 @@ Alternatively, you can download and compile DNAscent:
 
    git clone --recursive https://github.com/MBoemo/DNAscent.git
    cd DNAscent
-   git checkout 4.0.3
+   git checkout 4.1.1
    make
    cd ..
 

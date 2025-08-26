@@ -3,6 +3,12 @@
 Release Notes
 ===============================
 
+v4.1.1
+-----------------
+
+* Added new ``DNAscent seeBreaks`` executable which determines whether DNA breaks at replication forks.
+* Data to test this release was provided by `Mathew Jones <https://researchers.uq.edu.au/researcher/25051>`_ and `Subash Rai <https://gih.uq.edu.au/profile/677/subash-rai>`_ at the University of Queensland. We are always grateful for their long-term collaboration and we are particularly grateful to them for supporting the release of the software to the community ahead of publication.
+
 v4.0.3
 -----------------
 

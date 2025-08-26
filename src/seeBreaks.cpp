@@ -38,7 +38,7 @@ static const char *help=
 struct Arguments {
 	std::string lForkInput;
 	std::string rForkInput;
-	std::string HeadersInput;
+	std::string DetectInput;
 	std::string output;
     bool specifiedLeft = false;
     bool specifiedRight = false;
@@ -121,7 +121,7 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 				throw InvalidExtension(ext);
 			}
 			
-			args.HeadersInput = strArg;
+			args.DetectInput = strArg;
 			i+=2;
 		}
 		else if ( flag == "-o" or flag == "--output" ){
@@ -129,32 +129,6 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 			if (i == argc-1) throw TrailingFlag(flag);		
 		
  			std::string strArg( argv[ i + 1 ] );
-
-            std::ifstream f(args.output);
-
-            if (!f.good()) {
-
-                if (strArg.back() == '/') {
-                    strArg = strArg + "detect.seeBreaks";
-                }
-                else{ 
-                    strArg = strArg + "/detect.seeBreaks";
-                }
-                
-                std::ofstream file(strArg);
-
-                std::ifstream f2(strArg);
-
-                if (f2.good()) {
-                    std::cout << "file created at directory path\n";
-                }
-
-                else {
-                    std::cerr << "Error: invalid output path.\n";
-                    exit(EXIT_FAILURE);
-                }
-            }
-
             args.output = strArg;
 			i+=2;
 			args.specifiedOutput = true;
@@ -170,57 +144,80 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 }
 
 
-void detectUnpack (Arguments &args, std::vector<std::string> &dlines, int &dnCounter) {
+void detectUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3Prime, int &dnCounter) {
 
-    std::ifstream detectFile(args.HeadersInput);
+    int minReadLength = 3000;
+    std::ifstream detectFile(args.DetectInput);
+    std::string line;
 
-    std::string dline;
+	while( std::getline( detectFile, line ) ){
 
-    while (std::getline(detectFile, dline)) {
-        dlines.push_back(dline);
-        dnCounter++;
+        if (line.substr(0,1) == "#" or line.length() == 0) continue; //ignore header and blank lines
+        if ( line.substr(0,1) == ">" ){
+
+            dnCounter++;			
+            
+            //parse the header line
+            std::istringstream ssLine(line);
+            std::string column;
+            int cIndex = 0;
+            int refStart = -1;
+            int refEnd = -1;
+            while ( ssLine >> column ) {
+
+                if ( cIndex == 2 ) {
+
+                    refStart = std::stoi(column);
+                }
+                else if ( cIndex == 3 ) {
+
+                    refEnd = std::stoi(column);
+                }
+                cIndex++;
+            }
+            assert(refStart != -1 and refEnd != -1);
+
+            if (refEnd - refStart < minReadLength) continue; //ignore short reads
+            
+            v5Prime.push_back(refStart);
+            v3Prime.push_back(refEnd);
+        }
     }
     detectFile.close();
-
-    if (dlines.empty()) {
-        std::cerr << "Error: Detect file is empty or not formatted correctly." << std::endl;
-        exit(EXIT_FAILURE);
-    }    
 }
 
 
 void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3Prime, int &dnCounter) {
 
-    htsFile *bam_fh = sam_open((args.HeadersInput).c_str(), "r");
+    int minReadLength = 3000;
 
-    if (bam_fh == NULL) throw IOerror(args.HeadersInput);
+    htsFile *bam_fh = sam_open((args.DetectInput).c_str(), "r");
 
-    std::cout << "BAM file opened successfully.\n";
+    if (bam_fh == NULL) throw IOerror(args.DetectInput);
 
     bam_hdr_t *bam_hdr = sam_hdr_read(bam_fh);
     bam1_t *itr_record = bam_init1();
-    int result = sam_read1(bam_fh, bam_hdr, itr_record);
 
-    while(result >= 0){
+    while(sam_read1(bam_fh, bam_hdr, itr_record) >= 0){
                         
-        bam1_t *record = bam_dup1(itr_record);
-
         int refStart,refEnd;
-        getRefEnd(record,refStart,refEnd);
+        getRefEnd(itr_record,refStart,refEnd);
+
+        if (refEnd - refStart < minReadLength) continue; //ignore short reads
 
         v5Prime.push_back(refStart);
         v3Prime.push_back(refEnd);
-
-        result = sam_read1(bam_fh, bam_hdr, itr_record);
     }
+	bam_destroy1(itr_record);				
+	bam_hdr_destroy(bam_hdr);
+	hts_close(bam_fh);
 }
+
 
 void forkUnpack(std::string input, Arguments &args, std::vector<int> &ForkLength, std::vector<double> &StallScore, int &nCounter) {
 
     std::string fileInput = (input == "left") ? args.lForkInput : args.rForkInput;
     
-    std::cout << "Processing " << input << " fork file: " << fileInput << std::endl;
-
     std::ifstream file(fileInput);
 
     if (!file.is_open()) 
@@ -283,8 +280,7 @@ void forkUnpack(std::string input, Arguments &args, std::vector<int> &ForkLength
 }
 
 
-void simulation (std::vector<std::string> &dlines, 
-                std::vector<int> &v5Prime, 
+void simulation (std::vector<int> &v5Prime, 
                 std::vector<int> &v3Prime, 
                 std::vector<int> &forkLength,
                 std::vector<double> &stallScore,
@@ -299,13 +295,7 @@ void simulation (std::vector<std::string> &dlines,
     std::mt19937 gen(221005);
 
     // Fork simulation
-    for (int i = 0; i < 5000; i++) {    
-
-        // Counter 
-        if (i > 0 && (i+1) % 1000 == 0) {
-
-            std::cout << "Completed " << i+1 << " iterations of fork simulation.\n";
-        }
+    for (int i = 0; i < 5000; i++) {  
             
         int runOff = 0;
             
@@ -314,37 +304,10 @@ void simulation (std::vector<std::string> &dlines,
             int read5Prime = 0;
             int read3Prime = 0;
 
-            // Detect
-
-            if (specifiedDetect == true) {
-
-                // Random draw on detect read headers
-                std::uniform_int_distribution<> distrib(0, dlines.size() - 1);
-                int randomIndex = distrib(gen);
-                std::string randomRow = dlines[randomIndex];
-                    
-                // Interpret row 
-                std::istringstream iss(randomRow);
-                std::vector<std::string> parts;
-                std::string part;
-
-                while (iss >> part) {
-
-                    parts.push_back(part);
-                }
-                read5Prime = std::stoi(parts[2]);
-                read3Prime = std::stoi(parts[3]);
-            }
-
-            else if (specifiedBam == true) {
-
-                std::uniform_int_distribution<> distrib(0, v5Prime.size()-1);
-                int randomIndex = distrib(gen);
-
-                read5Prime = v5Prime[randomIndex];
-                read3Prime = v3Prime[randomIndex];
-                    
-            }
+            std::uniform_int_distribution<> distrib(0, v5Prime.size()-1);
+            int randomIndex = distrib(gen);
+            read5Prime = v5Prime[randomIndex];
+            read3Prime = v3Prime[randomIndex];
 
             if (runLeft == true) {
 
@@ -358,10 +321,7 @@ void simulation (std::vector<std::string> &dlines,
                 int randomLength = forkLength[randomIndex2];
 
                 // Check if there is a run off
-                if (randomStart - read5Prime < randomLength) {
-
-                    runOff++;    
-                }
+                if (randomStart - read5Prime < randomLength) runOff++;
             }
             else if (runRight == true) {
 
@@ -375,22 +335,13 @@ void simulation (std::vector<std::string> &dlines,
                 int randomLength = forkLength[randomIndex2];
 
                 // Check if there is a run off
-                if (read3Prime - randomStart < randomLength) {
-
-                    runOff++;
-                }  
+                if (read3Prime - randomStart < randomLength) runOff++;  
             }
         }
 
-            // Convert to proportion and store proportion
-
+        // Convert to proportion and store proportion
         double probRunOff = static_cast<double>(runOff) / stallScore.size();
         totalRunOffs.push_back(probRunOff);
-
-        if (i > 0 && (i+1) % 1000 == 0) {
-
-            std::cout << probRunOff << "\n" ;
-        }       
     }
 }
 
@@ -400,10 +351,6 @@ void observation(std::vector<double> stallScore, std::vector<double> &totalObsRu
     std::mt19937 gen(221005);
 
     for (int i = 0; i < 5000; ++i) {
-                
-        if (i > 0 && (i+1) % 1000 == 0) {
-            std::cout << "Completed " << i+1 << " iterations of fork observation.\n";
-        }
 
         int obsRunOffs = 0;
         int noObsRunOffs = 0;
@@ -424,21 +371,6 @@ void observation(std::vector<double> stallScore, std::vector<double> &totalObsRu
         double probObsRunOff = static_cast<double>(obsRunOffs) / (obsRunOffs + noObsRunOffs);
         totalObsRunOff.push_back(probObsRunOff);
     }
-}
-
-
-void meanAndStdDev(std::vector<double> totalRunOffs, double &mean, double &stdDev) {
-
-    // Calculate mean
-    double sum = std::accumulate(totalRunOffs.begin(), totalRunOffs.end(), 0.0);
-    mean = sum / totalRunOffs.size();
-
-    // Calculate standard deviation
-    double sqSum = 0.0;
-    for (double val : totalRunOffs) {
-        sqSum += (val - mean) * (val - mean);
-    }
-    stdDev = std::sqrt(sqSum / (totalRunOffs.size() - 1));
 }
 
 
@@ -471,12 +403,11 @@ int seeBreaks_main(int argc, char** argv) {
     // Parse detect output
     std::vector<int> v5Prime;
     std::vector<int> v3Prime;
-    std::vector<std::string> dlines;
     int dnCounter = 0;
 
     if (args.specifiedDetect == true) {
 
-        detectUnpack(args, dlines, dnCounter);
+        detectUnpack(args, v5Prime, v3Prime, dnCounter);
     }
     else if (args.specifiedBam == true){
 
@@ -492,7 +423,7 @@ int seeBreaks_main(int argc, char** argv) {
 
         runLeft = true;
 
-        simulation (dlines, v5Prime, v3Prime, lForkLength, lStallScore, args.specifiedDetect, args.specifiedBam, runLeft = true, runRight = false, lRunOffs);        
+        simulation(v5Prime, v3Prime, lForkLength, lStallScore, args.specifiedDetect, args.specifiedBam, runLeft = true, runRight = false, lRunOffs);        
     }
 
     //right forks
@@ -502,7 +433,7 @@ int seeBreaks_main(int argc, char** argv) {
 
         runRight = true;
 
-        simulation (dlines, v5Prime, v3Prime, rForkLength, rStallScore, args.specifiedDetect, args.specifiedBam, runLeft = false, runRight = true, rRunOffs);
+        simulation(v5Prime, v3Prime, rForkLength, rStallScore, args.specifiedDetect, args.specifiedBam, runLeft = false, runRight = true, rRunOffs);
     }
 
     // Combine Simulation Run Offs
@@ -553,22 +484,16 @@ int seeBreaks_main(int argc, char** argv) {
     }
 
     // Calculate Simulation mean and standard deviation
-    double simMean;
-    double simStdDev;
+    double simMean = vectorMean(totalSimRunOffs);
+    double simStdDev = vectorStdv(totalSimRunOffs, simMean);
 
-    meanAndStdDev(totalSimRunOffs, simMean, simStdDev);
-
-    // Calculate Observation mean abd standard deviation
-    double obsMean;
-    double obsStdDev;
-    
-    meanAndStdDev(totalObsRunOffs, obsMean, obsStdDev);
+    // Calculate Observation mean abd standard deviation  
+    double obsMean = vectorMean(totalObsRunOffs);
+    double obsStdDev = vectorStdv(totalObsRunOffs, obsMean);
 
     // difference between simulated and observed
     std::mt19937 gen(221005);
     std::vector<double> difference;
-    double difMean;
-    double difStdDev;
 
     for (size_t i = 0; i < totalSimRunOffs.size(); ++i) {
         std::normal_distribution<double> obsDistribution(obsMean, obsStdDev);
@@ -576,7 +501,8 @@ int seeBreaks_main(int argc, char** argv) {
         difference.push_back(obsDistribution(gen) - simDistribution(gen));
     
     }
-    meanAndStdDev(difference, difMean, difStdDev);
+    double difMean = vectorMean(difference);
+    double difStdDev = vectorStdv(difference, difMean);
     double leftTail = difMean - 1.96 * difStdDev;
     double rightTail = difMean + 1.96 * difStdDev;
 
