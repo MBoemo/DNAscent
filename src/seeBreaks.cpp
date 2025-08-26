@@ -295,7 +295,7 @@ void simulation (std::vector<std::string> &dlines,
                 std::vector<double> &totalRunOffs) { 
 
     // Random number generator
-    std::random_device rd;
+
     std::mt19937 gen(221005);
 
     // Fork simulation
@@ -476,7 +476,7 @@ int seeBreaks_main(int argc, char** argv) {
 
     if (args.specifiedDetect == true) {
 
-        detectUnpack(args, dlines, dnCounter, readCount);
+        detectUnpack(args, dlines, dnCounter);
     }
     else if (args.specifiedBam == true){
 
@@ -620,8 +620,7 @@ int seeBreaks_main(int argc, char** argv) {
 
             outFile << val << "\n";
         }
-
-        outFile << "\n";
+        outFile.close();
     }
 
     return 0;
