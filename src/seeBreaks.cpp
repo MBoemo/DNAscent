@@ -129,7 +129,6 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 			if (i == argc-1) throw TrailingFlag(flag);		
 		
  			std::string strArg( argv[ i + 1 ] );
-			
 
             std::ifstream f(args.output);
 
@@ -390,7 +389,7 @@ void simulation (std::vector<std::string> &dlines,
 
         if (i > 0 && (i+1) % 1000 == 0) {
 
-            std::cout << "Lsim: " << probRunOff << "\n" ;
+            std::cout << probRunOff << "\n" ;
         }       
     }
 }
@@ -477,7 +476,7 @@ int seeBreaks_main(int argc, char** argv) {
 
     if (args.specifiedDetect == true) {
 
-        detectUnpack(args, dlines, dnCounter);
+        detectUnpack(args, dlines, dnCounter, readCount);
     }
     else if (args.specifiedBam == true){
 
@@ -595,7 +594,10 @@ int seeBreaks_main(int argc, char** argv) {
 
         std::ofstream outFile(args.output);
         
-        outFile << "#seeBreaks Output Data:  \n";
+        outFile << "#DetectFile" << args.output << "\n";
+        outFile << "#Software " << std::string(getExePath()) << "\n";
+        outFile << "#Version " << std::string(VERSION) << "\n";
+        outFile << "#Commit " << std::string(getGitCommit()) << "\n";
         outFile << "#n " << lnCounter + rnCounter << "\n";
         outFile << "#ExpectedMean " << simMean << "\n";
         outFile << "#ExpectedStdv " << simStdDev << "\n";
@@ -605,22 +607,18 @@ int seeBreaks_main(int argc, char** argv) {
         outFile << "#DifferenceStdv " << difStdDev << "\n";
         outFile << "#95ConfidenceInterval " << leftTail << " " << rightTail << "\n";
 
-        outFile << "\n";
-
-        outFile << "simulation\n";
+        outFile << "\nsimulation:\n";
 
         for (const auto& val : totalSimRunOffs) {
 
-            outFile << val;
-            outFile << "\n";
+            outFile << val << "\n";
         }
 
-        outFile << "\n observation\n";
+        outFile << "\nobservation:\n";
 
         for (const auto& val : totalObsRunOffs) {
 
-            outFile << val;
-            outFile << "\n";
+            outFile << val << "\n";
         }
 
         outFile << "\n";
