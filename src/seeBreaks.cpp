@@ -21,6 +21,7 @@
 #include "event_handling.h"
 #include <numeric>
 #include <random>
+#include <sys/stat.h>
 
 
 static const char *help=
@@ -114,6 +115,9 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 			}
 			else if (strcmp(ext,"detect") == 0){
 				args.specifiedDetect = true;
+            }
+            else if (strcmp(ext,"forkSense") == 0){
+                args.specifiedDetect = true;
 			}
 			else{
 				throw InvalidExtension(ext);
@@ -537,7 +541,6 @@ int seeBreaks_main(int argc, char** argv) {
     meanAndStdDev(totalObsRunOffs, obsMean, obsStdDev);
 
     // difference between simulated and observed
-
     std::mt19937 gen(221005);
     std::vector<double> difference;
     double difMean;
@@ -553,13 +556,16 @@ int seeBreaks_main(int argc, char** argv) {
     double leftTail = difMean - 1.96 * difStdDev;
     double rightTail = difMean + 1.96 * difStdDev;
 
+    // Output summary statistics
     std::cout << "Simulation Mean: " << simMean << "\n";
     std::cout << "Simulation Standard Deviation: " << simStdDev << "\n";
     std::cout << "Observation Mean: " << obsMean << "\n";
     std::cout << "Observation Standard Deviation: " << obsStdDev << "\n";
+    std::cout << "#DifferenceMean " << difMean << "\n";
+    std::cout << "#DifferenceStdv " << difStdDev << "\n";
+    std::cout << "#95ConfidenceInterval " << leftTail << " " << rightTail << "\n";
 
     // Output data
-
     if (args.specifiedOutput == true) {
 
         std::ofstream outFile(args.output);
