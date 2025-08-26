@@ -21,8 +21,6 @@
 #include "event_handling.h"
 #include <numeric>
 #include <random>
-#include <sys/stat.h>
-
 
 static const char *help=
 "seeBreaks: DNAscent executable that detects an elevated frequency of DNA breaks at replication forks.\n"
@@ -32,7 +30,7 @@ static const char *help=
 "  -l,--left                 path to leftForks file from forkSense detect with `bed` extension,\n"
 "  -r,--right                path to rightFork file from forkSense detect with `bed` extension,\n"
 "  -d,--detect               path to output from detect with `detect` or `bam` extension,\n"
-"  -o,--output               path to output file for seeBreaks,\n"
+"  -o,--output               path to output file or directory for seeBreaks,\n"
 "DNAscent is under active development by the Boemo Group, Department of Pathology, University of Cambridge (https://www.boemogroup.org/).\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -131,11 +129,38 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 			if (i == argc-1) throw TrailingFlag(flag);		
 		
  			std::string strArg( argv[ i + 1 ] );
-			args.output = strArg;
+			
+
+            std::ifstream f(args.output);
+
+            if (!f.good()) {
+
+                if (strArg.back() == '/') {
+                    strArg = strArg + "detect.seeBreaks";
+                }
+                else{ 
+                    strArg = strArg + "/detect.seeBreaks";
+                }
+                
+                std::ofstream file(strArg);
+
+                std::ifstream f2(strArg);
+
+                if (f2.good()) {
+                    std::cout << "file created at directory path\n";
+                }
+
+                else {
+                    std::cerr << "Error: invalid output path.\n";
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            args.output = strArg;
 			i+=2;
 			args.specifiedOutput = true;
-		}
-		else throw InvalidOption( flag );
+        }
+        else throw InvalidOption( flag );
 	}
     if ( !args.specifiedOutput or (!args.specifiedLeft and !args.specifiedRight) or (!args.specifiedDetect and !args.specifiedBam) ) {
         std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent seeBreaks." << std::endl;
@@ -280,7 +305,7 @@ void simulation (std::vector<std::string> &dlines,
         // Counter 
         if (i > 0 && (i+1) % 1000 == 0) {
 
-            std::cout << "Completed " << i+1 << " iterations of left fork simulation.\n";
+            std::cout << "Completed " << i+1 << " iterations of fork simulation.\n";
         }
             
         int runOff = 0;
@@ -378,7 +403,7 @@ void observation(std::vector<double> stallScore, std::vector<double> &totalObsRu
     for (int i = 0; i < 5000; ++i) {
                 
         if (i > 0 && (i+1) % 1000 == 0) {
-            std::cout << "Completed " << i+1 << " iterations of right fork observation.\n";
+            std::cout << "Completed " << i+1 << " iterations of fork observation.\n";
         }
 
         int obsRunOffs = 0;
