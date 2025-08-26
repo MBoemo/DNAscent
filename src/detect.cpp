@@ -32,6 +32,8 @@
 #include <omp.h>
 #include <mutex>
 
+
+
 static const char *help=
 "detect: DNAscent executable that detects BrdU and EdU in Oxford Nanopore reads.\n"
 "To run DNAscent detect, do:\n"
@@ -188,6 +190,45 @@ Arguments parseDetectArguments( int argc, char** argv ){
 	if (args.outputFilename == args.indexFilename or args.outputFilename == args.referenceFilename or args.outputFilename == args.bamFilename) throw OverwriteFailure();
 
 	return args;
+}
+
+
+std::string writeDetectHeader(std::string alignmentFilename,
+		                std::string refFilename,
+				std::string indexFn,
+				int threads,
+				bool useHMM,
+				unsigned int quality,
+				unsigned int length,
+				bool useGPU){
+
+	std::string detMode = "CNN";
+
+	std::string compMode;
+	if (useGPU) compMode = "GPU";
+	else compMode = "CPU";
+
+	auto t = std::time(nullptr);
+	auto tm = *std::localtime(&t);
+	std::ostringstream oss;
+	oss << std::put_time(&tm, "%d/%m/%Y %H:%M:%S");
+	auto str = oss.str();
+
+	std::string out;
+	out += "#Alignment " + alignmentFilename + "\n";
+	out += "#Genome " + refFilename + "\n";
+	out += "#Index " + indexFn + "\n";
+	out += "#Threads " + std::to_string(threads) + "\n";
+	out += "#Compute " + compMode + "\n";
+	out += "#Mode " + detMode + "\n";
+	out += "#MappingQuality " + std::to_string(quality) + "\n";
+	out += "#MappingLength " + std::to_string(length) + "\n";
+	out += "#SystemStartTime " + str + "\n";
+	out += "#Software " + std::string(getExePath()) + "\n";
+	out += "#Version " + std::string(VERSION) + "\n";
+	out += "#Commit " + std::string(getGitCommit()) + "\n";
+
+	return out;
 }
 
 

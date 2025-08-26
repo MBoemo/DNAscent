@@ -23,83 +23,10 @@
 #include <sstream>
 #include "data_IO.h"
 #include "pfasta/pfasta.h"
-#include "gitcommit.h"
 #include "common.h"
-#include "softwarepath.h"
 #include "error_handling.h"
-
-
-std::string writeDetectHeader(std::string alignmentFilename,
-		                std::string refFilename,
-				std::string indexFn,
-				int threads,
-				bool useHMM,
-				unsigned int quality,
-				unsigned int length,
-				bool useGPU){
-
-	std::string detMode = "CNN";
-
-	std::string compMode;
-	if (useGPU) compMode = "GPU";
-	else compMode = "CPU";
-
-	auto t = std::time(nullptr);
-	auto tm = *std::localtime(&t);
-	std::ostringstream oss;
-	oss << std::put_time(&tm, "%d/%m/%Y %H:%M:%S");
-	auto str = oss.str();
-
-	std::string out;
-	out += "#Alignment " + alignmentFilename + "\n";
-	out += "#Genome " + refFilename + "\n";
-	out += "#Index " + indexFn + "\n";
-	out += "#Threads " + std::to_string(threads) + "\n";
-	out += "#Compute " + compMode + "\n";
-	out += "#Mode " + detMode + "\n";
-	out += "#MappingQuality " + std::to_string(quality) + "\n";
-	out += "#MappingLength " + std::to_string(length) + "\n";
-	out += "#SystemStartTime " + str + "\n";
-	out += "#Software " + std::string(executablePath) + "\n";
-	out += "#Version " + std::string(VERSION) + "\n";
-	out += "#Commit " + std::string(gitcommit) + "\n";
-
-	return out;
-}
-
-std::string writeRegionsHeader(std::string detectFile,
-		                double threshold,
-						bool useHMM,
-						unsigned int cooldown,
-						unsigned int resolution,
-						double probability,
-						double zscore){
-
-	std::string detMode;
-	if (useHMM) detMode = "HMM";
-	else detMode = "CNN";
-
-	auto t = std::time(nullptr);
-	auto tm = *std::localtime(&t);
-	std::ostringstream oss;
-	oss << std::put_time(&tm, "%d/%m/%Y %H:%M:%S");
-	auto str = oss.str();
-
-	std::string out;
-	out += "#DetectFile " + detectFile + "\n";
-	out += "#Mode " + detMode + "\n";
-	out += "#CallThreshold " + std::to_string(threshold) + "\n";
-	out += "#Cooldown " + std::to_string(cooldown) + "\n";
-	out += "#Resolution " + std::to_string(resolution) + "\n";
-	out += "#Probability " + std::to_string(probability) + "\n";
-	out += "#ZScore " + std::to_string(zscore) + "\n";
-	out += "#SystemStartTime " + str + "\n";
-	out += "#Software " + std::string(executablePath) + "\n";
-	out += "#Version " + std::string(VERSION) + "\n";
-	out += "#Commit " + std::string(gitcommit) + "\n";
-
-	return out;
-}
+#include "softwarepath.h"
+#include "gitcommit.h"
 
 
 std::map< std::string, std::string > import_reference( std::string fastaFilePath ){
