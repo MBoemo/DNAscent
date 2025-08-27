@@ -229,6 +229,8 @@ void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3
     int minL;
     int bamProgCounter = 0;
 
+    std::cout << "Bam file processing";
+
     countRecords(bam_fh, bam_hdr, bamCounter, minQ, minL);  //this probably doesnt work :)
     progressBar bam(bamCounter, false);
 
@@ -427,9 +429,6 @@ int seeBreaks_main(int argc, char** argv) {
     Arguments args = parseBreaksArguments(argc, argv);
 
      // Initialize progress bar
-
-    int readCounter = 0;
-    int outReadCounter = 0;
 
     progressBar pb(20000, false);
 
