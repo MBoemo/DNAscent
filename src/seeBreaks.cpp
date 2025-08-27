@@ -578,9 +578,9 @@ int seeBreaks_main(int argc, char** argv) {
     std::cout << "ExpectedStdv " << simStdDev << "\n";
     std::cout << "ObservedMean " << obsMean << "\n";
     std::cout << "ObservedStdv " << obsStdDev << "\n";
-    std::cout << "#DifferenceMean " << difMean << "\n"; 
-    std::cout << "#DifferenceStdv " << difStdDev << "\n";
-    std::cout << "#95ConfidenceInterval " << leftTail << " " << rightTail << "\n";
+    std::cout << "DifferenceMean " << difMean << "\n"; 
+    std::cout << "DifferenceStdv " << difStdDev << "\n";
+    std::cout << "95ConfidenceInterval " << leftTail << " " << rightTail << "\n\n";
 
     // Output data
     if (args.specifiedOutput == true) {
