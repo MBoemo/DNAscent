@@ -171,7 +171,7 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 }
 
 
-void detectUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3Prime, int &dnCounter) {
+void detectUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3Prime) {
 
     int minReadLength = 3000;
     std::ifstream detectFile(args.DetectInput);
@@ -181,8 +181,7 @@ void detectUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &
 
         if (line.substr(0,1) == "#" or line.length() == 0) continue; //ignore header and blank lines
         if ( line.substr(0,1) == ">" ){
-
-            dnCounter++;			
+		
             
             //parse the header line
             std::istringstream ssLine(line);
@@ -214,7 +213,7 @@ void detectUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &
 }
 
 
-void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3Prime, int &dnCounter) {
+void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3Prime) {
 
     int minReadLength = 3000;
 
@@ -438,15 +437,14 @@ int seeBreaks_main(int argc, char** argv) {
     std::vector<int> v5Prime;
     std::vector<int> v3Prime;
     std::vector<std::string> dlines;
-    int dnCounter = 0;
 
     if (args.specifiedDetect == true) {
 
-        detectUnpack(args, v5Prime, v3Prime, dnCounter);
+        detectUnpack(args, v5Prime, v3Prime);
     }
     else if (args.specifiedBam == true){
         
-        bamUnpack(args, v5Prime, v3Prime, dnCounter);       
+        bamUnpack(args, v5Prime, v3Prime);       
 
     }
 
