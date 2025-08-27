@@ -282,7 +282,6 @@ void simulation (std::vector<int> &v5Prime,
                 std::vector<int> &v3Prime, 
                 std::vector<int> &forkLength,
                 std::vector<double> &stallScore,
-                bool runLeft, 
                 std::vector<double> &totalRunOffs) { 
 
     int bsIterations = 5000;
@@ -298,35 +297,24 @@ void simulation (std::vector<int> &v5Prime,
             
         for (size_t j = 0; j < stallScore.size(); ++j) {
 
-            // Randomly select a read
-            std::uniform_int_distribution<> distrib(0, v5Prime.size()-1);
-            int randomIndex = distrib(gen);
-            int read5Prime = v5Prime[randomIndex];
-            int read3Prime = v3Prime[randomIndex];
+            // Select boundaries of a random read
+            assert(v5Prime.size() == v3Prime.size());
+            std::uniform_int_distribution<> readDist(0, v5Prime.size()-1);
+            int readIndex = readDist(gen);
+            int read5Prime = v5Prime[readIndex];
+            int read3Prime = v3Prime[readIndex];
 
-            // Randomly select a pulse length
-            std::uniform_int_distribution<> random(0 , forkLength.size()-1);
-            int randomIndex2 = random(gen);
-            int randomLength = forkLength[randomIndex2];
+            // Randomly select a fork track length
+            std::uniform_int_distribution<> trackDist(0 , forkLength.size()-1);
+            int trackIndex = trackDist(gen);
+            int randomLength = forkLength[trackIndex];
 
-            if (runLeft) {
+            // Randomly select a starting point on the read
+            std::uniform_int_distribution<> startDist(read5Prime , read3Prime - 2000);
+            int randomStart = startDist(gen);
 
-                // Randomly select a starting point on the read
-                std::uniform_int_distribution<> distrib(read5Prime + 2000 , read3Prime-1);
-                int randomStart = distrib(gen);
-
-                // Check if there is a run off
-                if (randomStart - read5Prime < randomLength) runOff++;
-            }
-            else{ //right
-
-                // Randomly select a starting point on the read
-                std::uniform_int_distribution<> distrib(read5Prime , read3Prime -2000);
-                int randomStart = distrib(gen);
-
-                // Check if there is a run off
-                if (read3Prime - randomStart < randomLength) runOff++;  
-            }
+            // Check if there is a run off
+            if (read3Prime - randomStart < randomLength) runOff++;  
         }
 
         // Convert to proportion and store proportion
@@ -384,62 +372,36 @@ int seeBreaks_main(int argc, char** argv) {
         bamUnpack(args, v5Prime, v3Prime);       
     }
 
-    // Read left forks file
-    int lnCounter = 0;
-    std::vector<int> lForkLength;
-    std::vector<double> lStallScore;
+    // Parse forkSense bed files
+    int nForks = 0;
+    std::vector<int> forkTrackLengths;
+    std::vector<double> stallScores;
 
-    if (args.specifiedLeft == true) {
+    if (args.specifiedLeft) {
 
-        forkUnpack(args.lForkInput, lForkLength, lStallScore, lnCounter);
+        forkUnpack(args.lForkInput, forkTrackLengths, stallScores, nForks);
     }
+    if (args.specifiedRight) {
 
-    // Read right forks file
-    std::vector<int> rForkLength;
-    std::vector<double> rStallScore;
-    int rnCounter = 0;
-
-    if (args.specifiedRight == true) {
-
-        forkUnpack(args.rForkInput, rForkLength, rStallScore, rnCounter);
+        forkUnpack(args.rForkInput, forkTrackLengths, stallScores, nForks);
     }
 
     std::vector<double> totalSimRunOffs;
+    simulation(v5Prime, v3Prime, forkTrackLengths, stallScores, totalSimRunOffs);   
 
-    // left forks
-    if (args.specifiedLeft == true) {
-
-        simulation(v5Prime, v3Prime, lForkLength, lStallScore, true, totalSimRunOffs);   
-    }
-
-    // right forks
-    if (args.specifiedRight == true) {
-
-        simulation(v5Prime, v3Prime, rForkLength, rStallScore, false, totalSimRunOffs);
-    }
-
-    // Left Fork Observations
+    // Fork Observations
     std::vector<double> totalObsRunOffs;
-    if (args.specifiedLeft) {
-        
-        observation(lStallScore, totalObsRunOffs);  
-    }
+    observation(stallScores, totalObsRunOffs);  
 
-    // Right Fork Observations
-    if (args.specifiedRight) {
-        
-        observation(rStallScore, totalObsRunOffs);
-    }
-
-    // Calculate Simulation mean and standard deviation
+    // Calculate simulation mean and standard deviation
     double simMean = vectorMean(totalSimRunOffs);
     double simStdDev = vectorStdv(totalSimRunOffs, simMean);
 
-    // Calculate Observation mean abd standard deviation  
+    // Calculate observed mean and standard deviation  
     double obsMean = vectorMean(totalObsRunOffs);
     double obsStdDev = vectorStdv(totalObsRunOffs, obsMean);
 
-    // difference between simulated and observed
+    // Difference between simulated and observed
     std::mt19937 gen(221005);
     std::vector<double> difference;
 
@@ -453,49 +415,50 @@ int seeBreaks_main(int argc, char** argv) {
     double leftTail = difMean - 1.96 * difStdDev;
     double rightTail = difMean + 1.96 * difStdDev;
 
-    // Output summary statistics
-    std::cout << "\n\nExpectedMean " << simMean << "\n";
-    std::cout << "ExpectedStdv " << simStdDev << "\n";
-    std::cout << "ObservedMean " << obsMean << "\n";
-    std::cout << "ObservedStdv " << obsStdDev << "\n";
-    std::cout << "DifferenceMean " << difMean << "\n"; 
-    std::cout << "DifferenceStdv " << difStdDev << "\n";
-    std::cout << "95ConfidenceInterval " << leftTail << " " << rightTail << "\n\n";
+    // Write output to stdout
+    std::cout << "Expected number of analogue tracks at read ends\n";
+    std::cout << "   Mean: " << simMean << "\n";
+    std::cout << "   Stdv: " << simStdDev << "\n";
+    std::cout << "Observed number of analogue tracks at read ends\n";
+    std::cout << "   Mean: " << obsMean << "\n";
+    std::cout << "   Stdv: " << obsStdDev << "\n";
+    std::cout << "Difference between observed and expected\n";
+    std::cout << "   Mean: " << difMean << "\n"; 
+    std::cout << "   Stdv: " << difStdDev << "\n";
+    std::cout << "   95% Confidence Interval: [" << leftTail << ", " << rightTail << "]\n";
 
-    // Output data
-    if (args.specifiedOutput == true) {
+    // Write output to file
+    auto t = std::time(nullptr);
+	auto tm = *std::localtime(&t);
+	std::ostringstream oss;
+	oss << std::put_time(&tm, "%d/%m/%Y %H:%M:%S");
+	auto startTime = oss.str();
+    std::ofstream outFile(args.output);
+    outFile << "#DetectFile " << args.DetectInput << "\n";
+    outFile << "#ForkFiles " << args.lForkInput << " " << args.rForkInput << "\n";
+	outFile << "#SystemStartTime " + startTime + "\n";
+    outFile << "#Software " << std::string(getExePath()) << "\n";
+    outFile << "#Version " << std::string(VERSION) << "\n";
+    outFile << "#Commit " << std::string(getGitCommit()) << "\n";
+    outFile << "#NumberOfForks " << nForks << "\n";
+    outFile << "#ExpectedMean " << simMean << "\n";
+    outFile << "#ExpectedStdv " << simStdDev << "\n";
+    outFile << "#ObservedMean " << obsMean << "\n";
+    outFile << "#ObservedStdv " << obsStdDev << "\n";
+    outFile << "#DifferenceMean " << difMean << "\n";
+    outFile << "#DifferenceStdv " << difStdDev << "\n";
+    outFile << "#95ConfidenceInterval " << leftTail << " " << rightTail << "\n";
+    outFile << ">ExpectedReadEndFractions:\n";
+    for (const auto& val : totalSimRunOffs) {
 
-        std::ofstream outFile(args.output);
-        
-        outFile << "#DetectFile" << args.output << "\n";
-        outFile << "#Software " << std::string(getExePath()) << "\n";
-        outFile << "#Version " << std::string(VERSION) << "\n";
-        outFile << "#Commit " << std::string(getGitCommit()) << "\n";
-        outFile << "#n " << lnCounter + rnCounter << "\n";
-        outFile << "#ExpectedMean " << simMean << "\n";
-        outFile << "#ExpectedStdv " << simStdDev << "\n";
-        outFile << "#ObservedMean " << obsMean << "\n";
-        outFile << "#ObservedStdv " << obsStdDev << "\n";
-        outFile << "#DifferenceMean " << difMean << "\n";
-        outFile << "#DifferenceStdv " << difStdDev << "\n";
-        outFile << "#95ConfidenceInterval " << leftTail << " " << rightTail << "\n";
-
-        outFile << "\nsimulation:\n";
-
-        for (const auto& val : totalSimRunOffs) {
-
-            outFile << val << "\n";
-        }
-
-        outFile << "\nobservation:\n";
-
-        for (const auto& val : totalObsRunOffs) {
-
-            outFile << val << "\n";
-        }
-        outFile.close();
+        outFile << val << "\n";
     }
+    outFile << ">ObservedReadEndFractions:\n";
+    for (const auto& val : totalObsRunOffs) {
+
+        outFile << val << "\n";
+    }
+    outFile.close();
 
     return 0;
-    
 }
