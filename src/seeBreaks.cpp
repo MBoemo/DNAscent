@@ -40,6 +40,7 @@ struct Arguments {
 	std::string rForkInput;
 	std::string DetectInput;
 	std::string output;
+    int readCounts = 1 ;
     bool specifiedLeft = false;
     bool specifiedRight = false;
     bool specifiedDetect = false;
@@ -129,6 +130,32 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 			if (i == argc-1) throw TrailingFlag(flag);		
 		
  			std::string strArg( argv[ i + 1 ] );
+
+            std::ifstream f(args.output);
+
+            if (!f.good()) {
+
+                if (strArg.back() == '/') {
+                    strArg = strArg + "detect.seeBreaks";
+                }
+                else{ 
+                    strArg = strArg + "/detect.seeBreaks";
+                }
+                
+                std::ofstream file(strArg);
+
+                std::ifstream f2(strArg);
+
+                if (f2.good()) {
+                    std::cout << "file created at directory path\n";
+                }
+
+                else {
+                    std::cerr << "Error: invalid output path.\n";
+                    exit(EXIT_FAILURE);
+                }
+            }
+
             args.output = strArg;
 			i+=2;
 			args.specifiedOutput = true;
@@ -198,7 +225,18 @@ void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3
     bam_hdr_t *bam_hdr = sam_hdr_read(bam_fh);
     bam1_t *itr_record = bam_init1();
 
+    int bamCounter;
+    int minQ;
+    int minL;
+    int bamProgCounter = 0;
+
+    countRecords(bam_fh, bam_hdr, bamCounter, minQ, minL);  //this probably doesnt work :)
+    progressBar bam(bamCounter, false);
+
     while(sam_read1(bam_fh, bam_hdr, itr_record) >= 0){
+
+        bamProgCounter ++;
+        bam.displayProgress(bamProgCounter, 0, 0);
                         
         int refStart,refEnd;
         getRefEnd(itr_record,refStart,refEnd);
@@ -207,6 +245,7 @@ void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3
 
         v5Prime.push_back(refStart);
         v3Prime.push_back(refEnd);
+
     }
 	bam_destroy1(itr_record);				
 	bam_hdr_destroy(bam_hdr);
@@ -288,7 +327,9 @@ void simulation (std::vector<int> &v5Prime,
                 bool specifiedBam,
                 bool runLeft, 
                 bool runRight,
-                std::vector<double> &totalRunOffs) { 
+                std::vector<double> &totalRunOffs,
+                progressBar &pb,
+                Arguments &args) { 
 
     // Random number generator
 
@@ -298,6 +339,9 @@ void simulation (std::vector<int> &v5Prime,
     for (int i = 0; i < 5000; i++) {  
             
         int runOff = 0;
+
+        pb.displayProgress(args.readCounts, 0, 0);
+        args.readCounts ++;
             
         for (size_t j = 0; j < stallScore.size(); ++j) {
 
@@ -318,6 +362,11 @@ void simulation (std::vector<int> &v5Prime,
                 std::uniform_int_distribution<> distrib(read5Prime + 2000 , read3Prime-1);
                 int randomStart = distrib(gen);
 
+                // Randomly select a pulse length
+                std::uniform_int_distribution<> random(0 , forkLength.size()-1);
+                int randomIndex2 = random(gen);
+                int randomLength = forkLength[randomIndex2];
+
                 // Check if there is a run off
                 if (randomStart - read5Prime < randomLength) runOff++;
             }
@@ -326,6 +375,11 @@ void simulation (std::vector<int> &v5Prime,
                 // Randomly select a starting point on the read
                 std::uniform_int_distribution<> distrib(read5Prime , read3Prime -2000);
                 int randomStart = distrib(gen);
+
+                // Randomly select a pulse length 
+                std::uniform_int_distribution<> random(1 , forkLength.size()-1);
+                int randomIndex2 = random(gen);
+                int randomLength = forkLength[randomIndex2];
 
                 // Check if there is a run off
                 if (read3Prime - randomStart < randomLength) runOff++;  
@@ -338,15 +392,17 @@ void simulation (std::vector<int> &v5Prime,
     }
 }
 
-void observation(std::vector<double> stallScore, std::vector<double> &totalObsRunOff) {
+void observation(std::vector<double> stallScore, std::vector<double> &totalObsRunOff, progressBar &pb, Arguments &args) {
 
-    std::random_device rd;
     std::mt19937 gen(221005);
 
     for (int i = 0; i < 5000; ++i) {
 
         int obsRunOffs = 0;
         int noObsRunOffs = 0;
+
+        pb.displayProgress(args.readCounts, 0, 0);
+        args.readCounts ++;
 
         for (size_t j = 0; j < (trunc(stallScore.size() / 4)); ++j) {
 
@@ -371,6 +427,32 @@ int seeBreaks_main(int argc, char** argv) {
 
     Arguments args = parseBreaksArguments(argc, argv);
 
+     // Initialize progress bar
+
+    int readCounter = 0;
+    int outReadCounter = 0;
+
+    progressBar pb(20000, false);
+
+    // Parse detect output
+    std::vector<int> v5Prime;
+    std::vector<int> v3Prime;
+    std::vector<std::string> dlines;
+    int dnCounter = 0;
+
+    if (args.specifiedDetect == true) {
+
+        detectUnpack(args, v5Prime, v3Prime, dnCounter);
+    }
+    else if (args.specifiedBam == true){
+        
+        bamUnpack(args, v5Prime, v3Prime, dnCounter);       
+
+    }
+
+    //Starting simulation processing message
+    std::cout << "\nBeginning simulation: \n";
+
     // Read left forks file
     int lnCounter = 0;
     std::vector<int> lForkLength;
@@ -393,19 +475,7 @@ int seeBreaks_main(int argc, char** argv) {
         forkUnpack("right", args, rForkLength, rStallScore, rnCounter);
     }
 
-    // Parse detect output
-    std::vector<int> v5Prime;
-    std::vector<int> v3Prime;
-    int dnCounter = 0;
 
-    if (args.specifiedDetect == true) {
-
-        detectUnpack(args, v5Prime, v3Prime, dnCounter);
-    }
-    else if (args.specifiedBam == true){
-
-        bamUnpack(args, v5Prime, v3Prime, dnCounter);        
-    }
 
     //left forks
     std::vector<double> lRunOffs; 
@@ -416,7 +486,8 @@ int seeBreaks_main(int argc, char** argv) {
 
         runLeft = true;
 
-        simulation(v5Prime, v3Prime, lForkLength, lStallScore, args.specifiedDetect, args.specifiedBam, runLeft = true, runRight = false, lRunOffs);        
+        simulation(v5Prime, v3Prime, lForkLength, lStallScore, args.specifiedDetect, args.specifiedBam, runLeft = true, runRight = false, lRunOffs, pb, args);   
+ 
     }
 
     //right forks
@@ -426,7 +497,8 @@ int seeBreaks_main(int argc, char** argv) {
 
         runRight = true;
 
-        simulation(v5Prime, v3Prime, rForkLength, rStallScore, args.specifiedDetect, args.specifiedBam, runLeft = false, runRight = true, rRunOffs);
+        simulation(v5Prime, v3Prime, rForkLength, rStallScore, args.specifiedDetect, args.specifiedBam, runLeft = false, runRight = true, rRunOffs, pb, args);
+
     }
 
     // Combine Simulation Run Offs
@@ -450,14 +522,16 @@ int seeBreaks_main(int argc, char** argv) {
     std::vector<double> lObsRunOffs;
     if (args.specifiedLeft == true) {
         
-        observation(lStallScore, lObsRunOffs);
+        observation(lStallScore, lObsRunOffs, pb, args);  
+
     }
 
     // Right Fork Observations
     std::vector<double> rObsRunOffs;
     if (args.specifiedRight == true) {
         
-        observation(rStallScore, rObsRunOffs);
+        observation(rStallScore, rObsRunOffs, pb, args);
+ 
     }
 
     // Combine Run Offs
@@ -500,11 +574,11 @@ int seeBreaks_main(int argc, char** argv) {
     double rightTail = difMean + 1.96 * difStdDev;
 
     // Output summary statistics
-    std::cout << "Simulation Mean: " << simMean << "\n";
-    std::cout << "Simulation Standard Deviation: " << simStdDev << "\n";
-    std::cout << "Observation Mean: " << obsMean << "\n";
-    std::cout << "Observation Standard Deviation: " << obsStdDev << "\n";
-    std::cout << "#DifferenceMean " << difMean << "\n";
+    std::cout << "\n\nExpectedMean " << simMean << "\n";
+    std::cout << "ExpectedStdv " << simStdDev << "\n";
+    std::cout << "ObservedMean " << obsMean << "\n";
+    std::cout << "ObservedStdv " << obsStdDev << "\n";
+    std::cout << "#DifferenceMean " << difMean << "\n"; 
     std::cout << "#DifferenceStdv " << difStdDev << "\n";
     std::cout << "#95ConfidenceInterval " << leftTail << " " << rightTail << "\n";
 
