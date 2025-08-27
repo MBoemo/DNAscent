@@ -92,6 +92,14 @@ This will make the following files:
 
 We can load ``detect_output.bam`` as well as the above bed files files directly into IGV to see where origins, forks, and terminiations were called in the genome.
 
+If we've used an agent that targets the DNA damage response, or if we're working in a cell line that's prone to replication stress, we might want to see there are elevated levels of DNA breaks at replication forks. We can do this by passing the results of ``DNAscent detect`` and ``DNAscent forkSense`` to ``DNAscent seeBreaks":
+
+.. code-block:: console
+
+   DNAscent seeBreaks -d detect_output.bam -o output.seeBreaks --left leftForks_DNAscent_forkSense.bed --right rightForks_DNAscent_forkSense.bed
+
+The resulting file, ``output.seeBreaks``, will contain statistics on the number of analogue tracks that terminate at read ends compared to the number that would be expected by chance. In particular, it includes a 95% confidence interval on the difference between observed and expected values. If this confidence interval does not overlap 0, then there is statistically significant evidence of elevated DNA breaking at replication forks. We would generally say breaking is elevated if zero lies outside this interval.
+
 Barcoding
 ---------
 

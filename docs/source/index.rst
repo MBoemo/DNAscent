@@ -49,7 +49,7 @@ Publications
 
 If you use DNAscent for your research, please cite the publication appropriate for the version you used:
 
-**v3 or v4:** Jones MJK,  Rai SK,  Pfuderer PL, Bonfim-Melo A, Pagan JK, Clarke PR, Totanes FIG, Merrick CJ, McClelland SE, Boemo MA. A high-resolution, nanopore-based artificial intelligence assay for DNA replication stress in human cancer cells. [`Journal DOI <https://doi.org/10.1038/s41467-025-63168-w>`_]
+**v3 & v4:** Jones MJK,  Rai SK,  Pfuderer PL, Bonfim-Melo A, Pagan JK, Clarke PR, Totanes FIG, Merrick CJ, McClelland SE, Boemo MA. A high-resolution, nanopore-based artificial intelligence assay for DNA replication stress in human cancer cells. [`Journal DOI <https://doi.org/10.1038/s41467-025-63168-w>`_]
 
 **v3:** Totanes FIG,  Gockel J,  Chapman SE, Bartfai R, Boemo MA, Merrick CJ. Replication origin mapping in the malaria parasite Plasmodium falciparum. [`Journal DOI <https://doi.org/10.1093/nar/gkad093>`_]
 

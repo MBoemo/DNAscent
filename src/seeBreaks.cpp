@@ -40,12 +40,11 @@ struct Arguments {
 	std::string rForkInput;
 	std::string DetectInput;
 	std::string output;
-    int readCounts = 1 ;
     bool specifiedLeft = false;
     bool specifiedRight = false;
+    bool humanReadable = false;
+	bool specifiedOutput = false;
     bool specifiedDetect = false;
-    bool specifiedBam = false;
-	bool specifiedOutput = false; 
 };
 
 
@@ -60,9 +59,6 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 		exit(EXIT_SUCCESS);
 	}
 
-    int lPresent = 0;
-    int rPresent = 0;
-
 	Arguments args;
 
 	for ( int i = 1; i < argc; ){
@@ -71,27 +67,25 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 
  		if ( flag == "-l" or flag == "--left" ){
 
-            lPresent++;
+ 			if (i == argc-1) throw TrailingFlag(flag);
 
- 			std::string strArg( argv[ i + 1 ] );
- 			const char *ext = get_ext(strArg.c_str());
+            std::string strArg( argv[ i + 1 ] );
+            const char *ext = get_ext(strArg.c_str());
 
-            if (lPresent > 1) throw InvalidExtension(ext);
- 			if (i == argc-1) throw TrailingFlag(flag);		
- 		
+            if (strcmp(ext,"bed") != 0) throw InvalidExtension(ext);
+
 			args.lForkInput = strArg;
 			i+=2;
 			args.specifiedLeft = true;
 		}
         else if ( flag == "-r" or flag == "--right" ){
 
-            rPresent++;
-
- 			std::string strArg( argv[ i + 1 ] );
+ 			if (i == argc-1) throw TrailingFlag(flag);
+            
+            std::string strArg( argv[ i + 1 ] );
             const char *ext = get_ext(strArg.c_str());
-
-            if (rPresent > 1) throw InvalidExtension(ext);
- 			if (i == argc-1) throw TrailingFlag(flag);		
+            
+            if (strcmp(ext,"bed") != 0) throw InvalidExtension(ext);
  					
 			args.rForkInput = strArg;
 			i+=2;
@@ -110,17 +104,15 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
  			const char *ext = get_ext(strArg.c_str());
 				
 			if (strcmp(ext,"bam") == 0){
-				args.specifiedBam = true;
+				args.humanReadable = false;
 			}
 			else if (strcmp(ext,"detect") == 0){
-				args.specifiedDetect = true;
+				args.humanReadable = true;
             }
-            else if (strcmp(ext,"forkSense") == 0){
-                args.specifiedDetect = true;
-			}
 			else{
 				throw InvalidExtension(ext);
 			}
+            args.specifiedDetect = true;
 			
 			args.DetectInput = strArg;
 			i+=2;
@@ -130,39 +122,13 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 			if (i == argc-1) throw TrailingFlag(flag);		
 		
  			std::string strArg( argv[ i + 1 ] );
-
-            std::ifstream f(args.output);
-
-            if (!f.good()) {
-
-                if (strArg.back() == '/') {
-                    strArg = strArg + "detect.seeBreaks";
-                }
-                else{ 
-                    strArg = strArg + "/detect.seeBreaks";
-                }
-                
-                std::ofstream file(strArg);
-
-                std::ifstream f2(strArg);
-
-                if (f2.good()) {
-                    std::cout << "file created at directory path\n";
-                }
-
-                else {
-                    std::cerr << "Error: invalid output path.\n";
-                    exit(EXIT_FAILURE);
-                }
-            }
-
             args.output = strArg;
 			i+=2;
 			args.specifiedOutput = true;
         }
         else throw InvalidOption( flag );
 	}
-    if ( !args.specifiedOutput or (!args.specifiedLeft and !args.specifiedRight) or (!args.specifiedDetect and !args.specifiedBam) ) {
+    if ( !args.specifiedOutput or !args.specifiedDetect or (!args.specifiedLeft and !args.specifiedRight) ) {
         std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent seeBreaks." << std::endl;
         exit(EXIT_FAILURE);
     }
@@ -176,6 +142,7 @@ void detectUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &
     int minReadLength = 3000;
     std::ifstream detectFile(args.DetectInput);
     std::string line;
+    int prog = 0;
 
 	while( std::getline( detectFile, line ) ){
 
@@ -207,38 +174,29 @@ void detectUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &
             
             v5Prime.push_back(refStart);
             v3Prime.push_back(refEnd);
+
+            prog ++;
+            if (prog % 1000 == 0) std::cout << "\rProcessed " << prog << " reads..." << std::flush;	
         }
     }
     detectFile.close();
 }
 
 
-void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3Prime) {
+void bamUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3Prime) {
 
     int minReadLength = 3000;
 
     htsFile *bam_fh = sam_open((args.DetectInput).c_str(), "r");
-
     if (bam_fh == NULL) throw IOerror(args.DetectInput);
 
     bam_hdr_t *bam_hdr = sam_hdr_read(bam_fh);
     bam1_t *itr_record = bam_init1();
 
-    int bamCounter;
-    int minQ;
-    int minL;
-    int bamProgCounter = 0;
-
-    std::cout << "Bam file processing";
-
-    countRecords(bam_fh, bam_hdr, bamCounter, minQ, minL);  //this probably doesnt work :)
-    progressBar bam(bamCounter, false);
+    int prog = 0;
 
     while(sam_read1(bam_fh, bam_hdr, itr_record) >= 0){
-
-        bamProgCounter ++;
-        bam.displayProgress(bamProgCounter, 0, 0);
-                        
+          
         int refStart,refEnd;
         getRefEnd(itr_record,refStart,refEnd);
 
@@ -247,6 +205,8 @@ void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3
         v5Prime.push_back(refStart);
         v3Prime.push_back(refEnd);
 
+        prog ++;
+        if (prog % 1000 == 0) std::cout << "\rProcessed " << prog << " reads..." << std::flush;	
     }
 	bam_destroy1(itr_record);				
 	bam_hdr_destroy(bam_hdr);
@@ -254,9 +214,7 @@ void bamUnpack (Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3
 }
 
 
-void forkUnpack(std::string input, Arguments &args, std::vector<int> &ForkLength, std::vector<double> &StallScore, int &nCounter) {
-
-    std::string fileInput = (input == "left") ? args.lForkInput : args.rForkInput;
+void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector<double> &StallScore, int &nCounter) {
     
     std::ifstream file(fileInput);
 
@@ -274,31 +232,31 @@ void forkUnpack(std::string input, Arguments &args, std::vector<int> &ForkLength
         if (!line.empty() && line[0] != '#') {
 
             std::istringstream iss(line);
-            std::vector<std::string> parts;
-            std::string word;
+            std::vector<std::string> columns;
+            std::string entry;
 
-            while (iss >> word) {
-                parts.push_back(word);
+            while (iss >> entry) {
+                columns.push_back(entry);
             }
                                 
             double stallScore = 0.0;
-            std::string readID = parts[3];
+            std::string readID = columns[3];
 
             if (ReadIDs.find(readID) == ReadIDs.end()) {
 
-                int pulse5Prime = std::stoi(parts[1]);
-                int pulse3Prime = std::stoi(parts[2]);
+                int pulse5Prime = std::stoi(columns[1]);
+                int pulse3Prime = std::stoi(columns[2]);
 
                 int pulseLength = pulse3Prime - pulse5Prime;
                                     
-                if (parts.size() == 8) {  // R9
+                if (columns.size() == 8) {  // R9
 
-                    stallScore = std::stod(parts[7]);
+                    stallScore = std::stod(columns[7]);
                 } 
 
-                else if (parts.size() == 9)  { //R10
+                else if (columns.size() == 9)  { //R10
 
-                    stallScore = std::stod(parts[8]);
+                    stallScore = std::stod(columns[8]);
                 }
                 else {
                     std::cerr << "Error: Unexpected number of columns in the input file." << std::endl;
@@ -324,32 +282,21 @@ void simulation (std::vector<int> &v5Prime,
                 std::vector<int> &v3Prime, 
                 std::vector<int> &forkLength,
                 std::vector<double> &stallScore,
-                bool specifiedDetect, 
-                bool specifiedBam,
                 bool runLeft, 
-                bool runRight,
-                std::vector<double> &totalRunOffs,
-                progressBar &pb,
-                Arguments &args) { 
+                std::vector<double> &totalRunOffs) { 
 
-    // Random number generator
-
+    int bsIterations = 5000;
+    //progressBar pb(bsIterations, false);
     std::mt19937 gen(221005);
 
     // Fork simulation
-    for (int i = 0; i < 5000; i++) {  
-            
-        int runOff = 0;
+    for (int i = 0; i < bsIterations; i++) {  
 
-        pb.displayProgress(args.readCounts, 0, 0);
-        args.readCounts ++;
+        //pb.displayProgress(i, 0, 0);
+
+        int runOff = 0;           
             
         for (size_t j = 0; j < stallScore.size(); ++j) {
-
-            // Randomly select a pulse length
-            std::uniform_int_distribution<> random(0 , forkLength.size()-1);
-            int randomIndex2 = random(gen);
-            int randomLength = forkLength[randomIndex2];
 
             // Randomly select a read
             std::uniform_int_distribution<> distrib(0, v5Prime.size()-1);
@@ -357,30 +304,25 @@ void simulation (std::vector<int> &v5Prime,
             int read5Prime = v5Prime[randomIndex];
             int read3Prime = v3Prime[randomIndex];
 
-            if (runLeft == true) {
+            // Randomly select a pulse length
+            std::uniform_int_distribution<> random(0 , forkLength.size()-1);
+            int randomIndex2 = random(gen);
+            int randomLength = forkLength[randomIndex2];
+
+            if (runLeft) {
 
                 // Randomly select a starting point on the read
                 std::uniform_int_distribution<> distrib(read5Prime + 2000 , read3Prime-1);
                 int randomStart = distrib(gen);
 
-                // Randomly select a pulse length
-                std::uniform_int_distribution<> random(0 , forkLength.size()-1);
-                int randomIndex2 = random(gen);
-                int randomLength = forkLength[randomIndex2];
-
                 // Check if there is a run off
                 if (randomStart - read5Prime < randomLength) runOff++;
             }
-            else if (runRight == true) {
+            else{ //right
 
                 // Randomly select a starting point on the read
                 std::uniform_int_distribution<> distrib(read5Prime , read3Prime -2000);
                 int randomStart = distrib(gen);
-
-                // Randomly select a pulse length 
-                std::uniform_int_distribution<> random(1 , forkLength.size()-1);
-                int randomIndex2 = random(gen);
-                int randomLength = forkLength[randomIndex2];
 
                 // Check if there is a run off
                 if (read3Prime - randomStart < randomLength) runOff++;  
@@ -393,17 +335,18 @@ void simulation (std::vector<int> &v5Prime,
     }
 }
 
-void observation(std::vector<double> stallScore, std::vector<double> &totalObsRunOff, progressBar &pb, Arguments &args) {
+void observation(std::vector<double> stallScore, std::vector<double> &totalObsRunOff) {
 
+    int bsIterations = 5000;
+    //progressBar pb(bsIterations, false);
     std::mt19937 gen(221005);
 
-    for (int i = 0; i < 5000; ++i) {
+    for (int i = 0; i < bsIterations; ++i) {
 
         int obsRunOffs = 0;
         int noObsRunOffs = 0;
 
-        pb.displayProgress(args.readCounts, 0, 0);
-        args.readCounts ++;
+        //pb.displayProgress(i, 0, 0);
 
         for (size_t j = 0; j < (trunc(stallScore.size() / 4)); ++j) {
 
@@ -428,27 +371,18 @@ int seeBreaks_main(int argc, char** argv) {
 
     Arguments args = parseBreaksArguments(argc, argv);
 
-     // Initialize progress bar
-
-    progressBar pb(20000, false);
-
     // Parse detect output
     std::vector<int> v5Prime;
     std::vector<int> v3Prime;
-    std::vector<std::string> dlines;
 
-    if (args.specifiedDetect == true) {
+    if (args.humanReadable) {
 
         detectUnpack(args, v5Prime, v3Prime);
     }
-    else if (args.specifiedBam == true){
+    else{// is modbam
         
         bamUnpack(args, v5Prime, v3Prime);       
-
     }
-
-    //Starting simulation processing message
-    std::cout << "\nBeginning simulation: \n";
 
     // Read left forks file
     int lnCounter = 0;
@@ -457,8 +391,7 @@ int seeBreaks_main(int argc, char** argv) {
 
     if (args.specifiedLeft == true) {
 
-        std::string input = "left";
-        forkUnpack("left", args, lForkLength, lStallScore, lnCounter);
+        forkUnpack(args.lForkInput, lForkLength, lStallScore, lnCounter);
     }
 
     // Read right forks file
@@ -468,83 +401,34 @@ int seeBreaks_main(int argc, char** argv) {
 
     if (args.specifiedRight == true) {
 
-        std::string input = "right";
-        forkUnpack("right", args, rForkLength, rStallScore, rnCounter);
+        forkUnpack(args.rForkInput, rForkLength, rStallScore, rnCounter);
     }
 
-
-
-    //left forks
-    std::vector<double> lRunOffs; 
-    bool runLeft = false;
-    bool runRight = false;
-
-    if (args.specifiedLeft == true) {
-
-        runLeft = true;
-
-        simulation(v5Prime, v3Prime, lForkLength, lStallScore, args.specifiedDetect, args.specifiedBam, runLeft = true, runRight = false, lRunOffs, pb, args);   
- 
-    }
-
-    //right forks
-    std::vector<double> rRunOffs;
-
-    if (args.specifiedRight == true) {
-
-        runRight = true;
-
-        simulation(v5Prime, v3Prime, rForkLength, rStallScore, args.specifiedDetect, args.specifiedBam, runLeft = false, runRight = true, rRunOffs, pb, args);
-
-    }
-
-    // Combine Simulation Run Offs
     std::vector<double> totalSimRunOffs;
 
-    if (args.specifiedLeft == true && args.specifiedRight == true) {
+    // left forks
+    if (args.specifiedLeft == true) {
 
-        totalSimRunOffs.insert(totalSimRunOffs.end(), lRunOffs.begin(), lRunOffs.end());
-        totalSimRunOffs.insert(totalSimRunOffs.end(), rRunOffs.begin(), rRunOffs.end());
+        simulation(v5Prime, v3Prime, lForkLength, lStallScore, true, totalSimRunOffs);   
     }
-    else if (args.specifiedLeft == true) {
 
-        totalSimRunOffs = lRunOffs;
-    }
-    else if (args.specifiedRight == true) {
+    // right forks
+    if (args.specifiedRight == true) {
 
-        totalSimRunOffs = rRunOffs;
+        simulation(v5Prime, v3Prime, rForkLength, rStallScore, false, totalSimRunOffs);
     }
 
     // Left Fork Observations
-    std::vector<double> lObsRunOffs;
-    if (args.specifiedLeft == true) {
+    std::vector<double> totalObsRunOffs;
+    if (args.specifiedLeft) {
         
-        observation(lStallScore, lObsRunOffs, pb, args);  
-
+        observation(lStallScore, totalObsRunOffs);  
     }
 
     // Right Fork Observations
-    std::vector<double> rObsRunOffs;
-    if (args.specifiedRight == true) {
+    if (args.specifiedRight) {
         
-        observation(rStallScore, rObsRunOffs, pb, args);
- 
-    }
-
-    // Combine Run Offs
-    std::vector<double> totalObsRunOffs;
-    if (args.specifiedLeft == true && args.specifiedRight == true) {
-
-        totalObsRunOffs.insert(totalObsRunOffs.end(), lObsRunOffs.begin(), lObsRunOffs.end());
-        totalObsRunOffs.insert(totalObsRunOffs.end(), rObsRunOffs.begin(), rObsRunOffs.end());
-    }
-    else if (args.specifiedLeft == true) {
-
-        totalObsRunOffs = lObsRunOffs;
-    }
-    else if (args.specifiedRight == true) {
-
-        totalObsRunOffs = rObsRunOffs;
+        observation(rStallScore, totalObsRunOffs);
     }
 
     // Calculate Simulation mean and standard deviation
@@ -563,7 +447,6 @@ int seeBreaks_main(int argc, char** argv) {
         std::normal_distribution<double> obsDistribution(obsMean, obsStdDev);
         std::normal_distribution<double> simDistribution(simMean, simStdDev);   
         difference.push_back(obsDistribution(gen) - simDistribution(gen));
-    
     }
     double difMean = vectorMean(difference);
     double difStdDev = vectorStdv(difference, difMean);
