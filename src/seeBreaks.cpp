@@ -253,7 +253,7 @@ void scanReadIDs(std::string fileInput, std::vector<std::string> &ReadIDs, std::
 }
 
 
-void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector<double> &StallScore, std::vector<std::string> &duplicateIDs) {
+void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector<double> &StallScore, std::vector<std::string> &duplicateIDs, int &fsBoundary) {
     
     std::ifstream file(fileInput);
 
@@ -293,11 +293,13 @@ void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector
                 if (columns.size() == 8) {  // R9
 
                     stallScore = std::stod(columns[7]);
+                    fsBoundary = 1000; //R9 fs uses a 1 kb boundary
                 } 
 
                 else if (columns.size() == 9)  { //R10
 
                     stallScore = std::stod(columns[8]);
+                    fsBoundary = 2000; //R10 fs uses a 2 kb boundary
                 }
                 else {
                     std::cerr << "Error: Unexpected number of columns in the input file." << std::endl;
@@ -322,7 +324,8 @@ void simulation (std::vector<int> &v5Prime,
                 std::vector<int> &v3Prime, 
                 std::vector<int> &forkLength,
                 std::vector<double> &stallScore,
-                std::vector<double> &totalRunOffs) { 
+                std::vector<double> &totalRunOffs,
+                int fsBoundary) { 
 
     int bsIterations = 5000;
     std::mt19937 gen(221005);
@@ -347,11 +350,12 @@ void simulation (std::vector<int> &v5Prime,
             int randomLength = forkLength[trackIndex];
 
             // Randomly select a starting point on the read
-            std::uniform_int_distribution<> startDist(read5Prime , read3Prime - 2000);
+            int upperCutoff = read3Prime - fsBoundary;
+            std::uniform_int_distribution<> startDist(read5Prime , upperCutoff);
             int randomStart = startDist(gen);
 
             // Check if there is a run off
-            if (read3Prime - randomStart < randomLength) runOff++;  
+            if (upperCutoff - randomStart < randomLength) runOff++;  
         }
 
         // Convert to proportion and store proportion
@@ -420,18 +424,20 @@ int seeBreaks_main(int argc, char** argv) {
     // Parse forkSense bed files
     std::vector<int> forkTrackLengths;
     std::vector<double> stallScores;
+    int forkSenseBoundary = -1;
 
     if (args.specifiedLeft) {
 
-        forkUnpack(args.lForkInput, forkTrackLengths, stallScores, DuplicateIDs);
+        forkUnpack(args.lForkInput, forkTrackLengths, stallScores, DuplicateIDs, forkSenseBoundary);
     }
     if (args.specifiedRight) {
 
-        forkUnpack(args.rForkInput, forkTrackLengths, stallScores, DuplicateIDs);
+        forkUnpack(args.rForkInput, forkTrackLengths, stallScores, DuplicateIDs, forkSenseBoundary);
     }
+    assert(forkSenseBoundary != -1);
 
     std::vector<double> totalSimRunOffs;
-    simulation(v5Prime, v3Prime, forkTrackLengths, stallScores, totalSimRunOffs);   
+    simulation(v5Prime, v3Prime, forkTrackLengths, stallScores, totalSimRunOffs, forkSenseBoundary);   
 
     // Fork Observations
     std::vector<double> totalObsRunOffs;
@@ -460,7 +466,7 @@ int seeBreaks_main(int argc, char** argv) {
     double rightTail = difMean + 1.96 * difStdDev;
 
     // Write output to stdout
-    std::cout << "Expected number of analogue tracks at read ends\n";
+    std::cout << "\nExpected number of analogue tracks at read ends\n";
     std::cout << "   Mean: " << simMean << "\n";
     std::cout << "   Stdv: " << simStdDev << "\n";
     std::cout << "Observed number of analogue tracks at read ends\n";
