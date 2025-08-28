@@ -253,7 +253,7 @@ void scanReadIDs(std::string fileInput, std::vector<std::string> &ReadIDs, std::
 }
 
 
-void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector<double> &StallScore, std::vector<std::string> &duplicateIDs, int &fsBoundary) {
+void forkUnpack(std::string fileInput, bool isRight, std::vector<int> &ForkLength, std::vector<bool> &runOff, std::vector<std::string> &duplicateIDs, int &fsBoundary) {
     
     std::ifstream file(fileInput);
 
@@ -277,7 +277,6 @@ void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector
                 columns.push_back(entry);
             }
                                 
-            double stallScore = 0.0;
             std::string readID = columns[3];
 
             if ( std::find(duplicateIDs.begin(), duplicateIDs.end(), readID) == duplicateIDs.end() ) {
@@ -289,22 +288,6 @@ void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector
 
                 int read5Prime = std::stoi(columns[4]);
                 int read3Prime = std::stoi(columns[5]);
-                                    
-                if (columns.size() == 8) {  // R9
-
-                    stallScore = std::stod(columns[7]);
-                    fsBoundary = 1000; //R9 fs uses a 1 kb boundary
-                } 
-
-                else if (columns.size() == 9)  { //R10
-
-                    stallScore = std::stod(columns[8]);
-                    fsBoundary = 2000; //R10 fs uses a 2 kb boundary
-                }
-                else {
-                    std::cerr << "Error: Unexpected number of columns in the input file." << std::endl;
-                    continue;
-                }
 
                 // For reliable fork speeds, only consider forks that are at least 3kb away from the read ends
                 if ( pulse5Prime - read5Prime > 3000 and read3Prime - pulse3Prime > 3000 ) {
@@ -312,7 +295,15 @@ void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector
                     ForkLength.push_back(pulseLength);
                 }
 
-                StallScore.push_back(stallScore);
+                if (isRight and (read3Prime - pulse3Prime) < fsBoundary){
+                    runOff.push_back(true);
+                }
+                else if (not isRight and (pulse5Prime - read5Prime) < fsBoundary){
+                    runOff.push_back(true);
+                }
+                else{
+                    runOff.push_back(false);
+                }
             }
         }
     }
@@ -323,7 +314,7 @@ void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector
 void simulation (std::vector<int> &v5Prime, 
                 std::vector<int> &v3Prime, 
                 std::vector<int> &forkLength,
-                std::vector<double> &stallScore,
+                unsigned int nForks,
                 std::vector<double> &totalRunOffs,
                 int fsBoundary) { 
 
@@ -335,7 +326,7 @@ void simulation (std::vector<int> &v5Prime,
 
         int runOff = 0;           
             
-        for (size_t j = 0; j < stallScore.size(); ++j) {
+        for (size_t j = 0; j < nForks; ++j) {
 
             // Select boundaries of a random read
             assert(v5Prime.size() == v3Prime.size());
@@ -359,12 +350,12 @@ void simulation (std::vector<int> &v5Prime,
         }
 
         // Convert to proportion and store proportion
-        double probRunOff = static_cast<double>(runOff) / stallScore.size();
+        double probRunOff = static_cast<double>(runOff) / nForks;
         totalRunOffs.push_back(probRunOff);
     }
 }
 
-void observation(std::vector<double> stallScore, std::vector<double> &totalObsRunOff) {
+void observation(std::vector<bool> &runOff, std::vector<double> &totalObsRunOff) {
 
     int bsIterations = 5000;
     std::mt19937 gen(221005);
@@ -374,16 +365,16 @@ void observation(std::vector<double> stallScore, std::vector<double> &totalObsRu
         int obsRunOffs = 0;
         int noObsRunOffs = 0;
 
-        for (size_t j = 0; j < stallScore.size(); ++j) {
+        for (size_t j = 0; j < runOff.size(); ++j) {
 
-            std::uniform_int_distribution<> distrib(0 , stallScore.size()-1);
+            std::uniform_int_distribution<> distrib(0 , runOff.size()-1);
             int randomIndex = distrib(gen);
-            double randomScore = stallScore[randomIndex];
+            bool randomRunOff = runOff[randomIndex];
 
-            if (randomScore == -3.0) {
+            if (randomRunOff) {
                 obsRunOffs += 1;
             }
-            else if (randomScore >= 0.0) {
+            else {
                 noObsRunOffs += 1;
             }
         }
@@ -423,25 +414,25 @@ int seeBreaks_main(int argc, char** argv) {
 
     // Parse forkSense bed files
     std::vector<int> forkTrackLengths;
-    std::vector<double> stallScores;
-    int forkSenseBoundary = -1;
+    std::vector<bool> runOffs;
+    int forkSenseBoundary = 3000;
 
     if (args.specifiedLeft) {
 
-        forkUnpack(args.lForkInput, forkTrackLengths, stallScores, DuplicateIDs, forkSenseBoundary);
+        forkUnpack(args.lForkInput, false, forkTrackLengths, runOffs, DuplicateIDs, forkSenseBoundary);
     }
     if (args.specifiedRight) {
 
-        forkUnpack(args.rForkInput, forkTrackLengths, stallScores, DuplicateIDs, forkSenseBoundary);
+        forkUnpack(args.rForkInput, true, forkTrackLengths, runOffs, DuplicateIDs, forkSenseBoundary);
     }
     assert(forkSenseBoundary != -1);
 
     std::vector<double> totalSimRunOffs;
-    simulation(v5Prime, v3Prime, forkTrackLengths, stallScores, totalSimRunOffs, forkSenseBoundary);   
+    simulation(v5Prime, v3Prime, forkTrackLengths, runOffs.size(), totalSimRunOffs, forkSenseBoundary);   
 
     // Fork Observations
     std::vector<double> totalObsRunOffs;
-    observation(stallScores, totalObsRunOffs);  
+    observation(runOffs, totalObsRunOffs);  
 
     // Calculate simulation mean and standard deviation
     double simMean = vectorMean(totalSimRunOffs);
@@ -490,7 +481,7 @@ int seeBreaks_main(int argc, char** argv) {
     outFile << "#Software " << std::string(getExePath()) << "\n";
     outFile << "#Version " << std::string(VERSION) << "\n";
     outFile << "#Commit " << std::string(getGitCommit()) << "\n";
-    outFile << "#NumberOfForks " << stallScores.size() << "\n";
+    outFile << "#NumberOfForks " << runOffs.size() << "\n";
     outFile << "#ExpectedMean " << simMean << "\n";
     outFile << "#ExpectedStdv " << simStdDev << "\n";
     outFile << "#ObservedMean " << obsMean << "\n";
