@@ -374,7 +374,7 @@ void observation(std::vector<double> stallScore, std::vector<double> &totalObsRu
         int obsRunOffs = 0;
         int noObsRunOffs = 0;
 
-        for (size_t j = 0; j < (trunc(stallScore.size() / 4)); ++j) {
+        for (size_t j = 0; j < stallScore.size(); ++j) {
 
             std::uniform_int_distribution<> distrib(0 , stallScore.size()-1);
             int randomIndex = distrib(gen);
