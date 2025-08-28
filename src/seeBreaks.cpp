@@ -139,7 +139,7 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 
 void detectUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3Prime) {
 
-    int minReadLength = 3000;
+    int minReadLength = 6000;
     std::ifstream detectFile(args.DetectInput);
     std::string line;
     int prog = 0;
@@ -184,7 +184,7 @@ void detectUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &
 
 void bamUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3Prime) {
 
-    int minReadLength = 3000;
+    int minReadLength = 6000;
 
     htsFile *bam_fh = sam_open((args.DetectInput).c_str(), "r");
     if (bam_fh == NULL) throw IOerror(args.DetectInput);
@@ -272,7 +272,6 @@ void forkUnpack(std::string fileInput, bool isRight, std::vector<int> &ForkLengt
             std::istringstream iss(line);
             std::vector<std::string> columns;
             std::string entry;
-
             while (iss >> entry) {
                 columns.push_back(entry);
             }
@@ -283,25 +282,28 @@ void forkUnpack(std::string fileInput, bool isRight, std::vector<int> &ForkLengt
 
                 int pulse5Prime = std::stoi(columns[1]);
                 int pulse3Prime = std::stoi(columns[2]);
-
-                int pulseLength = pulse3Prime - pulse5Prime;
-
                 int read5Prime = std::stoi(columns[4]);
                 int read3Prime = std::stoi(columns[5]);
 
+                int gap3Prime = read3Prime - pulse3Prime;
+                int gap5Prime = pulse5Prime - read5Prime;
+                assert(gap3Prime >= 0 and gap5Prime >= 0);
+
+                int pulseLength = pulse3Prime - pulse5Prime;
+
                 // For reliable fork speeds, only consider forks that are at least 3kb away from the read ends
-                if ( pulse5Prime - read5Prime > 3000 and read3Prime - pulse3Prime > 3000 ) {
+                if ( (gap3Prime > fsBoundary) and (gap5Prime > fsBoundary ) ) {
 
                     ForkLength.push_back(pulseLength);
                 }
 
-                if (isRight and (read3Prime - pulse3Prime) < fsBoundary){
+                if ( isRight and (gap3Prime < fsBoundary) and (gap5Prime > fsBoundary) ){
                     runOff.push_back(true);
                 }
-                else if (not isRight and (pulse5Prime - read5Prime) < fsBoundary){
+                else if ( not isRight and (gap5Prime < fsBoundary) and (gap3Prime > fsBoundary) ){
                     runOff.push_back(true);
                 }
-                else{
+                else if ( (gap3Prime > fsBoundary) and (gap5Prime > fsBoundary ) ) {
                     runOff.push_back(false);
                 }
             }
@@ -342,11 +344,12 @@ void simulation (std::vector<int> &v5Prime,
 
             // Randomly select a starting point on the read
             int upperCutoff = read3Prime - fsBoundary;
-            std::uniform_int_distribution<> startDist(read5Prime , upperCutoff);
+            int lowerCutoff = read5Prime + fsBoundary;
+            std::uniform_int_distribution<> startDist(lowerCutoff, upperCutoff);
             int randomStart = startDist(gen);
 
             // Check if there is a run off
-            if (upperCutoff - randomStart < randomLength) runOff++;  
+            if (read3Prime - randomStart < randomLength) runOff++;  
         }
 
         // Convert to proportion and store proportion
@@ -415,7 +418,7 @@ int seeBreaks_main(int argc, char** argv) {
     // Parse forkSense bed files
     std::vector<int> forkTrackLengths;
     std::vector<bool> runOffs;
-    int forkSenseBoundary = 3000;
+    int forkSenseBoundary = 4000;
 
     if (args.specifiedLeft) {
 
