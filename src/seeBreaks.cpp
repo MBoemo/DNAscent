@@ -149,7 +149,6 @@ void detectUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &
         if (line.substr(0,1) == "#" or line.length() == 0) continue; //ignore header and blank lines
         if ( line.substr(0,1) == ">" ){
 		
-            
             //parse the header line
             std::istringstream ssLine(line);
             std::string column;
@@ -214,7 +213,7 @@ void bamUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &v3P
 }
 
 
-void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector<double> &StallScore, int &nCounter) {
+void scanReadIDs(std::string fileInput, std::vector<std::string> &ReadIDs, std::vector<std::string> &DuplicateIDs ) {
     
     std::ifstream file(fileInput);
 
@@ -224,7 +223,46 @@ void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector
         exit(EXIT_FAILURE);
     }
     
-    std::unordered_set<std::string> ReadIDs; 
+    std::string line; 
+
+    while (std::getline(file, line)) {
+
+        if (!line.empty() && line[0] != '#') {
+
+            std::istringstream iss(line);
+            std::vector<std::string> columns;
+            std::string entry;
+
+            while (iss >> entry) {
+
+                columns.push_back(entry);
+            }
+                                
+            std::string readID = columns[3];
+            if (std::find(ReadIDs.begin(), ReadIDs.end(), readID) != ReadIDs.end()) {
+
+                DuplicateIDs.push_back(readID);
+            }
+            else{
+
+                ReadIDs.push_back(readID);
+            }
+        }
+    }
+    file.close();
+}
+
+
+void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector<double> &StallScore, std::vector<std::string> &duplicateIDs) {
+    
+    std::ifstream file(fileInput);
+
+    if (!file.is_open()) 
+    {
+        std::cerr << "Error: Could not open file " << fileInput << "\n";
+        exit(EXIT_FAILURE);
+    }
+    
     std::string line; 
 
     while (std::getline(file, line)) {
@@ -242,12 +280,15 @@ void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector
             double stallScore = 0.0;
             std::string readID = columns[3];
 
-            if (ReadIDs.find(readID) == ReadIDs.end()) {
+            if ( std::find(duplicateIDs.begin(), duplicateIDs.end(), readID) == duplicateIDs.end() ) {
 
                 int pulse5Prime = std::stoi(columns[1]);
                 int pulse3Prime = std::stoi(columns[2]);
 
                 int pulseLength = pulse3Prime - pulse5Prime;
+
+                int read5Prime = std::stoi(columns[4]);
+                int read3Prime = std::stoi(columns[5]);
                                     
                 if (columns.size() == 8) {  // R9
 
@@ -263,14 +304,13 @@ void forkUnpack(std::string fileInput, std::vector<int> &ForkLength, std::vector
                     continue;
                 }
 
-                if (stallScore != -3) {
+                // For reliable fork speeds, only consider forks that are at least 3kb away from the read ends
+                if ( pulse5Prime - read5Prime > 3000 and read3Prime - pulse3Prime > 3000 ) {
 
                     ForkLength.push_back(pulseLength);
                 }
 
                 StallScore.push_back(stallScore);
-                ReadIDs.insert(readID);
-                nCounter++; 
             }
         }
     }
@@ -285,13 +325,10 @@ void simulation (std::vector<int> &v5Prime,
                 std::vector<double> &totalRunOffs) { 
 
     int bsIterations = 5000;
-    //progressBar pb(bsIterations, false);
     std::mt19937 gen(221005);
 
     // Fork simulation
     for (int i = 0; i < bsIterations; i++) {  
-
-        //pb.displayProgress(i, 0, 0);
 
         int runOff = 0;           
             
@@ -326,15 +363,12 @@ void simulation (std::vector<int> &v5Prime,
 void observation(std::vector<double> stallScore, std::vector<double> &totalObsRunOff) {
 
     int bsIterations = 5000;
-    //progressBar pb(bsIterations, false);
     std::mt19937 gen(221005);
 
     for (int i = 0; i < bsIterations; ++i) {
 
         int obsRunOffs = 0;
         int noObsRunOffs = 0;
-
-        //pb.displayProgress(i, 0, 0);
 
         for (size_t j = 0; j < (trunc(stallScore.size() / 4)); ++j) {
 
@@ -372,18 +406,28 @@ int seeBreaks_main(int argc, char** argv) {
         bamUnpack(args, v5Prime, v3Prime);       
     }
 
+    std::vector<std::string> ReadIDs;
+    std::vector<std::string> DuplicateIDs;
+    if (args.specifiedLeft) {
+
+        scanReadIDs(args.lForkInput, ReadIDs, DuplicateIDs);
+    }
+    if (args.specifiedRight) {
+
+        scanReadIDs(args.rForkInput, ReadIDs, DuplicateIDs);
+    }
+
     // Parse forkSense bed files
-    int nForks = 0;
     std::vector<int> forkTrackLengths;
     std::vector<double> stallScores;
 
     if (args.specifiedLeft) {
 
-        forkUnpack(args.lForkInput, forkTrackLengths, stallScores, nForks);
+        forkUnpack(args.lForkInput, forkTrackLengths, stallScores, DuplicateIDs);
     }
     if (args.specifiedRight) {
 
-        forkUnpack(args.rForkInput, forkTrackLengths, stallScores, nForks);
+        forkUnpack(args.rForkInput, forkTrackLengths, stallScores, DuplicateIDs);
     }
 
     std::vector<double> totalSimRunOffs;
@@ -440,7 +484,7 @@ int seeBreaks_main(int argc, char** argv) {
     outFile << "#Software " << std::string(getExePath()) << "\n";
     outFile << "#Version " << std::string(VERSION) << "\n";
     outFile << "#Commit " << std::string(getGitCommit()) << "\n";
-    outFile << "#NumberOfForks " << nForks << "\n";
+    outFile << "#NumberOfForks " << stallScores.size() << "\n";
     outFile << "#ExpectedMean " << simMean << "\n";
     outFile << "#ExpectedStdv " << simStdDev << "\n";
     outFile << "#ObservedMean " << obsMean << "\n";
