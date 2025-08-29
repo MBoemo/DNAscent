@@ -481,7 +481,7 @@ int seeBreaks_main(int argc, char** argv) {
     std::vector<double> totalObsRunOffs;
     int forkSenseBoundary = 2000;
 
-    for (int readEndTolerance = 100; readEndTolerance <= 3000; readEndTolerance += 250) {
+    for (int readEndTolerance = 250; readEndTolerance <= 2000; readEndTolerance += 250) {
 
         std::vector<int> forkTrackLengths;
         std::vector<bool> runOffs;
