@@ -29,6 +29,7 @@ static const char *help=
 "Required arguments are:\n"
 "  -l,--left                 path to leftForks file from forkSense detect with `bed` extension,\n"
 "  -r,--right                path to rightFork file from forkSense detect with `bed` extension,\n"
+"  -a,--analogue             path to second pulsed analogue file from forkSense with `bed` extension,\n"
 "  -d,--detect               path to output from detect with `detect` or `bam` extension,\n"
 "  -o,--output               path to output file or directory for seeBreaks,\n"
 "DNAscent is under active development by the Boemo Group, Department of Pathology, University of Cambridge (https://www.boemogroup.org/).\n"
@@ -38,10 +39,12 @@ static const char *help=
 struct Arguments {
 	std::string lForkInput;
 	std::string rForkInput;
+	std::string analogueInput;
 	std::string DetectInput;
 	std::string output;
     bool specifiedLeft = false;
     bool specifiedRight = false;
+    bool specifiedAnalogue = false;
     bool humanReadable = false;
 	bool specifiedOutput = false;
     bool specifiedDetect = false;
@@ -91,6 +94,19 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
 			i+=2;
 			args.specifiedRight = true;
         }
+        else if ( flag == "-a" or flag == "--analogue" ){
+
+ 			if (i == argc-1) throw TrailingFlag(flag);
+            
+            std::string strArg( argv[ i + 1 ] );
+            const char *ext = get_ext(strArg.c_str());
+            
+            if (strcmp(ext,"bed") != 0) throw InvalidExtension(ext);
+ 					
+			args.analogueInput = strArg;
+			i+=2;
+			args.specifiedAnalogue = true;
+        }
         else if ( flag == "-h" or flag == "--help" ){
             std::cout << help << std::endl;
             exit(EXIT_SUCCESS);
@@ -128,7 +144,7 @@ Arguments parseBreaksArguments( int argc, char** argv ) {
         }
         else throw InvalidOption( flag );
 	}
-    if ( !args.specifiedOutput or !args.specifiedDetect or (!args.specifiedLeft and !args.specifiedRight) ) {
+    if ( !args.specifiedOutput or !args.specifiedAnalogue or !args.specifiedDetect or (!args.specifiedLeft and !args.specifiedRight) ) {
         std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent seeBreaks." << std::endl;
         exit(EXIT_FAILURE);
     }
@@ -253,7 +269,45 @@ void scanReadIDs(std::string fileInput, std::vector<std::string> &ReadIDs, std::
 }
 
 
-void forkUnpack(std::string fileInput, bool isRight, std::vector<int> &ForkLength, std::vector<bool> &runOff, std::vector<std::string> &duplicateIDs, int &fsBoundary) {
+void analogueUnpack(std::string fileInput, std::map<std::string, std::pair<int,int>> &readID2analogue, std::vector<std::string> &DuplicateIDs) {
+    
+    std::ifstream file(fileInput);
+
+    if (!file.is_open()) 
+    {
+        std::cerr << "Error: Could not open file " << fileInput << "\n";
+        exit(EXIT_FAILURE);
+    }
+    
+    std::string line; 
+
+    while (std::getline(file, line)) {
+
+        if (!line.empty() && line[0] != '#') {
+
+            std::istringstream iss(line);
+            std::vector<std::string> columns;
+            std::string entry;
+            while (iss >> entry) {
+                columns.push_back(entry);
+            }
+                                
+            std::string readID = columns[3];
+
+            if ( std::find(DuplicateIDs.begin(), DuplicateIDs.end(), readID) == DuplicateIDs.end() ) {
+
+                int pulse5Prime = std::stoi(columns[1]);
+                int pulse3Prime = std::stoi(columns[2]);
+
+                readID2analogue[readID] = std::make_pair(pulse5Prime, pulse3Prime);
+            }
+        }
+    }
+    file.close();
+}
+
+
+void forkUnpack(std::string fileInput, bool isRight, std::vector<int> &ForkLength, std::map<std::string, std::pair<int,int>> &readID2analogue, std::vector<bool> &runOff, std::vector<std::string> &duplicateIDs, int &fsBoundary,  int &readEndTolerance) {
     
     std::ifstream file(fileInput);
 
@@ -289,21 +343,24 @@ void forkUnpack(std::string fileInput, bool isRight, std::vector<int> &ForkLengt
                 int gap5Prime = pulse5Prime - read5Prime;
                 assert(gap3Prime >= 0 and gap5Prime >= 0);
 
-                int pulseLength = pulse3Prime - pulse5Prime;
-
                 // For reliable fork speeds, only consider forks that are at least 3kb away from the read ends
                 if ( (gap3Prime > fsBoundary) and (gap5Prime > fsBoundary ) ) {
 
-                    ForkLength.push_back(pulseLength);
+                    if (isRight and pulse3Prime == readID2analogue[readID].second){
+                        ForkLength.push_back(readID2analogue[readID].second - readID2analogue[readID].first);
+                    }
+                    else if (not isRight and pulse5Prime == readID2analogue[readID].first){
+                        ForkLength.push_back(readID2analogue[readID].second - readID2analogue[readID].first);
+                    }
                 }
 
-                if ( isRight and (gap3Prime < fsBoundary) and (gap5Prime > fsBoundary) ){
+                if ( isRight and (gap3Prime < readEndTolerance) ){
                     runOff.push_back(true);
                 }
-                else if ( not isRight and (gap5Prime < fsBoundary) and (gap3Prime > fsBoundary) ){
+                else if ( not isRight and (gap5Prime < readEndTolerance) ){
                     runOff.push_back(true);
                 }
-                else if ( (gap3Prime > fsBoundary) and (gap5Prime > fsBoundary ) ) {
+                else{
                     runOff.push_back(false);
                 }
             }
@@ -318,7 +375,8 @@ void simulation (std::vector<int> &v5Prime,
                 std::vector<int> &forkLength,
                 unsigned int nForks,
                 std::vector<double> &totalRunOffs,
-                int fsBoundary) { 
+                int fsBoundary,
+                int readEndTolerance) { 
 
     int bsIterations = 5000;
     std::mt19937 gen(221005);
@@ -349,7 +407,7 @@ void simulation (std::vector<int> &v5Prime,
             int randomStart = startDist(gen);
 
             // Check if there is a run off
-            if (read3Prime - randomStart < randomLength) runOff++;  
+            if (read3Prime - readEndTolerance - randomStart < randomLength) runOff++;  
         }
 
         // Convert to proportion and store proportion
@@ -415,27 +473,31 @@ int seeBreaks_main(int argc, char** argv) {
         scanReadIDs(args.rForkInput, ReadIDs, DuplicateIDs);
     }
 
+    std::map<std::string, std::pair<int,int>> readID2analogue;
+    analogueUnpack(args.analogueInput, readID2analogue, DuplicateIDs);
+
     // Parse forkSense bed files
-    std::vector<int> forkTrackLengths;
-    std::vector<bool> runOffs;
-    int forkSenseBoundary = 4000;
-
-    if (args.specifiedLeft) {
-
-        forkUnpack(args.lForkInput, false, forkTrackLengths, runOffs, DuplicateIDs, forkSenseBoundary);
-    }
-    if (args.specifiedRight) {
-
-        forkUnpack(args.rForkInput, true, forkTrackLengths, runOffs, DuplicateIDs, forkSenseBoundary);
-    }
-    assert(forkSenseBoundary != -1);
-
     std::vector<double> totalSimRunOffs;
-    simulation(v5Prime, v3Prime, forkTrackLengths, runOffs.size(), totalSimRunOffs, forkSenseBoundary);   
-
-    // Fork Observations
     std::vector<double> totalObsRunOffs;
-    observation(runOffs, totalObsRunOffs);  
+    int forkSenseBoundary = 2000;
+
+    for (int readEndTolerance = 100; readEndTolerance <= 3000; readEndTolerance += 250) {
+
+        std::vector<int> forkTrackLengths;
+        std::vector<bool> runOffs;
+
+        if (args.specifiedLeft) {
+
+            forkUnpack(args.lForkInput, false, forkTrackLengths, readID2analogue, runOffs, DuplicateIDs, forkSenseBoundary, readEndTolerance);
+        }
+        if (args.specifiedRight) {
+
+            forkUnpack(args.rForkInput, true, forkTrackLengths, readID2analogue, runOffs, DuplicateIDs, forkSenseBoundary, readEndTolerance);
+        }
+
+        simulation(v5Prime, v3Prime, forkTrackLengths, runOffs.size(), totalSimRunOffs, forkSenseBoundary, readEndTolerance);
+        observation(runOffs, totalObsRunOffs);  
+    }
 
     // Calculate simulation mean and standard deviation
     double simMean = vectorMean(totalSimRunOffs);
@@ -461,14 +523,14 @@ int seeBreaks_main(int argc, char** argv) {
 
     // Write output to stdout
     std::cout << "\nExpected number of analogue tracks at read ends\n";
-    std::cout << "   Mean: " << simMean << "\n";
-    std::cout << "   Stdv: " << simStdDev << "\n";
+    std::cout << "   Estimate: " << simMean << "\n";
+    std::cout << "   StandardError: " << simStdDev << "\n";
     std::cout << "Observed number of analogue tracks at read ends\n";
-    std::cout << "   Mean: " << obsMean << "\n";
-    std::cout << "   Stdv: " << obsStdDev << "\n";
+    std::cout << "   Estimate: " << obsMean << "\n";
+    std::cout << "   StandardError: " << obsStdDev << "\n";
     std::cout << "Difference between observed and expected\n";
-    std::cout << "   Mean: " << difMean << "\n"; 
-    std::cout << "   Stdv: " << difStdDev << "\n";
+    std::cout << "   Estimate: " << difMean << "\n"; 
+    std::cout << "   StandardError: " << difStdDev << "\n";
     std::cout << "   95% Confidence Interval: [" << leftTail << ", " << rightTail << "]\n";
 
     // Write output to file
@@ -484,13 +546,12 @@ int seeBreaks_main(int argc, char** argv) {
     outFile << "#Software " << std::string(getExePath()) << "\n";
     outFile << "#Version " << std::string(VERSION) << "\n";
     outFile << "#Commit " << std::string(getGitCommit()) << "\n";
-    outFile << "#NumberOfForks " << runOffs.size() << "\n";
-    outFile << "#ExpectedMean " << simMean << "\n";
-    outFile << "#ExpectedStdv " << simStdDev << "\n";
-    outFile << "#ObservedMean " << obsMean << "\n";
-    outFile << "#ObservedStdv " << obsStdDev << "\n";
-    outFile << "#DifferenceMean " << difMean << "\n";
-    outFile << "#DifferenceStdv " << difStdDev << "\n";
+    outFile << "#ExpectedReadEndFraction " << simMean << "\n";
+    outFile << "#ExpectedReadEndFraction_StdErr " << simStdDev << "\n";
+    outFile << "#ObservedReadEndFraction " << obsMean << "\n";
+    outFile << "#ObservedReadEndFraction_StdErr " << obsStdDev << "\n";
+    outFile << "#Difference " << difMean << "\n";
+    outFile << "#Difference_StdErr " << difStdDev << "\n";
     outFile << "#95ConfidenceInterval " << leftTail << " " << rightTail << "\n";
     outFile << ">ExpectedReadEndFractions:\n";
     for (const auto& val : totalSimRunOffs) {
