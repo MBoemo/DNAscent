@@ -21,6 +21,8 @@
 #include <chrono>
 #include <iomanip>
 #include <cstring>
+#include <math.h>
+
 
 int show_version( int, char** );
 
@@ -178,17 +180,85 @@ inline std::string complement( std::string DNAseq ){
 }
 
 
+template <typename T>
+double vectorMean(std::vector<T>& obs) {
+    static_assert(std::is_arithmetic<T>::value, "vectorMean requires a numeric type");
+
+    double total = 0.0;
+    for (const auto& val : obs) {
+        total += static_cast<double>(val);
+    }
+
+    return obs.empty() ? 0.0 : total / static_cast<double>(obs.size());
+}
+
+
+template <typename T>
+double vectorStdv(std::vector<T>& obs, double &mean) {
+    static_assert(std::is_arithmetic<T>::value, "vectorStdv requires a numeric type");
+
+    double total = 0.0;
+    for (const auto& val : obs) {
+        total += std::pow(static_cast<double>(val) - mean, 2.0);
+    }
+
+    return obs.empty() ? 0.0 : std::sqrt(total / static_cast<double>(obs.size()));
+}
+
+
+template <typename T>
+double vectorSum(const std::vector<T>& obs) {
+    static_assert(std::is_arithmetic<T>::value, "vectorSum requires a numeric type");
+
+    double total = 0.0;
+    for (const auto& val : obs) {
+        total += static_cast<double>(val);
+    }
+    return total;
+}
+
+
+template <typename T>
+size_t argMin(const std::vector<T>& vec) {
+    static_assert(std::is_arithmetic<T>::value, "argMin requires a numeric type");
+
+    if (vec.empty()) return std::numeric_limits<size_t>::max(); // or throw std::invalid_argument
+
+    T smallest = vec[0];
+    size_t index = 0;
+
+    for (size_t i = 1; i < vec.size(); ++i) {
+        if (vec[i] < smallest) {
+            smallest = vec[i];
+            index = i;
+        }
+    }
+    return index;
+}
+
+
+template <typename T>
+size_t argMax(const std::vector<T>& vec) {
+    static_assert(std::is_arithmetic<T>::value, "argMax requires a numeric type");
+
+    if (vec.empty()) return std::numeric_limits<size_t>::max(); // or throw std::invalid_argument
+
+    T highest = vec[0];
+    size_t index = 0;
+
+    for (size_t i = 1; i < vec.size(); ++i) {
+        if (vec[i] > highest) {
+            highest = vec[i];
+            index = i;
+        }
+    }
+    return index;
+}
+
+
 void displayProgress( int, int );
 std::vector< std::string > split( std::string, char );
-int argMin( std::vector< double > );
-int argMax( std::vector< double > );
-double vectorMean( std::vector< double > & );
-double vectorStdv( std::vector< double > &, double & );
-double vectorSum( std::vector< double > & );
-std::vector<double> movingAvgFilter(std::vector<double> &, unsigned int);
-std::vector<double> movingAvgFilterLogistic(std::vector<double> &, unsigned int);
-std::vector<double> normVectorSum(std::vector<double>);
 const char *get_ext(const char *);
-std::string strip_extension(const std::string& );
+std::string strip_extension(const std::string & );
 
 #endif

@@ -53,6 +53,7 @@ The output includes the following statistics:
 
 .. code-block:: console
 
+   #nForks 2500
    #ExpectedReadEndFraction 0.128429
    #ExpectedReadEndFraction_StdErr 0.00931262
    #ObservedReadEndFraction 0.29308
@@ -61,6 +62,7 @@ The output includes the following statistics:
    #Difference_StdErr 0.0157217
    #95ConfidenceInterval 0.133543 0.195172
 
+- ``nForks`` is the number of forks used by ``seeBreaks`` to compute the statistics below. Note for normalisatin purposes, ``seeBreaks`` only uses a subset of fork calls that meet certain criteria. This number may therefore be considerably lower than the total number of fork calls from the sequencing run.
 - ``ExpectedReadEndFraction`` is the estimate of how many analogue tracks should run to the end of the read by chance. This estimate is made by using the distribution of read lengths from the output of ``DNAscent detect`` and the fork speeds from ``DNAscent forkSense``. A standard error of this estimate is determined by bootstrapping and is given by ``ExpectedReadEndFraction_StdErr``.
 - ``ObservedReadEndFraction`` is the estimate of how many analogue tracks ran to the end of the read made by using the output of ``DNAscent forkSense``. A standard error of this estimate is determined by bootstrapping and is given by ``ObservedReadEndFraction_StdErr``.
 - ``Difference`` is the estimate of the difference between observed and expected values, with positive values indicating more analogue tracks extending to the read end than expected by chance. The standard error of the distance estimate is given by ``Difference_StdErr``.
