@@ -304,7 +304,7 @@ void analogueUnpack(std::string fileInput, std::map<std::string, std::pair<int,i
 }
 
 
-void getForkSpeed(std::string fileInput, bool isRight, std::vector<int> &ForkLength, std::map<std::string, std::pair<int,int>> &readID2analogue, std::vector<std::string> &duplicateIDs, int &fsBoundary) {
+void getForkSpeed(std::string fileInput, bool isRight, std::vector<int> &ForkLength, std::map<std::string, std::pair<int,int>> &readID2analogue, std::vector<std::string> &duplicateIDs, int &fsBoundary, bool &isR9) {
     
     std::ifstream file(fileInput);
 
@@ -325,6 +325,13 @@ void getForkSpeed(std::string fileInput, bool isRight, std::vector<int> &ForkLen
             std::string entry;
             while (iss >> entry) {
                 columns.push_back(entry);
+            }
+
+            if (columns.size() == 8) isR9 = true;
+            else if (columns.size() == 9) isR9 = false;
+            else{
+                std::cerr << "Error: Incorrect number of columns in forkSense bed file " << fileInput << "\n";
+                exit(EXIT_FAILURE);
             }
                                 
             std::string readID = columns[3];
@@ -519,6 +526,7 @@ int seeBreaks_main(int argc, char** argv) {
     Arguments args = parseBreaksArguments(argc, argv);
 
     int forkSenseBoundary = 2000;
+    bool isR9 = false;
 
     std::vector<std::string> ReadIDs;
     std::vector<std::string> DuplicateIDs;
@@ -538,11 +546,11 @@ int seeBreaks_main(int argc, char** argv) {
     std::vector<int> forkTrackLengths;
     if (args.specifiedLeft) {
 
-        getForkSpeed(args.lForkInput, false, forkTrackLengths, readID2analogue, DuplicateIDs, forkSenseBoundary);
+        getForkSpeed(args.lForkInput, false, forkTrackLengths, readID2analogue, DuplicateIDs, forkSenseBoundary, isR9);
     }
     if (args.specifiedRight) {
 
-        getForkSpeed(args.rForkInput, true, forkTrackLengths, readID2analogue, DuplicateIDs, forkSenseBoundary);
+        getForkSpeed(args.rForkInput, true, forkTrackLengths, readID2analogue, DuplicateIDs, forkSenseBoundary, isR9);
     }
 
     double meanForkSpeed = vectorMean(forkTrackLengths);
@@ -567,7 +575,11 @@ int seeBreaks_main(int argc, char** argv) {
     std::vector<double> totalObsRunOffs;
     int nRightForks = 0;
     int nLeftForks = 0;
-    for (int readEndTolerance = 500; readEndTolerance <= 700; readEndTolerance += 50) {
+
+    int endTol = 250; //R10
+    if (isR9) endTol = 500; //adjust up for higher epsilon in R9 v3.1.2 DBSCAN
+
+    for (int readEndTolerance = endTol; readEndTolerance <= endTol + 250; readEndTolerance += 50) {
 
         std::vector<bool> runOffs;
 
