@@ -46,18 +46,32 @@ void displayProgress( int current, int total ){
 }
 
 
-std::vector< std::string > split( std::string s, char delim ){
-
-	std::stringstream ssString( s );
-	std::vector< std::string > splitString;
-	std::string entry;
-
-	while ( std::getline( ssString, entry, delim ) ){
-
-		splitString.push_back( entry );
-	}
-	return splitString;
+std::string trim(const std::string& str) {
+	size_t first = str.find_first_not_of(" \t\n\r");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t\n\r");
+    return str.substr(first, last - first + 1);
 }
+
+std::vector<std::string> split(const std::string& s, char delim ) {
+
+    std::vector<std::string> splitString;
+    std::string token;
+    std::istringstream iss(s);
+
+    if (std::isspace(delim)) {
+        while (iss >> token) {
+            splitString.push_back(token);
+        }
+    } else {
+        while (std::getline(iss, token, delim)) {
+            splitString.push_back(trim(token));  // optional trim
+        }
+    }
+    return splitString;
+}
+
+
 
 
 const char *get_ext(const char *filename){

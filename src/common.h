@@ -9,7 +9,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define VERSION "4.1.0"
+#define VERSION "4.1.1"
 
 #include <algorithm>
 #include <vector>
@@ -22,6 +22,7 @@
 #include <iomanip>
 #include <cstring>
 #include <math.h>
+#include <cctype>
 
 
 int show_version( int, char** );
@@ -257,7 +258,7 @@ size_t argMax(const std::vector<T>& vec) {
 
 
 void displayProgress( int, int );
-std::vector< std::string > split( std::string, char );
+std::vector<std::string> split(const std::string& s, char delim = ' ');
 const char *get_ext(const char *);
 std::string strip_extension(const std::string & );
 

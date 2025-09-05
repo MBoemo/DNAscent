@@ -25,7 +25,7 @@
 static const char *help=
 "seeBreaks: DNAscent executable that detects an elevated frequency of DNA breaks at replication forks.\n"
 "To run DNAscent seeBreaks, do:\n"
-"   DNAscent seeBreaks -l /path/to/leftForks_DNAscent_forksense.bed -r /rightForks_DNAscent_forksense.bed -d /path/to/detectOutput.bam -o /path/to/output.seeBreaks \n"
+"   DNAscent seeBreaks -l /path/to/leftForks_DNAscent_forksense.bed -r /path/to/rightForks_DNAscent_forksense.bed -a /path/to/BrdU_DNAscent_forkSense.bed -d /path/to/detectOutput.bam -o /path/to/output.seeBreaks \n"
 "Required arguments are:\n"
 "  -l,--left                 path to leftForks file from forkSense detect with `bed` extension,\n"
 "  -r,--right                path to rightFork file from forkSense detect with `bed` extension,\n"
@@ -48,6 +48,14 @@ struct Arguments {
     bool humanReadable = false;
 	bool specifiedOutput = false;
     bool specifiedDetect = false;
+};
+
+
+struct AnalogueTrack {
+    bool isRight;
+    std::string readID;
+    int gap5Prime;
+    int gap3Prime;
 };
 
 
@@ -163,26 +171,12 @@ void detectUnpack(Arguments &args, std::vector<int> &v5Prime, std::vector<int> &
 
         if (line.substr(0,1) == "#" or line.length() == 0) continue; //ignore header and blank lines
         if ( line.substr(0,1) == ">" ){
-		
-            //parse the header line
-            std::istringstream ssLine(line);
-            std::string column;
-            int cIndex = 0;
-            int refStart = -1;
-            int refEnd = -1;
-            while ( ssLine >> column ) {
 
-                if ( cIndex == 2 ) {
+            std::vector< std::string > columns = split(line);
+            assert(columns.size() == 5); //well-formed detect header
 
-                    refStart = std::stoi(column);
-                }
-                else if ( cIndex == 3 ) {
-
-                    refEnd = std::stoi(column);
-                }
-                cIndex++;
-            }
-            assert(refStart != -1 and refEnd != -1);
+            int refStart = std::stoi(columns[2]);
+            int refEnd = std::stoi(columns[3]);
 
             if (refEnd - refStart < minReadLength) continue; //ignore short reads
             
@@ -242,16 +236,9 @@ void scanReadIDs(std::string fileInput, std::vector<std::string> &ReadIDs, std::
 
         if (!line.empty() && line[0] != '#') {
 
-            std::istringstream iss(line);
-            std::vector<std::string> columns;
-            std::string entry;
-
-            while (iss >> entry) {
-
-                columns.push_back(entry);
-            }
-                                
+            std::vector< std::string > columns = split(line);
             std::string readID = columns[3];
+
             if (std::find(ReadIDs.begin(), ReadIDs.end(), readID) != ReadIDs.end()) {
 
                 DuplicateIDs.push_back(readID);
@@ -282,13 +269,7 @@ void analogueUnpack(std::string fileInput, std::map<std::string, std::pair<int,i
 
         if (!line.empty() && line[0] != '#') {
 
-            std::istringstream iss(line);
-            std::vector<std::string> columns;
-            std::string entry;
-            while (iss >> entry) {
-                columns.push_back(entry);
-            }
-                                
+            std::vector< std::string > columns = split(line);     
             std::string readID = columns[3];
 
             if ( std::find(DuplicateIDs.begin(), DuplicateIDs.end(), readID) == DuplicateIDs.end() ) {
@@ -304,7 +285,7 @@ void analogueUnpack(std::string fileInput, std::map<std::string, std::pair<int,i
 }
 
 
-void getForkSpeed(std::string fileInput, bool isRight, std::vector<int> &ForkLength, std::map<std::string, std::pair<int,int>> &readID2analogue, std::vector<std::string> &duplicateIDs, int &fsBoundary, bool &isR9) {
+void getAnalogueTrackLen(std::string fileInput, bool isRight, std::vector<int> &analogueLength, std::map<std::string, std::pair<int,int>> &readID2analogue, std::vector<std::string> &duplicateIDs, int &fsBoundary, bool &isR9) {
     
     std::ifstream file(fileInput);
 
@@ -320,12 +301,7 @@ void getForkSpeed(std::string fileInput, bool isRight, std::vector<int> &ForkLen
 
         if (!line.empty() && line[0] != '#') {
 
-            std::istringstream iss(line);
-            std::vector<std::string> columns;
-            std::string entry;
-            while (iss >> entry) {
-                columns.push_back(entry);
-            }
+            std::vector< std::string > columns = split(line);     
 
             if (columns.size() == 8) isR9 = true;
             else if (columns.size() == 9) isR9 = false;
@@ -365,7 +341,7 @@ void getForkSpeed(std::string fileInput, bool isRight, std::vector<int> &ForkLen
                 // For reliable fork speeds, only consider forks that are at least fsBoundary bp away from the read ends
                 if ( (gap3Prime > fsBoundary) and (gap5Prime > fsBoundary ) ) {
 
-                    ForkLength.push_back(secondAn3Prime - secondAn5Prime);
+                    analogueLength.push_back(secondAn3Prime - secondAn5Prime);
                 }
             }
         }
@@ -374,10 +350,10 @@ void getForkSpeed(std::string fileInput, bool isRight, std::vector<int> &ForkLen
 }
 
 
-int forkUnpack(std::string fileInput, bool isRight, std::map<std::string, std::pair<int,int>> &readID2analogue, std::vector<bool> &runOff, std::vector<std::string> &duplicateIDs, int &fsBoundary, int &readEndTolerance, int &minReadLength) {
+std::vector<AnalogueTrack> forkUnpack(std::string fileInput, bool isRight, std::map<std::string, std::pair<int,int>> &readID2analogue, std::vector<std::string> &duplicateIDs, int &fsBoundary, int &minReadLength, int &nForks) {
     
+    std::vector<AnalogueTrack> allTracks;
     std::ifstream file(fileInput);
-    int nForks = 0;
 
     if (!file.is_open()) 
     {
@@ -391,13 +367,7 @@ int forkUnpack(std::string fileInput, bool isRight, std::map<std::string, std::p
 
         if (!line.empty() && line[0] != '#') {
 
-            std::istringstream iss(line);
-            std::vector<std::string> columns;
-            std::string entry;
-            while (iss >> entry) {
-                columns.push_back(entry);
-            }
-                                
+            std::vector< std::string > columns = split(line);               
             std::string readID = columns[3];
 
             if ( std::find(duplicateIDs.begin(), duplicateIDs.end(), readID) == duplicateIDs.end() ) {
@@ -428,21 +398,32 @@ int forkUnpack(std::string fileInput, bool isRight, std::map<std::string, std::p
                 int gap5Prime = secondAn5Prime - read5Prime;
                 assert(gap3Prime >= 0 and gap5Prime >= 0);
 
-                if ( isRight and (gap5Prime > fsBoundary)){
-                    if (gap3Prime < readEndTolerance) runOff.push_back(true);
-                    else runOff.push_back(false);
-                    nForks++;  
-                }
-                else if ( not isRight and (gap3Prime > fsBoundary) ){
-                    if (gap5Prime < readEndTolerance) runOff.push_back(true);
-                    else runOff.push_back(false);
-                    nForks++;               
-                }
+                if ( isRight and (gap5Prime > fsBoundary)) nForks++;
+                else if ( not isRight and (gap3Prime > fsBoundary) ) nForks++;  
+                
+                AnalogueTrack track = {isRight, readID, gap5Prime, gap3Prime};
+                allTracks.push_back(track);
             }
         }
     }
     file.close();
-    return nForks;
+    return allTracks;
+}
+
+
+void checkRunOffs(std::vector<AnalogueTrack> &tracks, bool isRight, std::vector<bool> &runOff, int &fsBoundary, int &readEndTolerance) {
+
+    for (auto t = tracks.begin(); t != tracks.end(); t++) {
+
+        if ( t -> isRight and (t -> gap5Prime > fsBoundary)){
+            if (t -> gap3Prime < readEndTolerance) runOff.push_back(true);
+            else runOff.push_back(false);
+        }
+        else if ( not t -> isRight and (t -> gap3Prime > fsBoundary) ){
+            if (t -> gap5Prime < readEndTolerance) runOff.push_back(true);
+            else runOff.push_back(false);
+        }
+    }
 }
 
 
@@ -543,25 +524,25 @@ int seeBreaks_main(int argc, char** argv) {
     std::map<std::string, std::pair<int,int>> readID2analogue;
     analogueUnpack(args.analogueInput, readID2analogue, DuplicateIDs);
 
-    std::vector<int> forkTrackLengths;
+    std::vector<int> analogueTrackLengths;
     if (args.specifiedLeft) {
 
-        getForkSpeed(args.lForkInput, false, forkTrackLengths, readID2analogue, DuplicateIDs, forkSenseBoundary, isR9);
+        getAnalogueTrackLen(args.lForkInput, false, analogueTrackLengths, readID2analogue, DuplicateIDs, forkSenseBoundary, isR9);
     }
     if (args.specifiedRight) {
 
-        getForkSpeed(args.rForkInput, true, forkTrackLengths, readID2analogue, DuplicateIDs, forkSenseBoundary, isR9);
+        getAnalogueTrackLen(args.rForkInput, true, analogueTrackLengths, readID2analogue, DuplicateIDs, forkSenseBoundary, isR9);
     }
 
-    double meanForkSpeed = vectorMean(forkTrackLengths);
-    double stdvForkSpeed = vectorStdv(forkTrackLengths, meanForkSpeed);
-    int minReadLength = (int) meanForkSpeed + 3 * stdvForkSpeed;
+    double meanAnalogueLen = vectorMean(analogueTrackLengths);
+    double stdvAnalogueLen = vectorStdv(analogueTrackLengths, meanAnalogueLen);
+    int minReadLength = (int) meanAnalogueLen + 3 * stdvAnalogueLen;
 
     // Parse detect output
     std::vector<int> v5Prime;
     std::vector<int> v3Prime;
 
-    if (args.humanReadable) {
+    if (args.humanReadable) {// is .detect format
 
         detectUnpack(args, v5Prime, v3Prime, minReadLength);
     }
@@ -570,38 +551,40 @@ int seeBreaks_main(int argc, char** argv) {
         bamUnpack(args, v5Prime, v3Prime, minReadLength);       
     }
 
-    // Parse forkSense bed files
-    std::vector<double> totalSimRunOffs;
-    std::vector<double> totalObsRunOffs;
+    // Parse fork call bed files
     int nRightForks = 0;
     int nLeftForks = 0;
+    std::vector<AnalogueTrack> leftTracks, rightTracks;
+    if (args.specifiedLeft) {
 
+        leftTracks = forkUnpack(args.lForkInput, false, readID2analogue, DuplicateIDs, forkSenseBoundary, minReadLength, nLeftForks);
+    }
+    if (args.specifiedRight) {
+
+        rightTracks = forkUnpack(args.rForkInput, true, readID2analogue, DuplicateIDs, forkSenseBoundary, minReadLength, nRightForks);
+    }
+    int nForks = nRightForks + nLeftForks;
+
+    // Estimate expected and observed run off proportions
+    std::vector<double> totalSimRunOffs;
+    std::vector<double> totalObsRunOffs;
     int endTol = 250; //R10
-    if (isR9) endTol = 500; //adjust up for higher epsilon in R9 v3.1.2 DBSCAN
+    if (isR9) endTol = 500; //R9, adjusted up for higher epsilon in v3.1.2 forkSense
 
     for (int readEndTolerance = endTol; readEndTolerance <= endTol + 250; readEndTolerance += 50) {
 
         std::vector<bool> runOffs;
 
-        if (args.specifiedLeft) {
+        checkRunOffs(rightTracks, true, runOffs, forkSenseBoundary, readEndTolerance);
+        checkRunOffs(leftTracks, false, runOffs, forkSenseBoundary, readEndTolerance);
 
-            nLeftForks = forkUnpack(args.lForkInput, false, readID2analogue, runOffs, DuplicateIDs, forkSenseBoundary, readEndTolerance, minReadLength);
-        }
-        if (args.specifiedRight) {
-
-            nRightForks = forkUnpack(args.rForkInput, true, readID2analogue, runOffs, DuplicateIDs, forkSenseBoundary, readEndTolerance, minReadLength);
-        }
-
-        simulation(v5Prime, v3Prime, forkTrackLengths, runOffs.size(), totalSimRunOffs, forkSenseBoundary, readEndTolerance);
+        simulation(v5Prime, v3Prime, analogueTrackLengths, runOffs.size(), totalSimRunOffs, forkSenseBoundary, readEndTolerance);
         observation(runOffs, totalObsRunOffs);  
     }
-    int nForks = nRightForks + nLeftForks;
 
-    // Calculate simulation mean and standard deviation
     double simMean = vectorMean(totalSimRunOffs);
     double simStdDev = vectorStdv(totalSimRunOffs, simMean);
 
-    // Calculate observed mean and standard deviation  
     double obsMean = vectorMean(totalObsRunOffs);
     double obsStdDev = vectorStdv(totalObsRunOffs, obsMean);
 

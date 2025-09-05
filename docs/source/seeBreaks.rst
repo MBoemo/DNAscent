@@ -16,7 +16,7 @@ The algorithm will automatically tune itself to account for the read length dist
 Flow Cell Compatibility
 -----------------------
 
-As part of ``DNAscent`` v4, ``seeBreaks`` is naturally compatible with R10.4.1 data. However, unlike other ``DNAscent`` v4 subprograms, ``DNAscent seeBreaks`` is backcompatible with legacy R9.4.1 flow cells. It is therefore perfectly acceptable to use ``DNAscent seeBreaks`` (v4.1.1) on the outputs of ``DNAscent detect`` (v3.1.2) and ``DNAscent forkSense`` (v3.1.2) generated from R9.4.1 data.
+As part of v4, ``DNAscent seeBreaks`` is naturally compatible with R10.4.1 data. However, unlike other v4 subprograms, ``DNAscent seeBreaks`` is backcompatible with legacy R9.4.1 flow cells. It is therefore perfectly acceptable to use ``DNAscent seeBreaks`` (v4.1.1) on the outputs of ``DNAscent detect`` (v3.1.2) and ``DNAscent forkSense`` (v3.1.2) generated from R9.4.1 data.
 
 Usage
 -----
@@ -24,10 +24,11 @@ Usage
 .. code-block:: console
 
    To run DNAscent seeBreaks, do:
-      DNAscent seeBreaks -l /path/to/leftForks_DNAscent_forksense.bed -r /path/to/rightForks_DNAscent_forksense.bed -d /path/to/detectOutput.bam -o /path/to/output.seeBreaks
+      DNAscent seeBreaks -l /path/to/leftForks_DNAscent_forksense.bed -r /path/to/rightForks_DNAscent_forksense.bed -a /path/to/BrdU_DNAscent_forkSense.bed -d /path/to/detectOutput.bam -o /path/to/output.seeBreaks
    Required arguments are:\n"
      -l,--left                 path to leftForks file from forkSense detect with `bed` extension,
      -r,--right                path to rightFork file from forkSense detect with `bed` extension,
+     -a,--analogue             path to second pulsed analogue file from forkSense with `bed` extension,
      -d,--detect               path to output from detect with `detect` or `bam` extension,
      -o,--output               path to output file for seeBreaks.
 
@@ -53,7 +54,7 @@ The output includes the following statistics:
 
 .. code-block:: console
 
-   #nForks 2500
+   #nForks 1269
    #ExpectedReadEndFraction 0.128429
    #ExpectedReadEndFraction_StdErr 0.00931262
    #ObservedReadEndFraction 0.29308
@@ -62,12 +63,12 @@ The output includes the following statistics:
    #Difference_StdErr 0.0157217
    #95ConfidenceInterval 0.133543 0.195172
 
-- ``nForks`` is the number of forks used by ``seeBreaks`` to compute the statistics below. Note for normalisatin purposes, ``seeBreaks`` only uses a subset of fork calls that meet certain criteria. This number may therefore be considerably lower than the total number of fork calls from the sequencing run.
+- ``nForks`` is the number of fork calls used to compute the statistics below. Note that for normalisation purposes, only a subset of fork calls that meet certain criteria are used. This number may therefore be considerably lower than the total number of fork calls from the sequencing run.
 - ``ExpectedReadEndFraction`` is the estimate of how many analogue tracks should run to the end of the read by chance. This estimate is made by using the distribution of read lengths from the output of ``DNAscent detect`` and the fork speeds from ``DNAscent forkSense``. A standard error of this estimate is determined by bootstrapping and is given by ``ExpectedReadEndFraction_StdErr``.
 - ``ObservedReadEndFraction`` is the estimate of how many analogue tracks ran to the end of the read made by using the output of ``DNAscent forkSense``. A standard error of this estimate is determined by bootstrapping and is given by ``ObservedReadEndFraction_StdErr``.
 - ``Difference`` is the estimate of the difference between observed and expected values, with positive values indicating more analogue tracks extending to the read end than expected by chance. The standard error of the distance estimate is given by ``Difference_StdErr``.
 - ``95ConfidenceInterval`` specifies the 95% confidence interval for the difference between observed and expected values. If zero lies outside this interval, it suggests significant DNA breaking at replication forks.
 
-Taken together, we see in the example above that 1269 forks were used, with an expected read end fraction of 0.128 (±0.0093) and an observed read end fraction of 0.293 (±0.013). The difference between observed and expected is therefore 0.164 (±0.016), with a 95% confidence interval of [0.134, 0.195]. Since zero does not lie within this confidence interval, we can conclude that there is significant DNA breaking at replication forks in this example.
+Taken together, we see in the example above that 1269 forks were used, with an expected read end fraction of 0.128 (±0.0093) and an observed read end fraction of 0.293 (±0.013). The difference between observed and expected is therefore 0.164 (±0.016), with a 95% confidence interval of [0.134, 0.195]. Since zero does not lie within this confidence interval, it is likely that there was significant DNA breaking at replication forks in this sample.
 
 Each fraction from bootstrapping on Expected and Observed is given under ``>ExpectedReadEndFractions:`` and ``>ObservedReadEndFractions:``, respectively, for those who want to investigate and/or plot these distributions. See :ref:`cookbook` for an example of how to do this in Python.
