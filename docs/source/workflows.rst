@@ -97,7 +97,7 @@ We now have the following files from ``DNAscent forkSense``:
 
 We can load ``detect_output.bam`` as well as the above bed files files directly into IGV to see where origins, forks, analogue tracks, and terminiations were called in the genome.
 
-If we've used an agent that targets the DNA damage response, or if we're working in a cell line that's prone to replication stress, we might want to see there are elevated levels of DNA breaks at replication forks. We can do this by passing the results of ``DNAscent detect`` and ``DNAscent forkSense`` to ``DNAscent seeBreaks":
+If we've used an agent that targets the DNA damage response, or if we're working in a cell line that's prone to replication stress, we might want to see there are elevated levels of DNA breaks at replication forks. We can do this by passing the results of ``DNAscent detect`` and ``DNAscent forkSense`` to ``DNAscent seeBreaks``:
 
 .. code-block:: console
 
