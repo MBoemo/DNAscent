@@ -13,6 +13,7 @@
 #include "common.h"
 #include "error_handling.h"
 #include <math.h>
+#include <type_traits>
 
 
 int show_version( int, char** ){
@@ -45,129 +46,32 @@ void displayProgress( int current, int total ){
 }
 
 
-std::vector< std::string > split( std::string s, char delim ){
+std::string trim(const std::string& str) {
+	size_t first = str.find_first_not_of(" \t\n\r");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t\n\r");
+    return str.substr(first, last - first + 1);
+}
 
-	std::stringstream ssString( s );
-	std::vector< std::string > splitString;
-	std::string entry;
+std::vector<std::string> split(const std::string& s, char delim ) {
 
-	while ( std::getline( ssString, entry, delim ) ){
+    std::vector<std::string> splitString;
+    std::string token;
+    std::istringstream iss(s);
 
-		splitString.push_back( entry );
-	}
-	return splitString;
+    if (std::isspace(delim)) {
+        while (iss >> token) {
+            splitString.push_back(token);
+        }
+    } else {
+        while (std::getline(iss, token, delim)) {
+            splitString.push_back(trim(token));  // optional trim
+        }
+    }
+    return splitString;
 }
 
 
-double vectorMean( std::vector< double > &obs ){
-
-	double total = 0.0;
-	for ( size_t i = 0; i < obs.size(); i++ ) total += obs[i];
-	return total / (double) obs.size();
-}
-
-
-double vectorStdv( std::vector< double > &obs, double &mean ){
-
-	double total = 0.0;
-	for ( size_t i = 0; i < obs.size(); i++ ){
-		total += pow(obs[i] - mean, 2.0);
-	}
-	return sqrt(total / (double) obs.size());
-}
-
-
-double vectorSum( std::vector< double > &obs ){
-
-	double total = 0.0;
-	for ( size_t i = 0; i < obs.size(); i++ ) total += obs[i];
-	return total;
-}
-
-
-int argMin( std::vector< double > vec ){
-
-	double smallest = vec[0];
-	int index = 0;
-
-	for ( unsigned int i = 1; i < vec.size(); i++ ){
-
-		if ( vec[i] < smallest ){
-
-			smallest = vec[i];
-			index = i;
-		}
-	}
-	return index;
-}
-
-
-double logistic(double input, double slope, double centre){
-
-	return 1/(1 + exp (-slope*(abs(input)-centre))); 
-}
-
-
-std::vector<double> movingAvgFilter( std::vector<double> &input, unsigned int filterSize){
-
-	std::vector<double> out;
-	
-	for (size_t i = filterSize/2; i < input.size() - filterSize/2; i++){
-	
-		double sum = 0.;
-		for (size_t j = i - filterSize/2; j < i + filterSize/2; j++){
-			sum += input[j];
-		}
-		out.push_back( sum / (double) filterSize );
-	}
-	return out;
-}
-
-
-std::vector<double> movingAvgFilterLogistic( std::vector<double> &input, unsigned int filterSize){
-
-	std::vector<double> out;
-	
-	for (size_t i = filterSize/2; i < input.size() - filterSize/2; i++){
-	
-		double sum = 0.;
-		for (size_t j = i - filterSize/2; j < i + filterSize/2; j++){
-			sum += input[j];
-		}
-		out.push_back( logistic( sum / (double) filterSize, 20, 0.2));
-	}
-	return out;
-}
-
-
-std::vector<double> normVectorSum(std::vector<double> input){
-
-	double sum = vectorSum(input);
-
-	std::vector<double> output;
-	for (size_t i = 0; i < input.size(); i++){
-	
-		output.push_back(input[i]/sum);
-	}
-	return output;
-}
-
-
-int argMax(std::vector< double > vec){
-
-	double highest = vec[0];
-	int index = 0;
-
-	for ( unsigned int i = 1; i < vec.size(); i++ ){
-
-		if ( vec[i] > highest ){
-
-			highest = vec[i];
-			index = i;
-		}
-	}
-	return index;
-}
 
 
 const char *get_ext(const char *filename){

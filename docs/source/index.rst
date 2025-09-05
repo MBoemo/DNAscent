@@ -14,6 +14,7 @@ DNAscent
    index_exe
    detect
    forkSense
+   seeBreaks
    visualisation
    workflows
    cookbook
@@ -25,7 +26,7 @@ Overview
 
 DNAscent is software designed to detect the base analogues BrdU and EdU in Oxford Nanopore reads.  In an experimental setup where BrdU and EdU are incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis.  DNAscent can also call the genomic positions of stalled and stressed replication forks for use as a replication stress assay.
 
-DNAscent v4.0.2 supports sequencing data collected on Oxford Nanopore R10.4.1 flow cells. Users wishing to analyse data acquired on legacy R9.4.1 flow cells should roll back to DNAscent v3.1.2 as v4.0.2 is not back-compatible with R9.4.1 flow cells. As R9.4.1 flow cells have been deprecated by Oxford Nanopore,
+DNAscent v4.1.1 supports sequencing data collected on Oxford Nanopore R10.4.1 flow cells. Users wishing to analyse data acquired on legacy R9.4.1 flow cells should roll back to DNAscent v3.1.2 as v4.1.1 is not back-compatible with R9.4.1 flow cells. As R9.4.1 flow cells have been deprecated by Oxford Nanopore,
 previous versions of DNAscent designed for R9.4.1 flow cells (v3.1.2 and below) are no longer under active development.
 
 The Oxford Nanopore Flongle, MinION, GridION, and PromethION platforms are all supported.
@@ -46,15 +47,15 @@ Developer Recommendations
 Publications
 ------------
 
-If you use DNAscent for your research, please cite our publications:
+If you use DNAscent for your research, please cite the publication appropriate for the version you used:
 
-Jones MJK,  Rai SK,  Pfuderer PL, Bonfim-Melo A, Pagan JK, Clarke PR, McClelland SE, Boemo MA. A high-resolution, nanopore-based artificial intelligence assay for DNA replication stress in human cancer cells. [`bioRxiv <https://doi.org/10.1101/2022.09.22.509021>`_]
+**v3 & v4:** Jones MJK,  Rai SK,  Pfuderer PL, Bonfim-Melo A, Pagan JK, Clarke PR, Totanes FIG, Merrick CJ, McClelland SE, Boemo MA. A high-resolution, nanopore-based artificial intelligence assay for DNA replication stress in human cancer cells. [`Journal DOI <https://doi.org/10.1038/s41467-025-63168-w>`_]
 
-Totanes FIG,  Gockel J,  Chapman SE, Bartfai R, Boemo MA, Merrick CJ. Replication origin mapping in the malaria parasite Plasmodium falciparum. [`bioRxiv <https://doi.org/10.1101/2022.07.27.501677>`_]
+**v3:** Totanes FIG,  Gockel J,  Chapman SE, Bartfai R, Boemo MA, Merrick CJ. Replication origin mapping in the malaria parasite Plasmodium falciparum. [`Journal DOI <https://doi.org/10.1093/nar/gkad093>`_]
 
-Boemo, MA DNAscent v2: Detecting replication forks in nanopore sequencing data with deep learning. BMC Genomics 2021;22:430. [`Journal DOI <https://doi.org/10.1186/s12864-021-07736-6>`_]
+**v2:** Boemo, MA DNAscent v2: Detecting replication forks in nanopore sequencing data with deep learning. BMC Genomics 2021;22:430. [`Journal DOI <https://doi.org/10.1186/s12864-021-07736-6>`_]
 
-Muller CA, Boemo MA, Spingardi P, Kessler, BM, Kriaucionis S, Simpson JT, Nieduszynski CA. Capturing the dynamics of genome replication on individual ultra-long nanopore sequence reads. Nature Methods 2019;16:429-436. [`Journal DOI <https://doi.org/10.1038/s41592-019-0394-y>`_]
+**v1:** Muller CA, Boemo MA, Spingardi P, Kessler, BM, Kriaucionis S, Simpson JT, Nieduszynski CA. Capturing the dynamics of genome replication on individual ultra-long nanopore sequence reads. Nature Methods 2019;16:429-436. [`Journal DOI <https://doi.org/10.1038/s41592-019-0394-y>`_]
 
 Bugs, Questions, and Comments
 -----------------------------

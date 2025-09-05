@@ -7,9 +7,9 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'DNAscent'
-copyright = '2024, Michael A. Boemo'
+copyright = '2025, Michael A. Boemo'
 author = 'Michael A. Boemo'
-release = '4.0.1'
+release = '4.1.1'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

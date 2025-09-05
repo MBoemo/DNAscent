@@ -16,7 +16,7 @@ Pull the Singularity image:
 
 .. code-block:: console
 
-   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.0.3
+   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.1.1
 
 Alternatively, you can download and compile DNAscent:
 
@@ -24,7 +24,7 @@ Alternatively, you can download and compile DNAscent:
 
    git clone --recursive https://github.com/MBoemo/DNAscent.git
    cd DNAscent
-   git checkout 4.0.3
+   git checkout 4.1.1
    make
    cd ..
 
@@ -77,20 +77,33 @@ Note that we're assuming the CUDA libraries for the GPU have been set up properl
 
 When ``DNAscent detect`` is finished, it will should put a file in modbam format called ``detect_output.bam`` in the current directory. 
 
-Lastly, we can run ``DNAscent forkSense`` on the output of ``DNAscent detect`` to measure replication fork movement.  Suppose that in our experimental protocol, we pulsed BrdU first followed by EdU.  Let's run it on four threads and specify that we want it to keep track of replication origins, forks, and termination sites:
+Lastly, we can run ``DNAscent forkSense`` on the output of ``DNAscent detect`` to measure replication fork movement.  Suppose that in our experimental protocol, we pulsed BrdU first followed by EdU.  Let's run it on four threads and specify that we want it to keep track of replication origins, forks, termination sites, and analogue tracks:
 
 .. code-block:: console
 
-   DNAscent forkSense -d detect_output.bam -o output.forkSense -t 4 --markOrigins --markTerminations --markForks --order BrdU,EdU
+   DNAscent forkSense -d detect_output.bam -o output.forkSense -t 4 --markOrigins --markTerminations --markAnalogues --markForks --order BrdU,EdU
 
-This will make the following files: 
+Note that we need, at a minimum, to specify ``--markForks`` and ``--markAnalogues`` if we want to use ``DNAscent seeBreaks`` below.
+
+We now have the following files from ``DNAscent forkSense``:
 
 * origins_DNAscent_forkSense.bed (with our origin calls),
-* terminations_DNAscent_forkSense.bed (with our termination calls), 
-* four bed files (leftForks_DNAscent_forkSense.bed, leftForksStressed_DNAscent_forkSense.bed, rightForks_DNAscent_forkSense.bed, rightForksStressed_DNAscent_forkSense.bed) with our fork calls,
+* terminations_DNAscent_forkSense.bed (with our termination calls),
+* leftForks_DNAscent_forkSense.bed (with our leftward-moving fork calls), 
+* rightForks_DNAscent_forkSense.bed (with our rightward-moving fork calls), 
+* BrdU_DNAscent_forkSense.bed (with our BrdU analogue tracks),
+* EdU_DNAscent_forkSense.bed (with our EdU analogue tracks),
 * output.forkSense. 
 
-We can load ``detect_output.bam`` as well as the above bed files files directly into IGV to see where origins, forks, and terminiations were called in the genome.
+We can load ``detect_output.bam`` as well as the above bed files files directly into IGV to see where origins, forks, analogue tracks, and terminiations were called in the genome.
+
+If we've used an agent that targets the DNA damage response, or if we're working in a cell line that's prone to replication stress, we might want to see there are elevated levels of DNA breaks at replication forks. We can do this by passing the results of ``DNAscent detect`` and ``DNAscent forkSense`` to ``DNAscent seeBreaks":
+
+.. code-block:: console
+
+   DNAscent seeBreaks -d detect_output.bam -o output.seeBreaks --left leftForks_DNAscent_forkSense.bed --right rightForks_DNAscent_forkSense.bed --analogue EdU_DNAscent_forkSense.bed
+
+The resulting file, ``output.seeBreaks``, will contain statistics on the number of analogue tracks that terminate at read ends compared to the number that would be expected by chance. In particular, it includes a 95% confidence interval on the difference between observed and expected values. We would generally say breaking is elevated if zero lies outside this interval. You can see an example in the :ref:`cookbook` of how to parse and plot the distributions of expected and observed values.
 
 Barcoding
 ---------

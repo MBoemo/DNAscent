@@ -11,7 +11,7 @@ We recommend running DNAscent using one of our supported Singularity images. The
 
 .. code-block:: console
 
-   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.0.3
+   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.1.1
    
 You can run DNAscent from the image by passing the desired executable and arguments. The following example shows how to run DNAscent :ref:`detect`:
 
@@ -34,7 +34,7 @@ The DNAscent directory will appear in your current directory. Switch to the late
 .. code-block:: console
 
    cd DNAscent
-   git checkout 4.0.3
+   git checkout 4.1.1
    make
 
 This will put the DNAscent executable into the DNAscent/bin directory. Compilation requires a version of gcc that supports C++14, and a typical compile time for DNAscent and all of its dependencies is 5-7 minutes.
