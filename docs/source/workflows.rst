@@ -77,7 +77,7 @@ Note that we're assuming the CUDA libraries for the GPU have been set up properl
 
 When ``DNAscent detect`` is finished, it will should put a file in modbam format called ``detect_output.bam`` in the current directory. 
 
-Lastly, we can run ``DNAscent forkSense`` on the output of ``DNAscent detect`` to measure replication fork movement.  Suppose that in our experimental protocol, we pulsed BrdU first followed by EdU.  Let's run it on four threads and specify that we want it to keep track of replication origins, forks, termination sites, and analogue tracks:
+We can run ``DNAscent forkSense`` on the output of ``DNAscent detect`` to measure replication fork movement.  Suppose that in our experimental protocol, we pulsed BrdU first followed by EdU.  Let's run it on four threads and specify that we want it to keep track of replication origins, forks, termination sites, and analogue tracks:
 
 .. code-block:: console
 
