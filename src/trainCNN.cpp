@@ -31,7 +31,7 @@
 #include "reads.h"
 #include "../htslib/htslib/hts.h"
 #include "../htslib/htslib/sam.h"
-
+#include <mutex>
 
 static const char *help=
 "trainCNN: DNAscent executable that generates HMM or CNN bootstrapped calls to build training data for DNAscent training.\n"
@@ -94,10 +94,8 @@ Arguments parseDataArguments( int argc, char** argv ){
 	args.minL = 100;
 	args.capReads = false;
 	args.maxReads = 0;
-	args.useHMM = false;
 
 	/*parse the command line arguments */
-
 	for ( int i = 1; i < argc; ){
 
 		std::string flag( argv[ i ] );
@@ -245,7 +243,16 @@ int data_main( int argc, char** argv ){
 	bam_hdr_t *bam_hdr_cr = sam_hdr_read(bam_fh_cr);
 	std::cout << "ok." << std::endl;
 
-	/*initialise progress */
+	//open a log file
+	std::cout << "Opening log file... ";
+	std::string logFilename = strip_extension(args.outputFilename);
+	logFilename += ".trainCNN.log";
+	std::ofstream logfile(logFilename);
+	if (logfile.is_open()) std::cout << "ok." << std::endl;
+	else throw IOerror(logFilename);
+	std::mutex mtx;
+
+	//initialise progress
 	int numOfRecords = 0, prog = 0, failed = 0;
 	countRecords( bam_fh_cr, bam_hdr_cr, numOfRecords, args.minQ, args.minL );
 	progressBar pb(numOfRecords,true);
@@ -290,30 +297,14 @@ int data_main( int argc, char** argv ){
 			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,session,inputOps) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
-				//use the fit pore model for HMM calling
-				//bool useFitPoreModel = true;
-				//normaliseEvents(r, useFitPoreModel);
-				//if ( r.eventAlignment.size() == 0 ){
-				//	
-				//	failed++;
-				//	prog++;
-				//	continue;
-				//}
-				//HMMdetection hmm_likelihood = llAcrossRead(r, 12);
-				
-				//clear the alignments, scalings, and signals from the read and re-align using cannonical pore model
-				//r.clean();
-				//useFitPoreModel = false;	
-				//normaliseEvents(r, useFitPoreModel);							
-				//if ( r.eventAlignment.size() == 0 ){
-
-				//	failed++;
-				//	prog++;
-				//	continue;
-				//}
-				//std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, hmm_likelihood.refposToLikelihood);
-
 				DNAscent::read r(buffer[i], bam_hdr, readID2path, reference);
+
+				if (r.missing){
+
+					std::cerr << "ReadID " << r.readID << " missing from index. Skipping." << std::endl;
+					prog++;
+					continue;
+				}
 
 				const char *ext = get_ext(r.filename.c_str());
 				
@@ -324,7 +315,6 @@ int data_main( int argc, char** argv ){
 					fast5_getSignal(r);
 				}
 
-				//DNN
 				bool useFitPoreModel = false;	
 				normaliseEvents(r, useFitPoreModel);							
 				if ( (r.eventAlignment).size() == 0 ){
@@ -337,8 +327,9 @@ int data_main( int argc, char** argv ){
 				//do a first event alignment to make DNN input tensors
 				eventalign( r, Pore_Substrate_Config.windowLength_align);
 				
-				//run DNN analogue predictions
-				runCNN(r,session,inputOps, true);
+				//run analogue prediction
+				if (args.useHMM) llAcrossRead(r, 12);
+				else runCNN(r,session,inputOps, true);
 				
 				//clear the read and re-annotate wtih the DNN analogue predictions
 				eventalign(r, Pore_Substrate_Config.windowLength_align);				

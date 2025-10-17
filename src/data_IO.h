@@ -31,8 +31,6 @@ std::vector< std::pair< double, double > > import_poreModel_staticStdv( std::str
 std::vector< std::pair< double, double > > import_poreModel_fitStdv( std::string, unsigned int);
 std::string getExePath(void);
 std::string getGitCommit(void);
-std::string writeDetectHeader(std::string, std::string, std::string, int, bool, unsigned int, unsigned int, bool);
-std::string writeRegionsHeader(std::string, double, bool, unsigned int, unsigned int, double, double);
 unsigned int kmer2index(std::string &, unsigned int);
 void parseIndex( std::string, std::map< std::string, IndexEntry > & );
 

@@ -150,3 +150,46 @@ The following example pulls out stressed forks from the fork bed file.
 	   f_out.close()
    
 
+The following takes the output of ``DNAscent seeBreaks`` and creates histograms of the expected and observed number of analogue tracks at read ends.
+
+.. code-block:: python
+
+	import matplotlib.pyplot as plt
+	import sys
+
+	expected = []
+	observed = []
+
+	# Usage: python plotSeeBreaks.py output.seeBreaks
+	f = open(sys.argv[1],'r')
+
+	parsing_expected = False
+	parsing_observed = False
+
+	for line in f:
+		line = line.strip()
+		if line.startswith(">ExpectedReadEndFractions:"):
+			parsing_expected = True
+			parsing_observed = False
+			continue
+		elif line.startswith(">ObservedReadEndFractions:"):
+			parsing_expected = False
+			parsing_observed = True
+			continue
+		elif line.startswith("#") or not line:
+			continue
+
+		value = float(line)
+		if parsing_expected:
+			expected.append(value)
+		elif parsing_observed:
+			observed.append(value)
+
+	plt.figure()
+	plt.hist(expected, bins=30, alpha=0.5, label="Expected", color="skyblue", edgecolor="black")
+	plt.hist(observed, bins=30, alpha=0.5, label="Observed", color="salmon", edgecolor="black")
+	plt.xlabel("Fraction of Analogue Tracks at Read Ends")
+	plt.ylabel("Count")
+	plt.legend(framealpha=0.3)
+	plt.savefig('seeBreaks.pdf')
+	plt.close()

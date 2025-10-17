@@ -30,6 +30,8 @@
 #include "error_handling.h"
 #include "config.h"
 #include <omp.h>
+#include <mutex>
+
 
 
 static const char *help=
@@ -191,6 +193,45 @@ Arguments parseDetectArguments( int argc, char** argv ){
 }
 
 
+std::string writeDetectHeader(std::string alignmentFilename,
+		                std::string refFilename,
+				std::string indexFn,
+				int threads,
+				bool useHMM,
+				unsigned int quality,
+				unsigned int length,
+				bool useGPU){
+
+	std::string detMode = "CNN";
+
+	std::string compMode;
+	if (useGPU) compMode = "GPU";
+	else compMode = "CPU";
+
+	auto t = std::time(nullptr);
+	auto tm = *std::localtime(&t);
+	std::ostringstream oss;
+	oss << std::put_time(&tm, "%d/%m/%Y %H:%M:%S");
+	auto str = oss.str();
+
+	std::string out;
+	out += "#Alignment " + alignmentFilename + "\n";
+	out += "#Genome " + refFilename + "\n";
+	out += "#Index " + indexFn + "\n";
+	out += "#Threads " + std::to_string(threads) + "\n";
+	out += "#Compute " + compMode + "\n";
+	out += "#Mode " + detMode + "\n";
+	out += "#MappingQuality " + std::to_string(quality) + "\n";
+	out += "#MappingLength " + std::to_string(length) + "\n";
+	out += "#SystemStartTime " + str + "\n";
+	out += "#Software " + std::string(getExePath()) + "\n";
+	out += "#Version " + std::string(VERSION) + "\n";
+	out += "#Commit " + std::string(getGitCommit()) + "\n";
+
+	return out;
+}
+
+
 double sequenceProbability( std::vector <double> &observations,
 				std::string &sequence,
 				size_t windowSize,
@@ -349,11 +390,7 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, int windowLength ){
 }
 
 
-HMMdetection llAcrossRead( DNAscent::read &r, unsigned int windowLength){
-                          
-	HMMdetection hmm_out;
-
-	std::map<unsigned int, double> refPos2likelihood;
+void llAcrossRead( DNAscent::read &r, unsigned int windowLength){
 
 	unsigned int k = Pore_Substrate_Config.kmer_len;
 
@@ -373,7 +410,7 @@ HMMdetection llAcrossRead( DNAscent::read &r, unsigned int windowLength){
 		readHead = 0;
 	}
 
-	hmm_out.stdout += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
+	r.humanReadable_detectOut = ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 
@@ -488,9 +525,9 @@ HMMdetection llAcrossRead( DNAscent::read &r, unsigned int windowLength){
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
 		assert(posOnQuery < (r.basecall).size());
-		std::string kmerQuery = (r.basecall).substr(posOnQuery, k);
+		std::string kmerQuery = (r.basecall).substr(posOnQuery-k/2, k);
 		assert(posOnRef < (r.referenceSeqMappedTo).size());		
-		std::string kmerRef = (r.referenceSeqMappedTo).substr(posOnRef, k);
+		std::string kmerRef = (r.referenceSeqMappedTo).substr(posOnRef-k/2, k);
 		if ( r.isReverse ){
 
 			globalPosOnRef = r.refEnd - posOnRef - 1;
@@ -530,21 +567,10 @@ std::cerr << std::endl;
 std::cerr << logLikelihoodRatio << std::endl;
 #endif
 
-		hmm_out.stdout += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
-
-		//adjust reference position so that we make the call at the middle of the kmer
-		if ( r.isReverse ){
-
-			globalPosOnRef += (int) k/2;
-		}
-		else{
-
-			globalPosOnRef -= (int) k/2;
-		}
+		r.humanReadable_detectOut += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
 		
-		hmm_out.refposToLikelihood[globalPosOnRef] = std::make_pair(logLikelihoodRatio,0.);
+		r.refCoordToCalls[globalPosOnRef] = std::make_pair(logLikelihoodRatio,0.);
 	}
-	return hmm_out;
 }
 
 
@@ -771,6 +797,15 @@ int detect_main( int argc, char** argv ){
 		writer -> writeHeader_sam(bam_hdr_cr);
 	}
 
+	//open a log file
+	std::cout << "Opening log file... ";
+	std::string logFilename = strip_extension(args.outputFilename);
+	logFilename += ".detect.log";
+	std::ofstream logfile(logFilename);
+	if (logfile.is_open()) std::cout << "ok." << std::endl;
+	else throw IOerror(logFilename);
+	std::mutex mtx;
+
 	//initialise progress
 	int numOfRecords = 0, prog = 0, failed = 0;
 	countRecords( bam_fh_cr, bam_hdr_cr, numOfRecords, args.minQ, args.minL );
@@ -818,6 +853,13 @@ int detect_main( int argc, char** argv ){
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				DNAscent::read r(buffer[i], bam_hdr, readID2path, reference);
+				if (r.missing){
+
+					std::lock_guard<std::mutex> lock(mtx);
+					logfile << "ReadID " << r.readID << " missing from index. Skipping." << std::endl;
+					prog++;
+					continue;
+				}
 
 				const char *ext = get_ext(r.filename.c_str());
 
@@ -827,10 +869,6 @@ int detect_main( int argc, char** argv ){
 				else if (strcmp(ext,"fast5") == 0){
 					fast5_getSignal(r);
 				}
-
-				//for HMM
-				//bool useFitPoreModel = true;
-				//normaliseEvents(r, useFitPoreModel);
 
 				//for DNN
 				bool useFitPoreModel = false;
@@ -843,18 +881,19 @@ int detect_main( int argc, char** argv ){
 					continue;
 				}
 
-				//HMMdetection hmm_likelihood = llAcrossRead(r, 12);
-				//readOut = hmm_likelihood.stdout;
+				if (args.useHMM) llAcrossRead(r, 12);
+				else{
 				
-				eventalign( r, Pore_Substrate_Config.windowLength_align);
+					eventalign( r, Pore_Substrate_Config.windowLength_align);
 
-				if (not r.QCpassed){
-					failed++;
-					prog++;
-					continue;
+					if (not r.QCpassed){
+						failed++;
+						prog++;
+						continue;
+					}
+
+					runCNN(r,session,inputOps,args.humanReadable);
 				}
-
-				runCNN(r,session,inputOps,args.humanReadable);
 
 				prog++;
 				pb.displayProgress( prog, failed, failedEvents );
@@ -875,5 +914,6 @@ int detect_main( int argc, char** argv ){
 	writer -> close();
 	std::cout << std::endl;
 	pod5_terminate();
+	logfile.close();
 	return 0;
 }

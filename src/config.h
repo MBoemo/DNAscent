@@ -38,7 +38,7 @@ class Global_Config{
 		HMM_TransitionProbs HMM_config;
 		AdaptiveBanded_Params AdaptiveBanded_config;
 
-		AdaptiveBanded_Params AdaptiveBanded_Params_DNA_R10{-2.0, 5, 100}; //DNA - R10.4.1
+		AdaptiveBanded_Params AdaptiveBanded_Params_DNA_R10{-6.0, 5, 100}; //DNA - R10.4.1
 		HMM_TransitionProbs HMM_TransitionProbs_DNA_R10{0.3, 0.7, 0.999, 0.0025, 0.001, 0.001}; //DNA - R10.4.1
 
 		void configure_DNA_R10(void){

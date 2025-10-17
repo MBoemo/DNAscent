@@ -17,6 +17,7 @@
 #include "../alignment.h"
 #include "../trainGMM.h"
 #include "../config.h"
+#include "../seeBreaks.h"
 
 
 int show_options_DNAscent( int, char** );
@@ -27,12 +28,14 @@ static std::map< std::string, std::function< int( int, char** ) > > executables 
 	{"detect", 	detect_main},
 	{"forkSense", 	sense_main},
 	{"align", 	align_main},
+	{"seeBreaks", seeBreaks_main},
 	{"trainCNN", 	data_main},
 	{"trainGMM", 	train_main},
 	{"--help",	show_options_DNAscent},
 	{"-h",		show_options_DNAscent},
 	{"-v",		show_version},
 	{"--version",	show_version}
+	
 };
 
 

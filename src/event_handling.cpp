@@ -31,6 +31,7 @@ PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vec
 	
 	//for short reads, exit without doing refinement of scaling parameters	
 	if (kmer_ranks.size() < minLength) return s;
+	if (kmer_ranks.size() < 1000) trimSize = 5;
 
 	size_t effectiveSize = signals.size() - 2*trimSize;
 	
@@ -420,8 +421,8 @@ std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple
 	double avg_log_emission = sum_emission / n_aligned_events;
 	bool spanned = r.eventAlignment.front().second == 0 && r.eventAlignment.back().second == n_kmers - 1;
     
-    	//Testing - print QCs
-    	//std::cout << avg_log_emission << "\t" << spanned << "\t" << max_gap << "\t" << r.isReverse << std::endl;
+    //Testing - print QCs
+	//std::cout << avg_log_emission << "\t" << spanned << "\t" << max_gap << "\t" << r.isReverse << std::endl;
     
 	r.alignmentQCs.recordQCs(avg_log_emission, spanned, max_gap);
 	

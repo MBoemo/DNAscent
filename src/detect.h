@@ -18,14 +18,6 @@
 #include "../htslib/htslib/hts.h"
 #include "../htslib/htslib/sam.h"
 
-struct HMMdetection{
-
-	public:
-		std::map<unsigned int, std::pair<double,double>> refposToLikelihood;
-		std::string stdout;
-};
-
-
 class OutputWriter {
 	public:
 		virtual ~OutputWriter() {}
@@ -126,6 +118,6 @@ int detect_main( int argc, char** argv );
 std::vector< unsigned int > getPOIs( std::string &, int );
 double sequenceProbability( std::vector <double> &, std::string &, size_t, bool, PoreParameters, size_t, size_t );
 void runCNN(DNAscent::read & , std::shared_ptr<ModelSession> , std::vector<TF_Output>, bool );
-HMMdetection llAcrossRead( DNAscent::read &, unsigned int );
+void llAcrossRead( DNAscent::read &, unsigned int );
 
 #endif
