@@ -46,9 +46,16 @@
 double MODEL_RES = 10.; // 100 bp resolution
 
 static const char *help=
-"IOD: DNAscent executable that estimates inter-origin distance.\n"
-"To run DNAscent IOD, do:\n"
-"   DNAscent IOD -l /path/to/leftForks_DNAscent_forksense.bed -r /path/to/rightForks_DNAscent_forksense.bed -a /path/to/BrdU_DNAscent_forkSense.bed -d /path/to/detectOutput.bam -o /path/to/output.IOD \n"
+"meIODy: DNAscent executable that estimates inter-origin distance.\n"
+"To run DNAscent meIODy, do:\n"
+"   DNAscent meIODy -l /path/to/leftForks_DNAscent_forksense.bed \
+                    -r /path/to/rightForks_DNAscent_forksense.bed \
+					--origin /path/to/origins_DNAscent_forkSense.bed \
+					--termination /path/to/terminations_DNAscent_forkSense.bed \
+					-d /path/to/detectOutput.bam -o /path/to/output.IOD \
+					--tPulse1 5. \
+					--tPulse2 10. \
+					-o /path/to/output.IOD \n"
 "Required arguments are:\n"
 "  -l,--left                 path to leftForks file from forkSense detect with `bed` extension,\n"
 "  -r,--right                path to rightFork file from forkSense detect with `bed` extension,\n"
@@ -454,8 +461,8 @@ std::pair<std::vector<ForkCall>, std::vector<ForkCall>> parseForkCalls(
 	int n = std::min(readEnd + 1, static_cast<int>(result.leftForkTimes.size()));
 
 	// Minimum length of EdU and BrdU tracks that would be realistically and reliably detected by the forkSense filters
-	int BrdUReqLength = 1*MODEL_RES; 
-	int EdUReqLength = 1*MODEL_RES;
+	int BrdUReqLength = 2*MODEL_RES; 
+	int EdUReqLength = 2*MODEL_RES;
 
 	// Parse left fork tracks (direction = -1)
 	// Contiguous segments where leftForkTimes >= 0 each correspond to one left fork
@@ -495,7 +502,7 @@ std::pair<std::vector<ForkCall>, std::vector<ForkCall>> parseForkCalls(
 		int BrdULength = (brduStart != -1 && brduEnd != -1) ? std::abs(brduEnd - brduStart + 1) : 0;
 
 		// check that BrdU track extends at least 2 kb from read start, otherwise this would likely be filtered out by DNAscent's read end QC
-		if (eduStart != -1 && brduStart != -1 && EdULength >= EdUReqLength && BrdULength >= BrdUReqLength && std::abs(eduStart - readEnd) >= 2*MODEL_RES && std::abs(brduEnd- readStart) >= 2*MODEL_RES) { 
+		if (eduStart != -1 && brduStart != -1 && EdULength >= EdUReqLength && BrdULength >= BrdUReqLength && (std::abs(eduStart - readEnd) >= 2*MODEL_RES || std::abs(brduEnd- readStart) >= 2*MODEL_RES)) { 
 			ForkCall call;
 			call.EdU_start = eduStart;
 			call.EdU_end = eduEnd;
@@ -542,7 +549,7 @@ std::pair<std::vector<ForkCall>, std::vector<ForkCall>> parseForkCalls(
 		int EdULength = (eduStart != -1 && eduEnd != -1) ? std::abs(eduEnd - eduStart + 1) : 0;
 		int BrdULength = (brduStart != -1 && brduEnd != -1) ? std::abs(brduEnd - brduStart + 1) : 0;
 
-		if (eduStart != -1 && brduStart != -1 && EdULength >= EdUReqLength && BrdULength >= BrdUReqLength && std::abs(eduStart - readStart) >= 2*MODEL_RES && std::abs(brduEnd- readEnd) >= 2*MODEL_RES) {
+		if (eduStart != -1 && brduStart != -1 && EdULength >= EdUReqLength && BrdULength >= BrdUReqLength && (std::abs(eduStart - readStart) >= 2*MODEL_RES || std::abs(brduEnd- readEnd) >= 2*MODEL_RES)) {
 			ForkCall call;
 			call.EdU_start = eduStart;
 			call.EdU_end = eduEnd;
@@ -704,8 +711,10 @@ std::pair<std::vector<double>, std::vector<double>> calcSingleForkDistances(
 				int pulse3Prime = std::stoi(columns[2]);
 				int read5Prime = std::stoi(columns[4]);
 				int read3Prime = std::stoi(columns[5]);
-				if (std::abs(pulse3Prime - read3Prime) < 2000) continue;
-				if (std::abs(pulse5Prime - read5Prime) < 2000) continue;
+
+				// We're taking the max distance anyway, so both of these need to fail to throw a read out
+				if (std::abs(pulse3Prime - read3Prime) < 2000 and std::abs(pulse5Prime - read5Prime) < 2000) continue;
+
 				readForks[readID].push_back({pulse5Prime, pulse3Prime, -1, read5Prime, read3Prime});
 			}
 		}
@@ -727,8 +736,10 @@ std::pair<std::vector<double>, std::vector<double>> calcSingleForkDistances(
 				int pulse3Prime = std::stoi(columns[2]);
 				int read5Prime = std::stoi(columns[4]);
 				int read3Prime = std::stoi(columns[5]);
-				if (std::abs(pulse3Prime - read3Prime) < 2000) continue;
-				if (std::abs(pulse5Prime - read5Prime) < 2000) continue;
+
+				// We're taking the max distance anyway, so both of these need to fail to throw a read out
+				if (std::abs(pulse3Prime - read3Prime) < 2000 and std::abs(pulse5Prime - read5Prime) < 2000) continue;
+
 				readForks[readID].push_back({pulse5Prime, pulse3Prime, +1, read5Prime, read3Prime});
 			}
 		}
@@ -831,7 +842,7 @@ int iod_main(int argc, char** argv) {
 	auto dataDists = calcSingleForkDistances(args.lForkInput, args.rForkInput);
 	std::vector<double> data_behindDists = dataDists.first;
 	std::vector<double> data_aheadDists = dataDists.second;
-	std::cout << "Single-fork reads: " << data_behindDists.size() << " distances" << std::endl;
+	std::cout << "Total distance measurements: " << data_behindDists.size() << std::endl;
 
 	// Compute max(behind, ahead) for each read — the less-truncated flank
 	std::vector<double> data_maxDists(data_behindDists.size());
@@ -988,7 +999,6 @@ int iod_main(int argc, char** argv) {
 				  << "fr = " << std::scientific << std::setprecision(3) << std::setw(9) << fr
 				  << "  W = " << std::fixed << std::setprecision(3) << std::setw(5) << w << std::endl;
 	}
-	std::cerr << "Landscape has " << landscapeSimDists.size() << " evaluation points." << std::endl;
 
 	// Determine the point estimate from the landscape: sort data once and
 	// scan all landscape entries with the same procedure the bootstrap uses,
@@ -1044,8 +1054,6 @@ int iod_main(int argc, char** argv) {
 		return p;
 	};
 
-	SmoothParams sp1 = computeSmoothParams(data_behindDists);
-	SmoothParams sp2 = computeSmoothParams(data_aheadDists);
 	SmoothParams spMax = computeSmoothParams(data_maxDists);
 
 	for (int b = 0; b < nBootstrap; b++) {
@@ -1146,26 +1154,27 @@ int iod_main(int argc, char** argv) {
 	outFile << "#Software " << std::string(getExePath()) << "\n";
 	outFile << "#Version " << std::string(VERSION) << "\n";
 	outFile << "#Commit " << std::string(getGitCommit()) << "\n";
-	outFile << "#MeanForkSpeed " << std::fixed << std::setprecision(3) << avgForkSpeed << "\n";
+	outFile << "#nForks " << data_behindDists.size() << "\n";
+	outFile << "#MeanForkSpeed " << std::fixed << std::setprecision(3) << avgForkSpeed << " kb/min\n";
 	outFile << "#OptimalFiringRate " << std::scientific << std::setprecision(6) << bestFr << "\n";
 	outFile << "#WassersteinDistance " << std::fixed << std::setprecision(6) << bestW << "\n";
-	outFile << "#MedianIOD " << std::fixed << std::setprecision(1) << bestIOD << "\n";
-	outFile << "#95ConfidenceInterval " << std::fixed << std::setprecision(1) << ciLow << " " << ciHigh << "\n";
+	outFile << "#MedianIOD " << std::fixed << std::setprecision(1) << bestIOD << " kb\n";
+	outFile << "#95ConfidenceInterval " << std::fixed << std::setprecision(1) << ciLow << " kb , " << ciHigh << " kb\n";
 	outFile << ">DataBehindDistances:\n";
 	for (const auto& val : data_behindDists) {
-		outFile << val << "\n";
+		if (val >= 2.0) outFile << val << "\n";
 	}
 	outFile << ">SimBehindDistances:\n";
 	for (const auto& val : bestSimDist.first) {
-		outFile << val << "\n";
+		if (val >= 2.0) outFile << val << "\n";
 	}
 	outFile << ">DataAheadDistances:\n";
 	for (const auto& val : data_aheadDists) {
-		outFile << val << "\n";
+		if (val >= 2.0) outFile << val << "\n";
 	}
 	outFile << ">SimAheadDistances:\n";
 	for (const auto& val : bestSimDist.second) {
-		outFile << val << "\n";
+		if (val >= 2.0) outFile << val << "\n";
 	}
 
 	// Write landscape from points collected during the search (sorted by fr)

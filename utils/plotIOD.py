@@ -38,7 +38,7 @@ def main():
     filepath = sys.argv[1]
     headers, sections = parse_iod_output(filepath)
 
-    median_iod = float(headers.get('MedianIOD', 0))
+    median_iod = float(headers.get('MedianIOD', '0').split()[0])
     ci = headers.get('95ConfidenceInterval', None)
 
     data_behind = np.array([float(x) for x in sections.get('DataBehindDistances', [])])
@@ -75,7 +75,7 @@ def main():
     ax.set_title('Objective vs IOD')
     ax.axvline(median_iod, color='grey', linestyle='--', linewidth=0.8, label=f'Best IOD = {median_iod:.0f} kb')
     if ci:
-        lo, hi = [float(x) for x in ci.split()]
+        lo, hi = [float(x) for x in ci.split() if x.replace('.','',1).replace('-','',1).isdigit()]
         ax.axvspan(lo, hi, alpha=0.15, color='grey', label=f'95% CI [{lo:.0f}, {hi:.0f}] kb')
     ax.legend(fontsize=8)
 
