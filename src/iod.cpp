@@ -48,14 +48,14 @@ double MODEL_RES = 10.; // 100 bp resolution
 static const char *help=
 "meIODy: DNAscent executable that estimates inter-origin distance.\n"
 "To run DNAscent meIODy, do:\n"
-"   DNAscent meIODy -l /path/to/leftForks_DNAscent_forksense.bed \
-                    -r /path/to/rightForks_DNAscent_forksense.bed \
-					--origin /path/to/origins_DNAscent_forkSense.bed \
-					--termination /path/to/terminations_DNAscent_forkSense.bed \
-					-d /path/to/detectOutput.bam -o /path/to/output.IOD \
-					--tPulse1 5. \
-					--tPulse2 10. \
-					-o /path/to/output.IOD \n"
+"   DNAscent meIODy -l /path/to/leftForks_DNAscent_forksense.bed \n"
+"                   -r /path/to/rightForks_DNAscent_forksense.bed \n"
+"                   --origin /path/to/origins_DNAscent_forkSense.bed \n"
+"                   --termination /path/to/terminations_DNAscent_forkSense.bed\n"
+"                   -d /path/to/detectOutput.bam -o /path/to/output.IOD\n"
+"                   --tPulse1 5. \n"
+"                   --tPulse2 10. \n"
+"                   -o /path/to/output.IOD \n"
 "Required arguments are:\n"
 "  -l,--left                 path to leftForks file from forkSense detect with `bed` extension,\n"
 "  -r,--right                path to rightFork file from forkSense detect with `bed` extension,\n"
