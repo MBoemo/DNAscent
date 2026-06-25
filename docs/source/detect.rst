@@ -30,6 +30,12 @@ The path to the reference genome used in the alignment should be passed using th
 
 The number of threads is specified using the ``-t`` flag. ``DNAscent detect`` multithreads quite well by analysing a separate read on each thread so multithreading is recommended. By default, the signal alignments and base analogue predictions are run on CPUs.  If a CUDA-compatible GPU device is specified using the ``--GPU`` flag, then the signal alignments will be run on CPUs using the threads specified with ``-t`` and the base analogue prediction will be run on the GPU. Your GPU device number can be found with the command ``nvidia-smi``. GPU use requires that CUDA and cuDNN are set up correctly on your system and that these libraries can be accessed. If they're not, DNAscent will default back to using CPUs.
 
+When benchmarking different TensorFlow runtimes on GPUs, the following optional environment variables can be used to test runtime-level performance tuning without rebuilding DNAscent:
+
+* ``DNASCENT_TF_XLA=1`` enables TensorFlow XLA auto-jit.
+* ``DNASCENT_TF_CUDA_MALLOC_ASYNC=1`` requests TensorFlow's ``cuda_malloc_async`` allocator.
+* By default, GPU inference calls are serialized to reduce thread contention on a single TensorFlow session. Set ``DNASCENT_GPU_CONCURRENT=1`` to allow concurrent GPU inference calls from multiple threads.
+
 It is sometimes useful to only run ``DNAscent detect`` on reads that exceed a certain mapping quality or length threshold (as measured by the subsequence of the contig that the read maps to).  In order to do this without having to filter the bam file, DNAscent provides the ``-l`` and ``-q`` flags.  Any read in the bam file with a reference length lower than the value specificed with ``-l`` or a mapping quality lower than the value specified with ``-q`` will be ignored.
 
 Before calling BrdU and EdU in a read, ``DNAscent detect`` must first perform a fast event alignment (see https://www.biorxiv.org/content/10.1101/130633v2 for more details).  Quality control checks are performed on these alignments, and if they're not passed, then the read fails and is ignored.  Hence, the number of reads in the output file will be slightly lower than the number of input reads.  Typical failure rates are about 5-10%, although this will vary slightly depending on the read length, the BrdU substitution rate, and the genome sequenced.

@@ -3,7 +3,7 @@
 Release Notes
 ===============================
 
-v4.2.1
+v4.2.2
 -----------------
 
 * Added new ``DNAscent meIODy`` executable which determines inter-origin distance from DNAscent data.

@@ -9,7 +9,7 @@
 project = 'DNAscent'
 copyright = '2026, Michael A. Boemo'
 author = 'Michael A. Boemo'
-release = '4.2.1'
+release = '4.2.2'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

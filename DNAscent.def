@@ -2,7 +2,7 @@ Bootstrap: docker
 From: nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04
 
 %labels
-    Version v4.0.3
+    Version v4.2.1
 
 %help
     DNAscent is software for detecting regions of BrdU and EdU incorporation in Oxford Nanopore reads. 

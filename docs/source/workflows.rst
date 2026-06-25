@@ -28,6 +28,12 @@ Alternatively, you can download and compile DNAscent:
    make
    cd ..
 
+If you are compiling against a newer TensorFlow C runtime published under the versioned archive layout, you can instead run:
+
+.. code-block:: console
+
+   make TF_URL_LAYOUT=versions TF_VERSION=<version> TF_VARIANT=<gpu|cpu>
+
 Let's index the run:
 
 .. code-block:: console

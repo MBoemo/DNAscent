@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <math.h>
 #include <stdlib.h>
+#include <cstring>
 #include <limits>
 #include "detect.h"
 #include "common.h"
@@ -31,6 +32,15 @@
 #include "config.h"
 #include <omp.h>
 #include <mutex>
+
+
+static bool env_enabled(const char *name){
+	const char *value = std::getenv(name);
+	if (value == nullptr){
+		return false;
+	}
+	return std::strcmp(value, "1") == 0 || std::strcmp(value, "true") == 0 || std::strcmp(value, "TRUE") == 0;
+}
 
 
 
@@ -574,7 +584,7 @@ std::cerr << logLikelihoodRatio << std::endl;
 }
 
 
-void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, std::vector<TF_Output> inputOps, bool humanReadable){
+void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, const std::vector<TF_Output> &inputOps, bool humanReadable){
 
 	int NumInputs = 3;
 	int NumOutputs = 1;
@@ -592,9 +602,7 @@ void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, std::vecto
 	assert(sizeSequence > 0);
 
 	float *tmp_coreSequenceArray = (float *)malloc(sizeSequence*sizeof(float));
-	for(size_t i = 0; i < sizeSequence; i++){
-		tmp_coreSequenceArray[i] = unformattedCoreSequenceTensor[i];
-	}
+	std::memcpy(tmp_coreSequenceArray, unformattedCoreSequenceTensor.data(), sizeSequence*sizeof(float));
 
 	TF_Tensor* CoreSequenceInputTensor = TF_NewTensor(TF_FLOAT,
 		input_sequenceShape.values,
@@ -610,9 +618,7 @@ void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, std::vecto
 	std::vector<float> unformattedResidualSequenceTensor = r.makeResidualSequenceTensor();
 
 	float *tmp_resSequenceArray = (float *)malloc(sizeSequence*sizeof(float));
-	for(size_t i = 0; i < sizeSequence; i++){
-		tmp_resSequenceArray[i] = unformattedResidualSequenceTensor[i];
-	}
+	std::memcpy(tmp_resSequenceArray, unformattedResidualSequenceTensor.data(), sizeSequence*sizeof(float));
 
 	TF_Tensor* ResidualSequenceInputTensor = TF_NewTensor(TF_FLOAT,
 		input_sequenceShape.values,
@@ -634,9 +640,7 @@ void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, std::vecto
 	assert(sizeSignal > 0);
 
 	float *tmp_signalArray = (float *)malloc(sizeSignal*sizeof(float));
-	for(size_t i = 0; i < sizeSignal; i++){
-		tmp_signalArray[i] = unformattedSignalTensor[i];
-	}
+	std::memcpy(tmp_signalArray, unformattedSignalTensor.data(), sizeSignal*sizeof(float));
 
 	TF_Tensor* SignalInputTensor = TF_NewTensor(TF_FLOAT,
 		input_signalShape.values,
@@ -805,6 +809,8 @@ int detect_main( int argc, char** argv ){
 	if (logfile.is_open()) std::cout << "ok." << std::endl;
 	else throw IOerror(logFilename);
 	std::mutex mtx;
+	std::mutex gpu_inference_mtx;
+	bool serialize_gpu_inference = args.useGPU and not env_enabled("DNASCENT_GPU_CONCURRENT");
 
 	//initialise progress
 	int numOfRecords = 0, prog = 0, failed = 0;
@@ -849,7 +855,7 @@ int detect_main( int argc, char** argv ){
 		//if we've filled up the buffer with reads, compute them in parallel
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,session,inputOps,writer) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,session,inputOps,writer,serialize_gpu_inference,gpu_inference_mtx) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				DNAscent::read r(buffer[i], bam_hdr, readID2path, reference);
@@ -898,7 +904,13 @@ int detect_main( int argc, char** argv ){
 						continue;
 					}
 
-					runCNN(r,session,inputOps,args.humanReadable);
+					if (serialize_gpu_inference){
+						std::lock_guard<std::mutex> lock(gpu_inference_mtx);
+						runCNN(r,session,inputOps,args.humanReadable);
+					}
+					else{
+						runCNN(r,session,inputOps,args.humanReadable);
+					}
 				}
 
 				prog++;

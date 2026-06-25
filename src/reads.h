@@ -150,6 +150,7 @@ class AlignedPosition{
 			assert(kmer.substr(0,1) == "A" || kmer.substr(0,1) == "T" || kmer.substr(0,1) == "G" || kmer.substr(0,1) == "C");
 			
 			std::vector<float> padded_signal;
+			padded_signal.reserve(RAWDEPTH);
 
 			for (size_t i = 0; i < signal.size(); i++){
 
@@ -169,6 +170,19 @@ class AlignedPosition{
 
 			assert(padded_signal.size() == RAWDEPTH);
 			return padded_signal;
+		}
+		void writeSignalFeature(float *dst) const {
+
+			assert(signal.size() > 0);
+			assert(kmer.substr(0,1) == "A" || kmer.substr(0,1) == "T" || kmer.substr(0,1) == "G" || kmer.substr(0,1) == "C");
+
+			size_t i = 0;
+			for (; i < signal.size() and i < RAWDEPTH; i++){
+				dst[i] = static_cast<float>(signal[i]);
+			}
+			for (; i < RAWDEPTH; i++){
+				dst[i] = 0.0f;
+			}
 		}
 };
 
@@ -310,23 +324,21 @@ namespace DNAscent {
 			std::vector<float> makeSignalTensor(void){
 
 				assert(strand == "fwd" || strand == "rev");
-				std::vector<float> tensor;
-				tensor.reserve(3 * refCoordToAP.size());
+				std::vector<float> tensor(refCoordToAP.size() * RAWDEPTH, 0.0f);
+				size_t offset = 0;
 
 				if (strand == "fwd"){
 
 					for (auto p = refCoordToAP.begin(); p != refCoordToAP.end(); p++){
-
-						std::vector<float> feature = (p -> second) -> makeSignalFeature();
-						tensor.insert(tensor.end(), feature.begin(), feature.end());
+						(p -> second) -> writeSignalFeature(tensor.data() + offset);
+						offset += RAWDEPTH;
 					}
 				}
 				else{
 
 					for (auto p = refCoordToAP.rbegin(); p != refCoordToAP.rend(); p++){
-
-						std::vector<float> feature = (p -> second) -> makeSignalFeature();
-						tensor.insert(tensor.end(), feature.begin(), feature.end());
+						(p -> second) -> writeSignalFeature(tensor.data() + offset);
+						offset += RAWDEPTH;
 					}
 				}
 				return tensor;

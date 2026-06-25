@@ -3,7 +3,7 @@
 
 DNAscent is software designed to detect the base analogues BrdU and EdU in single molecules of DNA sequenced on the Oxford Nanopore platform. In an experimental setup where BrdU and EdU are incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis. DNAscent can also be used as a replication stress assay by calling the genomic positions of fork stalls and determining the frequency of DNA breaks at replication forks.
 
-DNAscent v4.2.1 supports sequencing data collected on Oxford Nanopore R10.4.1 flow cells. The Oxford Nanopore Flongle, MinION, GridION, and PromethION platforms are all supported.
+DNAscent v4.2.2 supports sequencing data collected on Oxford Nanopore R10.4.1 flow cells. The Oxford Nanopore Flongle, MinION, GridION, and PromethION platforms are all supported.
 
 DNAscent is under active development by the [Boemo Group](https://www.boemogroup.org/) based in the [Department of Pathology, University of Cambridge](https://www.path.cam.ac.uk/).
 
@@ -11,7 +11,7 @@ DNAscent is under active development by the [Boemo Group](https://www.boemogroup
 The recommended way to run DNAscent is via one of our supported Singularity images: https://cloud.sylabs.io/library/mboemo/dnascent/dnascent
 You can obtain the latest image by running:
 ```shell
-singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.2.1
+singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.2.2
 ```
 
 ## Building from Source
@@ -22,10 +22,19 @@ git clone --recursive https://github.com/MBoemo/DNAscent.git
 The DNAscent directory will appear in your current directory.  Switch to the latest tagged version and compile the software by running:
 ```shell
 cd DNAscent
-git checkout 4.2.1
+git checkout 4.2.2
 make
 ```
 This will put the DNAscent executable into the DNAscent/bin directory.  A typical compile time for DNAscent and its dependencies is 5 minutes.
+
+By default, ``make`` downloads TensorFlow C runtime 2.4.1. To target a different TensorFlow runtime (for example to match newer CUDA stacks on newer GPUs), you can override this during build:
+```shell
+make TF_VERSION=<version> TF_VARIANT=<gpu|cpu>
+```
+If the TensorFlow archive uses the newer versioned path layout (for example, ``.../tensorflow/versions/2.18.0/libtensorflow-gpu-linux-x86_64.tar.gz``), use:
+```shell
+make TF_URL_LAYOUT=versions TF_VERSION=<version> TF_VARIANT=<gpu|cpu>
+```
 
 ## Documentation
 Please see the [documentation](https://dnascent.readthedocs.io) for detailed usage instructions, descriptions of DNAscent's subprograms, and an example workflow.

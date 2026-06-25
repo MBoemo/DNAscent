@@ -7,6 +7,27 @@
 
 #include "tensor.h"
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
+
+
+static inline bool env_enabled(const char *name){
+	const char *value = std::getenv(name);
+	if (value == nullptr){
+		return false;
+	}
+	return std::strcmp(value, "1") == 0 || std::strcmp(value, "true") == 0 || std::strcmp(value, "TRUE") == 0;
+}
+
+
+static void configure_tf_runtime_hints(){
+	if (env_enabled("DNASCENT_TF_XLA")){
+		setenv("TF_XLA_FLAGS", "--tf_xla_auto_jit=2 --tf_xla_enable_xla_devices", 0);
+	}
+	if (env_enabled("DNASCENT_TF_CUDA_MALLOC_ASYNC")){
+		setenv("TF_GPU_ALLOCATOR", "cuda_malloc_async", 0);
+	}
+}
 
 
 std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > model_load_cpu_twoInputs(const char *saved_model_dir, unsigned int threads){
@@ -64,6 +85,8 @@ std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > model_lo
 
 
 std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > model_load_gpu_twoInputs(const char *saved_model_dir, unsigned char device, unsigned int threads){
+
+	configure_tf_runtime_hints();
 
 	std::shared_ptr<ModelSession> ms = std::make_shared<ModelSession>();
 	std::shared_ptr<TF_Graph *> Graph = std::make_shared<TF_Graph *>(TF_NewGraph());
@@ -157,6 +180,8 @@ std::shared_ptr<ModelSession> model_load_cpu(const char *saved_model_dir, unsign
 
 
 std::shared_ptr<ModelSession> model_load_gpu(const char *saved_model_dir, unsigned char device, unsigned int threads,const char *input_layer_name){
+
+	configure_tf_runtime_hints();
 
 	std::shared_ptr<ModelSession> ms = std::make_shared<ModelSession>();
 	std::shared_ptr<TF_Graph *> Graph = std::make_shared<TF_Graph *>(TF_NewGraph());

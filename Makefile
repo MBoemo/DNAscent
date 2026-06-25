@@ -31,6 +31,18 @@ HTS_INCLUDE = -I./htslib
 TENS_DEPEND = tensorflow/include/tensorflow/c/c_api.h
 TENS_LIB = -Wl,-rpath,${PATH_SPACEFIX}tensorflow/lib -L tensorflow/lib -ltensorflow
 TENS_INCLUDE = -I./tensorflow/include
+TF_VARIANT ?= gpu
+TF_VERSION ?= 2.4.1
+TF_PLATFORM ?= linux-x86_64
+TF_URL_LAYOUT ?= legacy
+ifeq ($(TF_URL_LAYOUT),versions)
+TF_TARBALL ?= libtensorflow-$(TF_VARIANT)-$(TF_PLATFORM).tar.gz
+TF_URL ?= https://storage.googleapis.com/tensorflow/versions/$(TF_VERSION)/$(TF_TARBALL)
+else
+TF_TARBALL ?= libtensorflow-$(TF_VARIANT)-$(TF_PLATFORM)-$(TF_VERSION).tar.gz
+TF_URL ?= https://storage.googleapis.com/tensorflow/libtensorflow/$(TF_TARBALL)
+endif
+TF_DOWNLOAD_CMD ?= wget -O $(TF_TARBALL) $(TF_URL)
 
 #fast5
 FAST5_INCLUDE = -I./fast5/include
@@ -65,10 +77,10 @@ hdf5-1.8.14/hdf5/lib/libhdf5.a:
 
 tensorflow/include/tensorflow/c/c_api.h:
 	if [ ! -e tensorflow/include/tensorflow/c/c_api.h ]; then \
-		mkdir tensorflow; \
+		mkdir -p tensorflow; \
 		cd tensorflow; \
-		wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-linux-x86_64-2.4.1.tar.gz; \
-		tar -xzf libtensorflow-gpu-linux-x86_64-2.4.1.tar.gz || exit 255; \
+		$(TF_DOWNLOAD_CMD); \
+		tar -xzf $(TF_TARBALL) || exit 255; \
 		cd ..; \
 	fi
 	

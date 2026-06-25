@@ -27,7 +27,7 @@ Overview
 
 DNAscent is software designed to detect the base analogues BrdU and EdU in Oxford Nanopore reads.  In an experimental setup where BrdU and EdU are incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis.  DNAscent can also call the genomic positions of stalled and stressed replication forks for use as a replication stress assay.
 
-DNAscent v4.2.1 supports sequencing data collected on Oxford Nanopore R10.4.1 flow cells. Users wishing to analyse data acquired on legacy R9.4.1 flow cells should roll back to DNAscent v3.1.2 as v4.2.1 is not back-compatible with R9.4.1 flow cells. As R9.4.1 flow cells have been deprecated by Oxford Nanopore,
+DNAscent v4.2.2 supports sequencing data collected on Oxford Nanopore R10.4.1 flow cells. Users wishing to analyse data acquired on legacy R9.4.1 flow cells should roll back to DNAscent v3.1.2 as v4.2.2 is not back-compatible with R9.4.1 flow cells. As R9.4.1 flow cells have been deprecated by Oxford Nanopore,
 previous versions of DNAscent designed for R9.4.1 flow cells (v3.1.2 and below) are no longer under active development.
 
 The Oxford Nanopore Flongle, MinION, GridION, and PromethION platforms are all supported.
@@ -42,6 +42,7 @@ Developer Recommendations
 * **FAST5 or POD5?** POD5. Dorado and DNAscent both perform better with POD5 compared to FAST5.
 * **Guppy or Dorado?** Basecalling with Dorado to bam format is our recommended workflow. It is faster than Guppy, has the newest basecalling models, and writes informative information to the output bam file which DNAscent can make use of.
 * **Singularity image or compile from source?** Singularity image. We load it with DNAscent's dependencies so that all you need is a valid NVIDIA driver. 
+   If you compile from source, TensorFlow C runtime download settings (including versioned archive URLs) are documented in :ref:`installation`.
 * **Human-readable or modbam output format from DNAscent detect?** We recommend modbam for most users. It produces about a 6x savings in drive space, can be visualised directly by genomics viewers, and makes some downstream analyses easier. 
 * **GPU or CPU?** GPU for DNAscent detect (along with as many CPUs as your GPU node has available) and CPU for DNAscent align and forkSense. DNAscent index is quick and should run in a few seconds on a single CPU.
 
