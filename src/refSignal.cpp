@@ -38,7 +38,9 @@ static const char *help=
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
-"  -l,--length               minimum read length in bp (default is 1000).\n"
+"  -l,--length               minimum read length in bp (default is 1000),\n"
+"  -d,--maxDepth             maximum number of reads used per position to estimate\n"
+"                            the Gaussian (default is 30).\n"
 "DNAscent is under active development by the Boemo Group, Department of Pathology, University of Cambridge (https://www.boemogroup.org/).\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -50,6 +52,7 @@ struct RefSignalArguments {
 	std::string indexFilename;
 	int minQ;
 	int minL;
+	int maxDepth;
 	unsigned int threads;
 };
 
@@ -74,9 +77,10 @@ RefSignalArguments parseRefSignalArguments( int argc, char** argv ){
 	}
 
 	RefSignalArguments args;
-	args.threads = 1;
-	args.minQ    = 20;
-	args.minL    = 1000;
+	args.threads  = 1;
+	args.minQ     = 20;
+	args.minL     = 1000;
+	args.maxDepth = 30;
 
 	for ( int i = 1; i < argc; ){
 
@@ -118,6 +122,16 @@ RefSignalArguments parseRefSignalArguments( int argc, char** argv ){
 
 			if (i == argc-1) throw TrailingFlag(flag);
 			args.indexFilename = std::string( argv[i+1] );
+			i += 2;
+		}
+		else if ( flag == "-d" or flag == "--maxDepth" ){
+
+			if (i == argc-1) throw TrailingFlag(flag);
+			args.maxDepth = std::stoi( argv[i+1] );
+			if (args.maxDepth < 0){
+				std::cout << "Exiting with error.  -d must be an integer >= 0 (0 means no limit)." << std::endl;
+				exit(EXIT_FAILURE);
+			}
 			i += 2;
 		}
 		else if ( flag == "-o" or flag == "--output" ){
@@ -229,7 +243,23 @@ int refSignal_main( int argc, char** argv ){
 		getRefEnd( record, refStart, refEnd );
 		int queryLen = record->core.l_qseq;
 
-		if ( mappingQual >= args.minQ and refEnd - refStart >= args.minL and queryLen != 0 ){
+		// Early rejection: if maxDepth is set and the read's start position has
+		// already reached maxDepth, skip the read before it enters the pipeline.
+		// genomeStats is safe to read here because we are in the sequential
+		// BAM-reading loop, between completed parallel batches.
+		bool saturated = false;
+		if ( args.maxDepth > 0 ){
+			std::string contigName( bam_hdr->target_name[record->core.tid] );
+			auto cit = genomeStats.find( contigName );
+			if ( cit != genomeStats.end() ){
+				auto pit = cit->second.find( refStart );
+				if ( pit != cit->second.end() and pit->second.count >= static_cast<long>(args.maxDepth) ){
+					saturated = true;
+				}
+			}
+		}
+
+		if ( not saturated and mappingQual >= args.minQ and refEnd - refStart >= args.minL and queryLen != 0 ){
 			buffer.push_back( record );
 		}
 		else{
@@ -301,7 +331,9 @@ int refSignal_main( int argc, char** argv ){
 						int pos = it->first;
 						double sig_mean = it->second->getSignalMean();
 						if ( sig_mean > 0.0 and sig_mean < 250.0 ){
-							contigStats[pos].update( sig_mean );
+							if ( args.maxDepth == 0 or contigStats[pos].count < static_cast<long>(args.maxDepth) ){
+								contigStats[pos].update( sig_mean );
+							}
 						}
 					}
 				}
@@ -331,6 +363,7 @@ int refSignal_main( int argc, char** argv ){
 	outFile << "#Threads "        << args.threads           << "\n";
 	outFile << "#MappingQuality " << args.minQ              << "\n";
 	outFile << "#MappingLength "  << args.minL              << "\n";
+	outFile << "#MaxDepth "       << args.maxDepth          << "\n";
 	outFile << "#Version "        << VERSION                << "\n";
 	outFile << "#Commit "         << getGitCommit()         << "\n";
 

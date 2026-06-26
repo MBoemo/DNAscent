@@ -20,7 +20,9 @@ Usage
    Optional arguments are:
      -t,--threads              number of threads (default is 1 thread),
      -q,--quality              minimum mapping quality (default is 20),
-     -l,--length               minimum read length in bp (default is 1000).
+     -l,--length               minimum read length in bp (default is 1000),
+     -d,--maxDepth             maximum number of reads used per position to estimate
+                               the Gaussian (default is 30; set to 0 for no limit).
 
 The main input of ``DNAscent refSignal`` is a sorted BAM file produced by aligning basecalled reads to a reference genome.  The reference genome passed with ``-r`` should be the same FASTA file used to produce that alignment.  The index required by ``-i`` is the file created using ``DNAscent index`` (see :ref:`index_exe`).
 
@@ -31,6 +33,8 @@ The main input of ``DNAscent refSignal`` is a sorted BAM file produced by aligni
 3. Run ``DNAscent refScan`` on the experimental BAM, providing the profile from step 2.
 
 The number of threads is specified using the ``-t`` flag.  ``DNAscent refSignal`` parallelises by processing a batch of reads simultaneously, so multithreading is recommended.
+
+For high-coverage datasets, the ``-d`` flag caps the number of reads that contribute to the Gaussian estimate at any single reference position.  Once a position has accumulated ``-d`` observations it is considered saturated and further reads covering it are skipped early, before signal fetching and event alignment, so they incur no meaningful computational cost.  The default of 30 is sufficient for a reliable mean and standard deviation; set ``-d 0`` to apply no limit.
 
 Method
 ------
@@ -52,6 +56,7 @@ Output
    #Threads 4
    #MappingQuality 20
    #MappingLength 1000
+   #MaxDepth 30
    #Version 4.2.2
    #Commit 4cf80a7b89bdf510a91b54572f8f94d3daf9b167
 
