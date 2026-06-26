@@ -3,7 +3,15 @@
 Release Notes
 ===============================
 
-v4.2.2
+v4.3.1
+-----------------
+
+* Added new ``DNAscent refSignal`` and ``DNAscent refScan`` executables for general-purpose, approximate modification/analogue detection.
+* Performance optimisations on signal alignments.
+* User can now specify the version of tensorflow to build against.
+
+
+v4.2.1
 -----------------
 
 * Added new ``DNAscent meIODy`` executable which determines inter-origin distance from DNAscent data.

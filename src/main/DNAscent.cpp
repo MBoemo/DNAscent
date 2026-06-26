@@ -19,6 +19,8 @@
 #include "../config.h"
 #include "../seeBreaks.h"
 #include "../iod.h"
+#include "../refSignal.h"
+#include "../refScan.h"
 
 
 int show_options_DNAscent( int, char** );
@@ -33,6 +35,8 @@ static std::map< std::string, std::function< int( int, char** ) > > executables 
 	{"trainCNN", 	data_main},
 	{"trainGMM", 	train_main},
 	{"meIODy", 		iod_main},
+	{"refSignal",		refSignal_main},
+	{"refScan",		refScan_main},
 	{"--help",	show_options_DNAscent},
 	{"-h",		show_options_DNAscent},
 	{"-v",		show_version},

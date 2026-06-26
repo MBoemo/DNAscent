@@ -189,8 +189,13 @@ inline int lnArgMax(std::vector<double> v){
 	return maxarg;
 }
 
+struct ViterbiState {
+	int pos;
+	char label;
+};
 
-std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <double> &observations,
+
+std::pair< double, std::vector<ViterbiState> > builtinViterbi( std::vector <double> &observations,
 				std::string &sequence,
 				PoreParameters scalings,
 				bool flip){
@@ -480,7 +485,7 @@ std::cerr << "Starting traceback..." << std::endl;
 std::cerr << "Number of events: " << observations.size() << std::endl;
 #endif
 
-	std::vector<std::string> stateIndices;
+	std::vector<ViterbiState> stateIndices;
 	stateIndices.reserve(observations.size());
 	while (traceback_old != -1){
 
@@ -490,18 +495,18 @@ std::cerr << "Number of events: " << observations.size() << std::endl;
 		if (traceback_old < M_offset){ //Del
 
 			//std::cout << "D " << traceback_old << std::endl;
-			stateIndices.push_back(std::to_string(traceback_old) + "_D");
+			stateIndices.push_back({static_cast<int>(traceback_old), 'D'});
 
 		}
 		else if (traceback_old < I_offset){ //M
 
 			//std::cout << "M " << traceback_old - M_offset << std::endl;
-			stateIndices.push_back(std::to_string(traceback_old- M_offset) + "_M");
+			stateIndices.push_back({static_cast<int>(traceback_old - M_offset), 'M'});
 		}
 		else { //I
 
 			//std::cout << "I " << traceback_old - I_offset << std::endl;
-			stateIndices.push_back(std::to_string(traceback_old - I_offset) + "_I");
+			stateIndices.push_back({static_cast<int>(traceback_old - I_offset), 'I'});
 
 		}
 		traceback_old = traceback_new;
@@ -613,13 +618,17 @@ void eventalign( DNAscent::read &r, unsigned int totalWindowLength){
 
 		std::vector< double > eventSnippet_means;
 		std::vector< event > eventSnippet;
+		eventSnippet_means.reserve(windowLength * 3);
+		eventSnippet.reserve(windowLength * 3);
+		const unsigned int queryStart = r.refToQuery.at(reference_index);
+		const unsigned int queryEnd = r.refToQuery.at(reference_index + windowLength - k + 1);
 
 		//get the events that correspond to the read snippet
 		bool firstMatch = true;
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			//if an event has been aligned to a position in the window, add it 
-			if ( (r.refToQuery)[reference_index] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[reference_index + windowLength - k + 1] ){
+			if ( queryStart <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < queryEnd ){
 
 				if (firstMatch){
 					readHead = j;
@@ -636,11 +645,11 @@ void eventalign( DNAscent::read &r, unsigned int totalWindowLength){
 			}
 
 			//stop once we get to the end of the window
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[reference_index + windowLength - k + 1] ) break;
+			if ( (r.eventAlignment)[j].second >= queryEnd ) break;
 		}
 	
 		//flag large insertions
-		int querySpan = (r.refToQuery)[reference_index + windowLength - k + 1] - (r.refToQuery)[reference_index];
+		int querySpan = queryEnd - queryStart;
 		assert(querySpan >= 0);
 		int referenceSpan = windowLength - k + 1;
 		int indelScore = querySpan - referenceSpan;
@@ -657,9 +666,9 @@ void eventalign( DNAscent::read &r, unsigned int totalWindowLength){
 		if ( r.isReverse ) reference_coord = r.refEnd - reference_index - k/2;
 		else reference_coord = r.refStart + reference_index + k/2;
 		//std::cout << "Event sizes: " << eventSnippet_means.size() << " " << eventSnippet.size() << std::endl;
-		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet_means, readSnippet, r.scalings, false);
+		std::pair< double, std::vector<ViterbiState> > builtinAlignment = builtinViterbi( eventSnippet_means, readSnippet, r.scalings, false);
 
-		std::vector< std::string > stateLabels = builtinAlignment.second;
+		std::vector<ViterbiState> stateLabels = builtinAlignment.second;
 		size_t lastM_ev = 0;
 		size_t lastM_ref = 0;
 
@@ -668,26 +677,26 @@ void eventalign( DNAscent::read &r, unsigned int totalWindowLength){
 		//grab the index of the last match so we don't print insertions where we shouldn't
 		for (size_t i = 0; i < stateLabels.size(); i++){
 
-			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
-			int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
+			char label = stateLabels[i].label;
+			int pos = stateLabels[i].pos;
 
-			if (label == "M"){
+			if (label == 'M'){
 				lastM_ev = evIdx;
 				lastM_ref = pos;
 			}
 
-			if (label != "D") evIdx++; //silent states don't emit an event
+			if (label != 'D') evIdx++; //silent states don't emit an event
 		}
 
 		//do a second pass to print the alignment
 		evIdx = 0;
 		for (size_t i = 0; i < stateLabels.size(); i++){
 
-			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
-	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
+			char label = stateLabels[i].label;
+	        int pos = stateLabels[i].pos;
 
 			//silent states don't emit an event
-			if (label == "D"){
+			if (label == 'D'){
 				runningDeletions++;
 				continue;
 			}
@@ -710,7 +719,7 @@ void eventalign( DNAscent::read &r, unsigned int totalWindowLength){
 			unsigned int event_indexRef = reference_index + pos + k/2;
 			unsigned event_indexQuery = r.refToQuery.at(event_indexRef);
 			
-			if (label == "M"){
+			if (label == 'M'){
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmerStrand, k)];
 
 				for (unsigned int idx_raw = 0; idx_raw < eventSnippet[evIdx].raw.size(); idx_raw++){
@@ -740,7 +749,7 @@ void eventalign( DNAscent::read &r, unsigned int totalWindowLength){
 				}
 
 			}
-			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+			else if (label == 'I' and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
 				for (unsigned int idx_raw = 0; idx_raw < eventSnippet[evIdx].raw.size(); idx_raw++){
 					double scaledEvent = (eventSnippet[evIdx].raw[idx_raw] - r.scalings.shift) / r.scalings.scale;
 					r.humanReadable_eventalignOut += std::to_string(event_coord) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::string(k, 'N') + "\t" + "0" + "\n";

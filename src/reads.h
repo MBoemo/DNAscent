@@ -97,6 +97,17 @@ class AlignedPosition{
 
 			signal.push_back(s);
 		}
+		double getSignalMean(void){
+
+			if (signal.empty()) return 0.0;
+			double sum = 0.0;
+			for (size_t i = 0; i < signal.size(); i++) sum += signal[i];
+			return sum / static_cast<double>(signal.size());
+		}
+		size_t getSignalCount(void){
+
+			return signal.size();
+		}
 		std::string getKmer(void){
 
 			return kmer;

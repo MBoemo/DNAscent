@@ -350,9 +350,12 @@ std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple
 	int curr_gap = 0;
 	int max_gap = 0;
 
-	std::vector< double > signalBuffer;
 	std::vector< unsigned int > cleanedRanks;
 	std::vector< double > cleanedSignals;
+	cleanedRanks.reserve(n_events);
+	cleanedSignals.reserve(n_events);
+	double signal_sum = 0.0;
+	unsigned int signal_count = 0;
 
 	while(curr_kmer_idx >= 0 && curr_event_idx >= 0) {
         
@@ -380,20 +383,22 @@ std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple
 		uint8_t from = trace[band_idx][offset];
 		if(from == FROM_D) {
 		
-			signalBuffer.push_back(r.events[curr_event_idx].mean);
+			signal_sum += r.events[curr_event_idx].mean;
+			signal_count++;
 			
 			//if this query position is a match on the reference, use the kmer rank on the reference
 			//accounts for basecalling inaccuracies under high analogue concentration
-			if (signalBuffer.size() > 0 and r.queryToRef.count(curr_kmer_idx) > 0){
+			if (signal_count > 0 and r.queryToRef.count(curr_kmer_idx) > 0){
 			
 				unsigned int posOnRef = r.queryToRef.at(curr_kmer_idx);
 				if (posOnRef < kmer_ranks_ref.size()){
 					unsigned int kmer_rank_onRef = kmer_ranks_ref[posOnRef];
 					cleanedRanks.push_back(kmer_rank_onRef);
-					cleanedSignals.push_back(vectorMean(signalBuffer));
+					cleanedSignals.push_back(signal_sum / signal_count);
 				}
 			}
-			signalBuffer.clear();
+			signal_sum = 0.0;
+			signal_count = 0;
 			
 			curr_kmer_idx -= 1;
 			curr_event_idx -= 1;
@@ -401,7 +406,8 @@ std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple
 			
 		} else if(from == FROM_U) {
 		
-			signalBuffer.push_back(r.events[curr_event_idx].mean);
+			signal_sum += r.events[curr_event_idx].mean;
+			signal_count++;
 
 			curr_event_idx -= 1;
 			curr_gap = 0;

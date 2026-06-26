@@ -16,6 +16,8 @@ DNAscent
    forkSense
    meIODy
    seeBreaks
+   refSignal
+   refScan
    visualisation
    workflows
    cookbook
