@@ -53,10 +53,7 @@ class Global_Config{
 			unlabelled_model = import_poreModel_fitStdv(fn_fit_unlabelled_model, kmer_len);
 			analogue_model = import_poreModel_fitStdv(fn_fit_analogue_model, kmer_len);
 			
-			fn_dnn_model = "dnn_models/detect_model_BrdUEdU_DNAr10_4_1/";
-			dnn_model_inputLayer1 = "serving_default_input_1";
-			dnn_model_inputLayer2 = "serving_default_input_2";
-			dnn_model_inputLayer3 = "serving_default_input_3";
+			fn_dnn_model = "dnn_models/detect_model_BrdUEdU_DNAr10_4_1/model.pt";
 			
 			HMM_config = HMM_TransitionProbs_DNA_R10;
 			AdaptiveBanded_config = AdaptiveBanded_Params_DNA_R10;

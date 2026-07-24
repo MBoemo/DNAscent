@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <mutex>
 #include "reads.h"
 #include "tensor.h"
 #include "error_handling.h"
@@ -117,7 +118,7 @@ class OutputWriterFactory {
 int detect_main( int argc, char** argv );
 std::vector< unsigned int > getPOIs( std::string &, int );
 double sequenceProbability( std::vector <double> &, std::string &, size_t, bool, PoreParameters, size_t, size_t );
-void runCNN(DNAscent::read & , std::shared_ptr<ModelSession> , const std::vector<TF_Output> &, bool );
+void runCNN(DNAscent::read & , std::shared_ptr<ModelSession> , bool , std::mutex * );
 void llAcrossRead( DNAscent::read &, unsigned int );
 
 #endif

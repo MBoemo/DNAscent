@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <cstring>
 #include <limits>
+#include <chrono>
 #include "detect.h"
 #include "common.h"
 #include "event_handling.h"
@@ -25,13 +26,16 @@
 #include "fast5.h"
 #include "probability.h"
 #include "../fast5/include/fast5.hpp"
-#include "../tensorflow/include/tensorflow/c/eager/c_api.h"
 #include "../pod5-file-format/c++/pod5_format/c_api.h"
 #include "htsInterface.h"
 #include "error_handling.h"
 #include "config.h"
 #include <omp.h>
 #include <mutex>
+#if defined(DNASCENT_CUDA)
+#include <c10/cuda/CUDAStream.h>
+#include <c10/cuda/CUDAGuard.h>
+#endif
 
 
 static bool env_enabled(const char *name){
@@ -69,7 +73,7 @@ struct Arguments {
 	bool humanReadable = false;
 	bool useGPU = false;
 	bool useHMM = false;
-	unsigned char GPUdevice = '0';
+	unsigned char GPUdevice = 0;
 	int minQ = 20;
 	int minL = 1000;
 	unsigned int threads = 1;
@@ -191,7 +195,10 @@ Arguments parseDetectArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			if (strArg.length() > 1) throw InvalidDevice(strArg);
 
-			args.GPUdevice = *argv[ i + 1 ];
+			//convert the single-digit device string (e.g. "0") to its integer
+			//ordinal; LibTorch's torch::Device expects the numeric index, not
+			//the ASCII character code.
+			args.GPUdevice = (unsigned char)(*argv[ i + 1 ] - '0');
 
 			i+=2;
 		}
@@ -584,86 +591,100 @@ std::cerr << logLikelihoodRatio << std::endl;
 }
 
 
-void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, const std::vector<TF_Output> &inputOps, bool humanReadable){
+void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, bool humanReadable, std::mutex *gpu_mtx){
 
-	int NumInputs = 3;
-	int NumOutputs = 1;
-
-	std::vector<TF_Tensor*> input_tensors;
-	TF_Tensor* OutputValues;
-
-	//core sequence input
+	//number of aligned positions in this read
 	std::vector<size_t> protoSequenceShape = r.getSequenceShape();
-	TensorShape input_sequenceShape={{1, (int64_t) protoSequenceShape[0]}, 2};
+	int64_t L = (int64_t) protoSequenceShape[0];
+	assert(L > 0);
 
-	std::vector<float> unformattedCoreSequenceTensor = r.makeCoreSequenceTensor();
+	//optional per-read timing (DNASCENT_TIMING=1) to see whether wall-time is
+	//driven by read length rather than by any accumulation across reads.
+	const bool timeReads = env_enabled("DNASCENT_TIMING");
+	std::chrono::steady_clock::time_point t_start;
+	if (timeReads) t_start = std::chrono::steady_clock::now();
 
-	size_t sizeSequence = unformattedCoreSequenceTensor.size();
-	assert(sizeSequence > 0);
+	//InferenceMode is stronger than NoGradGuard: it also skips autograd
+	//version-counter bookkeeping, lowering per-read overhead for pure inference.
+	c10::InferenceMode guard;
 
-	float *tmp_coreSequenceArray = (float *)malloc(sizeSequence*sizeof(float));
-	std::memcpy(tmp_coreSequenceArray, unformattedCoreSequenceTensor.data(), sizeSequence*sizeof(float));
+	//core sequence input: (1, L) int64
+	//getCoreIndex()/getResidualIndex() return 1-indexed integers; the exported
+	//torch model expects LongTensor indices into its embedding tables (the old
+	//TensorFlow model took the same integers as float).
+	std::vector<float> coreSeqF = r.makeCoreSequenceTensor();
+	std::vector<float> resSeqF  = r.makeResidualSequenceTensor();
 
-	TF_Tensor* CoreSequenceInputTensor = TF_NewTensor(TF_FLOAT,
-		input_sequenceShape.values,
-		input_sequenceShape.dim,
-		(void *)tmp_coreSequenceArray,
-		sizeSequence*sizeof(float),
-		cpp_array_deallocator<float>,
-		nullptr);
-
-	input_tensors.push_back(CoreSequenceInputTensor);
-	
-	//residual sequence input (inherits the same shape as core sequence)
-	std::vector<float> unformattedResidualSequenceTensor = r.makeResidualSequenceTensor();
-
-	float *tmp_resSequenceArray = (float *)malloc(sizeSequence*sizeof(float));
-	std::memcpy(tmp_resSequenceArray, unformattedResidualSequenceTensor.data(), sizeSequence*sizeof(float));
-
-	TF_Tensor* ResidualSequenceInputTensor = TF_NewTensor(TF_FLOAT,
-		input_sequenceShape.values,
-		input_sequenceShape.dim,
-		(void *)tmp_resSequenceArray,
-		sizeSequence*sizeof(float),
-		cpp_array_deallocator<float>,
-		nullptr);
-
-	input_tensors.push_back(ResidualSequenceInputTensor);
-
-	//signal input
-	std::vector<size_t> protoSignalShape = r.getSignalShape();
-	TensorShape input_signalShape={{1, (int64_t) protoSignalShape[0], (int64_t) protoSignalShape[1], (int64_t) protoSignalShape[2]}, 4};
-
-	std::vector<float> unformattedSignalTensor = r.makeSignalTensor();
-
-	size_t sizeSignal = unformattedSignalTensor.size();
-	assert(sizeSignal > 0);
-
-	float *tmp_signalArray = (float *)malloc(sizeSignal*sizeof(float));
-	std::memcpy(tmp_signalArray, unformattedSignalTensor.data(), sizeSignal*sizeof(float));
-
-	TF_Tensor* SignalInputTensor = TF_NewTensor(TF_FLOAT,
-		input_signalShape.values,
-		input_signalShape.dim,
-		(void *)tmp_signalArray,
-		sizeSignal*sizeof(float),
-		cpp_array_deallocator<float>,
-		nullptr);
-
-	input_tensors.push_back(SignalInputTensor);
-
-	//Run the Session
-	CStatus status;
-	TF_SessionRun(*(session->session.get()), NULL, &inputOps[0], &input_tensors[0], NumInputs, &session->outputs, &OutputValues, NumOutputs, NULL, 0, NULL, status.ptr);
-
-	if(TF_GetCode(status.ptr) != TF_OK)
-	{
-		printf("%s",TF_Message(status.ptr));
+	torch::Tensor coreSeq = torch::empty({1, L}, torch::kInt64);
+	torch::Tensor resSeq  = torch::empty({1, L}, torch::kInt64);
+	int64_t *corePtr = coreSeq.data_ptr<int64_t>();
+	int64_t *resPtr  = resSeq.data_ptr<int64_t>();
+	for (int64_t i = 0; i < L; i++){
+		corePtr[i] = (int64_t) llround(coreSeqF[i]);
+		resPtr[i]  = (int64_t) llround(resSeqF[i]);
 	}
 
-	if(TF_TensorType(OutputValues) != TF_FLOAT){
-		std::cerr << "Error, unexpected output tensor type." << std::endl;
-		exit (EXIT_FAILURE);
+	//signal input: (1, L, RAWDEPTH, 1) float32
+	std::vector<size_t> protoSignalShape = r.getSignalShape();
+	std::vector<float> signalF = r.makeSignalTensor();
+	torch::Tensor signal = torch::from_blob(
+		signalF.data(),
+		{1, (int64_t) protoSignalShape[0], (int64_t) protoSignalShape[1], (int64_t) protoSignalShape[2]},
+		torch::kFloat32).clone();
+
+	//run inference: output is (1, L, 3) softmax [thymidine, BrdU, EdU]
+	std::vector<torch::jit::IValue> inputs;
+	inputs.push_back(coreSeq);
+	inputs.push_back(resSeq);
+	inputs.push_back(signal);
+
+	// GPU concurrency model
+	// ---------------------
+	// Each OpenMP worker processes one whole read (batch size 1).  The exported
+	// model runs the eval-mode _sequential_scan, which is latency-bound: it
+	// issues O(L) tiny CUDA kernels back-to-back, so a single read never fills
+	// the GPU.  To overlap the work of several reads we give each worker its own
+	// CUDA stream (round-robined from LibTorch's per-device stream pool).  The
+	// H2D copy, forward and D2H copy all run on that stream, so kernels from
+	// different reads interleave on the device instead of serialising on the
+	// default stream.  Whole-read inference is preserved — the bidirectional SSM
+	// still sees the entire read, so long-range fork priors are never broken.
+	//
+	// A mutex (gpu_mtx != nullptr) is an optional safety valve that falls back to
+	// strictly serial GPU dispatch; the CPU-side tensor build above and the
+	// output-parsing loop below always run concurrently either way.
+	torch::Tensor output;
+	if (gpu_mtx != nullptr){
+		std::lock_guard<std::mutex> lock(*gpu_mtx);
+		//move inputs to the model's device and run
+		inputs[0] = coreSeq.to(session->device);
+		inputs[1] = resSeq.to(session->device);
+		inputs[2] = signal.to(session->device);
+		output = session->module.forward(inputs).toTensor();
+		output = output.to(torch::kCPU).contiguous();
+	}
+	else{
+#if defined(DNASCENT_CUDA)
+		if (session->device.is_cuda()){
+			//per-thread stream so concurrent reads overlap on the GPU
+			c10::cuda::CUDAStreamGuard stream_guard(
+				c10::cuda::getStreamFromPool(false, session->device.index()));
+			inputs[0] = coreSeq.to(session->device);
+			inputs[1] = resSeq.to(session->device);
+			inputs[2] = signal.to(session->device);
+			output = session->module.forward(inputs).toTensor();
+			//blocking D2H copy synchronises this stream before we read on host
+			output = output.to(torch::kCPU).contiguous();
+		}
+		else
+#endif
+		{
+			inputs[0] = coreSeq.to(session->device);
+			inputs[1] = resSeq.to(session->device);
+			inputs[2] = signal.to(session->device);
+			output = session->module.forward(inputs).toTensor();
+			output = output.to(torch::kCPU).contiguous();
+		}
 	}
 
 	unsigned int outputFields = 3;
@@ -674,9 +695,10 @@ void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, const std:
 	std::vector<unsigned int> queryIndices = r.getQueryIndices();
 	std::vector<std::string> kmers = r.getKmers();
 
-	size_t output_size = TF_TensorByteSize(OutputValues) / sizeof(float);
+	size_t output_size = (size_t) output.numel();
 	assert(output_size == protoSequenceShape[0] * outputFields);
-	float *output_array = (float *)TF_TensorData(OutputValues);
+	float *output_array = output.data_ptr<float>();
+
 
 	//write the output
 	unsigned int pos_ctr = 0;
@@ -717,11 +739,6 @@ void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, const std:
 		}
 	}
 
-	TF_DeleteTensor(OutputValues);
-	TF_DeleteTensor(CoreSequenceInputTensor);
-	TF_DeleteTensor(ResidualSequenceInputTensor);
-	TF_DeleteTensor(SignalInputTensor);
-
 	if (humanReadable){
 		if (r.isReverse) std::reverse(lines.begin(),lines.end());
 
@@ -732,6 +749,13 @@ void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, const std:
 	else{
 	
 		r.writeModBamTag();
+	}
+
+	if (timeReads){
+		double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_start).count();
+		static std::mutex timing_mtx;
+		std::lock_guard<std::mutex> lock(timing_mtx);
+		std::cerr << "[timing] readID=" << r.readID << " length=" << L << " runCNN_seconds=" << secs << std::endl;
 	}
 }
 
@@ -747,33 +771,14 @@ int detect_main( int argc, char** argv ){
 	//get the neural network model path
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + Pore_Substrate_Config.fn_dnn_model;
-	std::string input1_layer_name = Pore_Substrate_Config.dnn_model_inputLayer1;
-	std::string input2_layer_name = Pore_Substrate_Config.dnn_model_inputLayer2;
-	std::string input3_layer_name = Pore_Substrate_Config.dnn_model_inputLayer3;
 
-	std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > modelPair;
-
+	std::shared_ptr<ModelSession> session;
 	if (not args.useGPU){
-
-		modelPair = model_load_cpu_twoInputs(modelPath.c_str(), args.threads);
+		session = model_load_cpu(modelPath.c_str(), args.threads);
 	}
 	else{
-
-		modelPair = model_load_gpu_twoInputs(modelPath.c_str(), args.GPUdevice, args.threads);
+		session = model_load_gpu(modelPath.c_str(), args.GPUdevice, args.threads);
 	}
-
-	std::shared_ptr<ModelSession> session = modelPair.first;
-	std::shared_ptr<TF_Graph *> Graph = modelPair.second;
-
-	auto input1_op = TF_GraphOperationByName(*(Graph.get()), input1_layer_name.c_str());
-	auto input2_op = TF_GraphOperationByName(*(Graph.get()), input2_layer_name.c_str());
-	auto input3_op = TF_GraphOperationByName(*(Graph.get()), input3_layer_name.c_str());
-	if(!input1_op or !input2_op or !input3_op){
-		std::cout << "bad input name" << std::endl;
-		exit(0);
-	}
-
-	std::vector<TF_Output> inputOps = {{input1_op,0}, {input2_op,0}, {input3_op,0}};
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
@@ -810,6 +815,19 @@ int detect_main( int argc, char** argv ){
 	else throw IOerror(logFilename);
 	std::mutex mtx;
 	std::mutex gpu_inference_mtx;
+	// GPU inference is SERIALISED by default: one read touches the GPU at a time
+	// (on the default stream), while the CPU-side work — read construction,
+	// signal fetch, normalisation, eventalign and the output parsing in runCNN —
+	// still runs concurrently across the -t worker threads.
+	//
+	// This is the fastest safe policy for this model.  A single read already
+	// keeps the GPU busy, and its chunked scan issues thousands of tiny CUDA
+	// allocations; letting multiple threads do that at once fragments the
+	// per-stream caching allocator (forcing device-synchronising cudaMalloc/Free)
+	// and contends on the allocator mutex, which makes -t 12 far SLOWER than -t 1.
+	//
+	// DNASCENT_GPU_CONCURRENT=1 opts into concurrent per-thread CUDA streams
+	// (see runCNN) for GPUs left underutilised by a single read.
 	bool serialize_gpu_inference = args.useGPU and not env_enabled("DNASCENT_GPU_CONCURRENT");
 
 	//initialise progress
@@ -855,7 +873,7 @@ int detect_main( int argc, char** argv ){
 		//if we've filled up the buffer with reads, compute them in parallel
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,session,inputOps,writer,serialize_gpu_inference,gpu_inference_mtx) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,session,writer,serialize_gpu_inference,gpu_inference_mtx) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				DNAscent::read r(buffer[i], bam_hdr, readID2path, reference);
@@ -905,11 +923,10 @@ int detect_main( int argc, char** argv ){
 					}
 
 					if (serialize_gpu_inference){
-						std::lock_guard<std::mutex> lock(gpu_inference_mtx);
-						runCNN(r,session,inputOps,args.humanReadable);
+						runCNN(r,session,args.humanReadable,&gpu_inference_mtx);
 					}
 					else{
-						runCNN(r,session,inputOps,args.humanReadable);
+						runCNN(r,session,args.humanReadable,nullptr);
 					}
 				}
 

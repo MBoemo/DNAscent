@@ -61,7 +61,7 @@ struct Arguments {
 	bool capReads;
 	bool useHMM = false;
 	bool useGPU = false;
-	unsigned char GPUdevice = '0';
+	unsigned char GPUdevice = 0;
 	int minQ, maxReads;
 	int minL;
 	unsigned int threads;
@@ -178,7 +178,10 @@ Arguments parseDataArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			if (strArg.length() > 1) throw InvalidDevice(strArg);
 
-			args.GPUdevice = *argv[ i + 1 ];
+			//convert the single-digit device string (e.g. "0") to its integer
+			//ordinal; LibTorch's torch::Device expects the numeric index, not
+			//the ASCII character code.
+			args.GPUdevice = (unsigned char)(*argv[ i + 1 ] - '0');
 
 			i+=2;
 		}
@@ -202,33 +205,14 @@ int data_main( int argc, char** argv ){
 	//get the neural network model path
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + Pore_Substrate_Config.fn_dnn_model;
-	std::string input1_layer_name = Pore_Substrate_Config.dnn_model_inputLayer1;
-	std::string input2_layer_name = Pore_Substrate_Config.dnn_model_inputLayer2;
-	std::string input3_layer_name = Pore_Substrate_Config.dnn_model_inputLayer3;
 
-	std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > modelPair;
-
+	std::shared_ptr<ModelSession> session;
 	if (not args.useGPU){
-
-		modelPair = model_load_cpu_twoInputs(modelPath.c_str(), args.threads);
+		session = model_load_cpu(modelPath.c_str(), args.threads);
 	}
 	else{
-
-		modelPair = model_load_gpu_twoInputs(modelPath.c_str(), args.GPUdevice, args.threads);
+		session = model_load_gpu(modelPath.c_str(), args.GPUdevice, args.threads);
 	}
-
-	std::shared_ptr<ModelSession> session = modelPair.first;
-	std::shared_ptr<TF_Graph *> Graph = modelPair.second;
-
-	auto input1_op = TF_GraphOperationByName(*(Graph.get()), input1_layer_name.c_str());
-	auto input2_op = TF_GraphOperationByName(*(Graph.get()), input2_layer_name.c_str());
-	auto input3_op = TF_GraphOperationByName(*(Graph.get()), input3_layer_name.c_str());
-	if(!input1_op or !input2_op or !input3_op){
-		std::cout << "bad input name" << std::endl;
-		exit(0);
-	}
-
-	std::vector<TF_Output> inputOps = {{input1_op,0}, {input2_op,0}, {input3_op,0}};
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
@@ -294,7 +278,7 @@ int data_main( int argc, char** argv ){
 		//if we've filled up the buffer with reads, compute them in parallel
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,session,inputOps) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,session) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				DNAscent::read r(buffer[i], bam_hdr, readID2path, reference);
@@ -329,7 +313,7 @@ int data_main( int argc, char** argv ){
 				
 				//run analogue prediction
 				if (args.useHMM) llAcrossRead(r, 12);
-				else runCNN(r,session,inputOps, true);
+				else runCNN(r,session, true, nullptr);
 				
 				//clear the read and re-annotate wtih the DNN analogue predictions
 				eventalign(r, Pore_Substrate_Config.windowLength_align);				

@@ -6,7 +6,6 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
-#include "../tensorflow/include/tensorflow/c/eager/c_api.h"
 #include <fstream>
 #include "trainGMM.h"
 #include "forkSense.h"

@@ -2,6 +2,7 @@
 bin/DNAscent
 bin/.*
 *.o
+*.so
 
 #directories we don't want to track
 build/
