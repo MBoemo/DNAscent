@@ -80,15 +80,40 @@ void pod5_getSignal( DNAscent::read &r ){
 			assert(r.signalLength > 0);
 			size_t sig_start = r.signalStartCoord + r.signalTrim;
 			size_t sig_end = r.signalStartCoord + r.signalLength;
-			r.raw.erase(r.raw.begin(), r.raw.begin() + sig_start);
-			r.raw.erase(r.raw.begin() + (sig_end - sig_start), r.raw.end());
+
+			//guard against split tags (sp/ns/ts) that are inconsistent with the
+			//parent signal so an out-of-range slice can't read past the signal
+			if (sig_start >= r.raw.size() or sig_end > r.raw.size() or sig_end <= sig_start){
+
+				std::cerr << "Warning: split-read signal bounds out of range for readID " << r.readID;
+				std::cerr << " (sp=" << r.signalStartCoord << ", ns=" << r.signalLength << ", ts=" << r.signalTrim;
+				std::cerr << ", parent signal length=" << r.raw.size() << "). Skipping read." << std::endl;
+				r.raw.clear();
+				r.QCpassed = false;
+			}
+			else{
+				r.raw.erase(r.raw.begin(), r.raw.begin() + sig_start);
+				r.raw.erase(r.raw.begin() + (sig_end - sig_start), r.raw.end());
+			}
 		}
 		else{ //trim using the normal dorado bounds if the read wasn't split
 
 			size_t sig_start = r.signalTrim;
 			size_t sig_end = r.signalLength;
-			r.raw.erase(r.raw.begin(), r.raw.begin() + sig_start);
-			r.raw.erase(r.raw.begin() + (sig_end - sig_start), r.raw.end());
+
+			//guard against ns/ts tags that exceed the available signal
+			if (sig_start >= r.raw.size() or sig_end > r.raw.size() or sig_end <= sig_start){
+
+				std::cerr << "Warning: signal bounds out of range for readID " << r.readID;
+				std::cerr << " (ns=" << r.signalLength << ", ts=" << r.signalTrim;
+				std::cerr << ", signal length=" << r.raw.size() << "). Skipping read." << std::endl;
+				r.raw.clear();
+				r.QCpassed = false;
+			}
+			else{
+				r.raw.erase(r.raw.begin(), r.raw.begin() + sig_start);
+				r.raw.erase(r.raw.begin() + (sig_end - sig_start), r.raw.end());
+			}
 		}
 	}
 

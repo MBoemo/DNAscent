@@ -12,6 +12,7 @@
 #include <iterator>
 #include <algorithm>
 #include <math.h>
+#include <cmath>
 #include "scrappie/event_detection.h"
 #include "probability.h"
 #include "error_handling.h"
@@ -75,6 +76,15 @@ PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vec
 		}	
 	}
 	
+	//fail scaling refinement if there aren't enough points to estimate a slope
+	if (slopes.empty()){
+
+		PoreParameters params_ts;
+		params_ts.shift = -1.;
+		params_ts.scale = -1.;
+		return params_ts;
+	}
+
 	std::sort(slopes.begin(), slopes.end());
 	double slope_median = slopes[ slopes.size() / 2 ];
 	std::vector<double> intercepts;
@@ -88,7 +98,9 @@ PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vec
 	double intercept_median = intercepts[ intercepts.size() / 2 ];
 	PoreParameters params_ts;
 	
-	if (slope_median == 0.){
+	//fail scaling refinement on a degenerate or non-finite slope so downstream
+	//log calculations never receive nan/negative shift and scale values
+	if (slope_median == 0. or not std::isfinite(slope_median) or not std::isfinite(intercept_median)){
 	
 		params_ts.shift = -1.;
 		params_ts.scale = -1.;
@@ -103,6 +115,14 @@ PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vec
 
 	//std::cerr << "ROUGH TO TS: " << s.scale << " " << scale_TSrefined << " " << s.shift << " " << shift_TSrefined << std::endl;
 	//std::cerr << s.scale << " " << scale_TSrefined << " " << s.shift << " " << shift_TSrefined << std::endl;
+
+	//fail scaling refinement if the refined parameters are non-finite or degenerate
+	if (not std::isfinite(shift_TSrefined) or not std::isfinite(scale_TSrefined) or scale_TSrefined == 0.){
+
+		params_ts.shift = -1.;
+		params_ts.scale = -1.;
+		return params_ts;
+	}
 
 	params_ts.shift = shift_TSrefined;
 	params_ts.scale = scale_TSrefined;
@@ -544,6 +564,12 @@ PoreParameters estimateScaling_quantiles(std::vector< double > &signal_means, st
 
 void normaliseEvents( DNAscent::read &r, bool useFitPoreModel ){
 
+	//nothing to do if signal extraction failed or was skipped
+	if (r.raw.empty()){
+		r.eventAlignment.clear();
+		return;
+	}
+
 	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
 	assert(et.n > 0);
 	
@@ -601,8 +627,8 @@ void normaliseEvents( DNAscent::read &r, bool useFitPoreModel ){
 	//fine tune scaling parameters
 	r.scalings = estimateScaling_theilSen(segmentation.first, segmentation.second, r.scalings, useFitPoreModel );
 	
-	//fail the read if it fails scaling refminement
-	if (r.scalings.shift == -1.) r.eventAlignment.clear();
+	//fail the read if it fails scaling refinement or produces non-finite/degenerate scalings
+	if (r.scalings.shift == -1. or not std::isfinite(r.scalings.shift) or not std::isfinite(r.scalings.scale) or r.scalings.scale == 0.) r.eventAlignment.clear();
 
 	r.scalings.eventsPerBase = (double) et.n / (double) (r.basecall.size() - k);
 }

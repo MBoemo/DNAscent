@@ -756,7 +756,9 @@ void eventalign( DNAscent::read &r, unsigned int totalWindowLength){
 		reference_index += lastM_ref + 1;
 	}
 
-	r.QCpassed = true;
+	//only pass QC if at least one aligned position was produced, otherwise the
+	//sequence/signal tensors are empty and runCNN fails its size assertion
+	r.QCpassed = (r.refCoordToAP.size() > 0);
 }
 
 
