@@ -679,6 +679,13 @@ void eventalign( DNAscent::read &r, unsigned int totalWindowLength){
 			if (label != "D") evIdx++; //silent states don't emit an event
 		}
 
+		//the Viterbi path should emit exactly one event per collected event; if not, the
+		//alignment is inconsistent (e.g. nan emission probabilities) so fail QC and skip the read
+		if (evIdx != eventSnippet.size()){
+			r.QCpassed = false;
+			return;
+		}
+
 		//do a second pass to print the alignment
 		evIdx = 0;
 		for (size_t i = 0; i < stateLabels.size(); i++){
