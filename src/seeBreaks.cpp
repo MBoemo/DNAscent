@@ -568,6 +568,10 @@ int seeBreaks_main(int argc, char** argv) {
     // Estimate expected and observed run off proportions
     std::vector<double> totalSimRunOffs;
     std::vector<double> totalObsRunOffs;
+    std::vector<std::vector<double>> simDrawsByTol;
+    std::vector<std::vector<double>> obsDrawsByTol;
+    std::vector<double> simMeansByTol;
+    std::vector<double> obsMeansByTol;
     int endTol = 250; //R10
     if (isR9) endTol = 500; //R9, adjusted up for higher epsilon in v3.1.2 forkSense
 
@@ -578,8 +582,19 @@ int seeBreaks_main(int argc, char** argv) {
         checkRunOffs(rightTracks, true, runOffs, forkSenseBoundary, readEndTolerance);
         checkRunOffs(leftTracks, false, runOffs, forkSenseBoundary, readEndTolerance);
 
-        simulation(v5Prime, v3Prime, analogueTrackLengths, runOffs.size(), totalSimRunOffs, forkSenseBoundary, readEndTolerance);
-        observation(runOffs, totalObsRunOffs);  
+        std::vector<double> simRunOffs;
+        std::vector<double> obsRunOffs;
+        simulation(v5Prime, v3Prime, analogueTrackLengths, runOffs.size(), simRunOffs, forkSenseBoundary, readEndTolerance);
+        observation(runOffs, obsRunOffs);
+
+        simMeansByTol.push_back(vectorMean(simRunOffs));
+        obsMeansByTol.push_back(vectorMean(obsRunOffs));
+
+        totalSimRunOffs.insert(totalSimRunOffs.end(), simRunOffs.begin(), simRunOffs.end());
+        totalObsRunOffs.insert(totalObsRunOffs.end(), obsRunOffs.begin(), obsRunOffs.end());
+
+        simDrawsByTol.push_back(std::move(simRunOffs));
+        obsDrawsByTol.push_back(std::move(obsRunOffs));
     }
 
     double simMean = vectorMean(totalSimRunOffs);
@@ -588,19 +603,35 @@ int seeBreaks_main(int argc, char** argv) {
     double obsMean = vectorMean(totalObsRunOffs);
     double obsStdDev = vectorStdv(totalObsRunOffs, obsMean);
 
-    // Difference between simulated and observed
-    std::mt19937 gen(221005);
-    std::vector<double> difference;
+    size_t nTol = simDrawsByTol.size();
+    size_t bsN = (nTol > 0) ? simDrawsByTol[0].size() : 0;
 
-    for (size_t i = 0; i < totalSimRunOffs.size(); ++i) {
-        std::normal_distribution<double> obsDistribution(obsMean, obsStdDev);
-        std::normal_distribution<double> simDistribution(simMean, simStdDev);   
-        difference.push_back(obsDistribution(gen) - simDistribution(gen));
+    // Effect estimate: mean excess of observed over expected read-end fraction, paired within each tolerance
+    double difMean = 0.0;
+    for (size_t t = 0; t < nTol; ++t) difMean += obsMeansByTol[t] - simMeansByTol[t];
+    if (nTol > 0) difMean /= nTol;
+
+    // Confidence interval on the effect size uses the observation bootstrap
+    std::vector<double> effectBoot(bsN, 0.0);
+    for (size_t k = 0; k < bsN; ++k) {
+        double acc = 0.0;
+        for (size_t t = 0; t < nTol; ++t) acc += obsDrawsByTol[t][k] - simMeansByTol[t];
+        effectBoot[k] = acc / nTol;
     }
-    double difMean = vectorMean(difference);
-    double difStdDev = vectorStdv(difference, difMean);
-    double leftTail = difMean - 1.96 * difStdDev;
-    double rightTail = difMean + 1.96 * difStdDev;
+    double effectBootMean = vectorMean(effectBoot);
+    double difStdDev = vectorStdv(effectBoot, effectBootMean);
+    double lowerBound = difMean - 1.645 * difStdDev;
+
+    // One-sided p-value locates the observed effect in the null (random-placement) distribution
+    std::vector<double> nullEffect(bsN, 0.0);
+    for (size_t k = 0; k < bsN; ++k) {
+        double acc = 0.0;
+        for (size_t t = 0; t < nTol; ++t) acc += simDrawsByTol[t][k] - simMeansByTol[t];
+        nullEffect[k] = acc / nTol;
+    }
+    size_t atOrAbove = 0;
+    for (size_t k = 0; k < bsN; ++k) if (nullEffect[k] >= difMean) ++atOrAbove;
+    double pValue = static_cast<double>(atOrAbove + 1) / static_cast<double>(bsN + 1);
 
     // Write output to stdout
     std::cout << "\nNumber of forks: " << nForks << "\n";
@@ -613,7 +644,8 @@ int seeBreaks_main(int argc, char** argv) {
     std::cout << "Difference between observed and expected\n";
     std::cout << "   Estimate: " << difMean << "\n"; 
     std::cout << "   StandardError: " << difStdDev << "\n";
-    std::cout << "   95% Confidence Interval: [" << leftTail << ", " << rightTail << "]\n";
+    std::cout << "   One-sided 95% lower bound: " << lowerBound << "\n";
+    std::cout << "   One-sided p-value: " << pValue << "\n";
 
     // Write output to file
     auto t = std::time(nullptr);
@@ -635,7 +667,8 @@ int seeBreaks_main(int argc, char** argv) {
     outFile << "#ObservedReadEndFraction_StdErr " << obsStdDev << "\n";
     outFile << "#Difference " << difMean << "\n";
     outFile << "#Difference_StdErr " << difStdDev << "\n";
-    outFile << "#95ConfidenceInterval " << leftTail << " " << rightTail << "\n";
+    outFile << "#OneSided95LowerBound " << lowerBound << "\n";
+    outFile << "#OneSidedPValue " << pValue << "\n";
     outFile << ">ExpectedReadEndFractions:\n";
     for (const auto& val : totalSimRunOffs) {
 
@@ -643,6 +676,16 @@ int seeBreaks_main(int argc, char** argv) {
     }
     outFile << ">ObservedReadEndFractions:\n";
     for (const auto& val : totalObsRunOffs) {
+
+        outFile << val << "\n";
+    }
+    outFile << ">NullEffectDistribution:\n";
+    for (const auto& val : nullEffect) {
+
+        outFile << val << "\n";
+    }
+    outFile << ">ObservedEffectBootstrap:\n";
+    for (const auto& val : effectBoot) {
 
         outFile << val << "\n";
     }
