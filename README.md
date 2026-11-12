@@ -7,11 +7,15 @@ DNAscent v4.2.1 supports sequencing data collected on Oxford Nanopore R10.4.1 fl
 
 DNAscent is under active development by the [Boemo Group](https://www.boemogroup.org/) based in the [Department of Pathology, University of Cambridge](https://www.path.cam.ac.uk/).
 
-## Singularity Image
-The recommended way to run DNAscent is via one of our supported Singularity images: https://cloud.sylabs.io/library/mboemo/dnascent/dnascent
-You can obtain the latest image by running:
+## Container Image
+The recommended way to run DNAscent is via our supported container image, which is hosted on the GitHub Container Registry: https://github.com/MBoemo/DNAscent/pkgs/container/dnascent
+You can obtain the latest image with Singularity/Apptainer by running:
 ```shell
-singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.2.1
+singularity pull DNAscent.sif docker://ghcr.io/mboemo/dnascent:4.2.1
+```
+The same image can also be pulled with Docker:
+```shell
+docker pull ghcr.io/mboemo/dnascent:4.2.1
 ```
 
 ## Building from Source

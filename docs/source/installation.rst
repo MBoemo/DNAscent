@@ -4,15 +4,21 @@ Getting Started
 ===============================
 
 
-Singularity
+Container Image
 ---------------------
 
-We recommend running DNAscent using one of our supported Singularity images. These images contain all necessary dependencies including TensorFlow, CUDA, CuDNN, and compression plugins so that your system only needs a valid NVIDIA driver for GPU usage. If your system does not have Singularity installed, instructions are available `here <https://docs.sylabs.io/guides/3.0/user-guide/installation.html>`_.
+We recommend running DNAscent using our supported container image. This image contains all necessary dependencies including TensorFlow, CUDA, CuDNN, and compression plugins so that your system only needs a valid NVIDIA driver for GPU usage. The image is hosted on the `GitHub Container Registry <https://github.com/MBoemo/DNAscent/pkgs/container/dnascent>`_ as an OCI image, so it can be pulled with either Apptainer/Singularity or Docker. If your system does not have Apptainer (the maintained successor to Singularity) installed, instructions are available `here <https://apptainer.org/docs/user/latest/quick_start.html>`_.
 
 .. code-block:: console
 
-   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.2.1
-   
+   singularity pull DNAscent.sif docker://ghcr.io/mboemo/dnascent:4.2.1
+
+The same image can also be pulled with Docker:
+
+.. code-block:: console
+
+   docker pull ghcr.io/mboemo/dnascent:4.2.1
+
 You can run DNAscent from the image by passing the desired executable and arguments. The following example shows how to run DNAscent :ref:`detect`:
 
 .. code-block:: console

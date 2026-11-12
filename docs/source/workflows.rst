@@ -12,11 +12,11 @@ In particular, we assume the following:
 Example Workflow
 ----------------
 
-Pull the Singularity image:
+Pull the container image:
 
 .. code-block:: console
 
-   singularity pull DNAscent.sif library://mboemo/dnascent/dnascent:4.1.1
+   singularity pull DNAscent.sif docker://ghcr.io/mboemo/dnascent:4.1.1
 
 Alternatively, you can download and compile DNAscent:
 
