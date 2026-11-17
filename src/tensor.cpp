@@ -6,6 +6,7 @@
 //----------------------------------------------------------
 
 #include "tensor.h"
+#include "tensor_config.h"
 #include <algorithm>
 
 
@@ -32,11 +33,9 @@ std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > model_lo
 
 	//configure the model
 	CStatus status;
-	uint8_t intra_op_parallelism_threads = std::max((unsigned int)1,threads/2);
-	uint8_t inter_op_parallelism_threads = 2;
-	uint8_t cpus = std::max((unsigned int)1,threads/2);
-	uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, cpus, 0x10, intra_op_parallelism_threads, 0x28, inter_op_parallelism_threads, 0x38, 0x1};
-	TF_SetConfig(SessionOpts, buf,sizeof(buf),status.ptr);
+	const unsigned int half = std::max(1u, threads/2);
+	const auto buf = tensor_config::configProto(half, half, 2);
+	TF_SetConfig(SessionOpts, buf.data(), buf.size(), status.ptr);
 	
 	if(status.failure()){
 		std::cout << "Model configuration failed." << std::endl;
@@ -75,11 +74,8 @@ std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > model_lo
 
 	//configure the model
 	CStatus status;
-	uint8_t intra_op_parallelism_threads = 1;
-	uint8_t inter_op_parallelism_threads = threads;
-	uint8_t cpus = threads;
-	uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, cpus, 0xa, 0x7, 0xa, 0x3, 0x47, 0x50, 0x55, 0x10, 0x1, 0x10, intra_op_parallelism_threads, 0x28, inter_op_parallelism_threads, 0x32, 0x5, 0x20, 0x1, 0x2a, 0x1, (unsigned char) device, 0x38, 0x1};
-	TF_SetConfig(SessionOpts, buf,sizeof(buf),status.ptr);
+	const auto buf = tensor_config::configProto(threads, 1, threads, device);
+	TF_SetConfig(SessionOpts, buf.data(), buf.size(), status.ptr);
 	
 	if(status.failure()){
 		std::cout << "Model configuration failed." << std::endl;
@@ -118,11 +114,9 @@ std::shared_ptr<ModelSession> model_load_cpu(const char *saved_model_dir, unsign
 
 	//configure the model
 	CStatus status;
-	uint8_t intra_op_parallelism_threads = std::max((unsigned int)1,threads/2);
-	uint8_t inter_op_parallelism_threads = 2;
-	uint8_t cpus = std::max((unsigned int)1,threads/2);
-	uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, cpus, 0x10, intra_op_parallelism_threads, 0x28, inter_op_parallelism_threads, 0x38, 0x1};
-	TF_SetConfig(SessionOpts, buf,sizeof(buf),status.ptr);
+	const unsigned int half = std::max(1u, threads/2);
+	const auto buf = tensor_config::configProto(half, half, 2);
+	TF_SetConfig(SessionOpts, buf.data(), buf.size(), status.ptr);
 	
 	if(status.failure()){
 		std::cout << "Model configuration failed." << std::endl;
@@ -168,11 +162,8 @@ std::shared_ptr<ModelSession> model_load_gpu(const char *saved_model_dir, unsign
 
 	//configure the model
 	CStatus status;
-	uint8_t intra_op_parallelism_threads = 1;
-	uint8_t inter_op_parallelism_threads = threads;
-	uint8_t cpus = threads;
-	uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, cpus, 0xa, 0x7, 0xa, 0x3, 0x47, 0x50, 0x55, 0x10, 0x1, 0x10, intra_op_parallelism_threads, 0x28, inter_op_parallelism_threads, 0x32, 0x5, 0x20, 0x1, 0x2a, 0x1, (unsigned char) device, 0x38, 0x1};
-	TF_SetConfig(SessionOpts, buf,sizeof(buf),status.ptr);
+	const auto buf = tensor_config::configProto(threads, 1, threads, device);
+	TF_SetConfig(SessionOpts, buf.data(), buf.size(), status.ptr);
 	
 	if(status.failure()){
 		std::cout << "Model configuration failed." << std::endl;
